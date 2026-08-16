@@ -1,26 +1,91 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ─────────────────────────────────────────────────────────────
+   Kadenz — Designsystem
+   Bewusst nur Dark Mode: die App wird um 6 Uhr früh und im
+   abgedunkelten Gym benutzt. Akzent ist Eisblau; Grün/Amber/
+   Koralle sind für Regenerations-Semantik reserviert und
+   dürfen NIE als Bedien-Akzent auftauchen.
+   ───────────────────────────────────────────────────────────── */
+@theme {
+  --color-ground: #090b0d;
+  --color-surface: #11151a;
+  --color-surface-2: #171c22;
+  --color-surface-3: #1e242b;
+  --color-hair: #232a32;
+  --color-hair-soft: #1a2027;
+
+  --color-fg: #e9eef2;
+  --color-fg-dim: #94a3ae;
+  --color-fg-faint: #5d6a75;
+
+  --color-accent: #a9c9ff;
+  --color-accent-deep: #6e9be8;
+  --color-on-accent: #0a1220;
+
+  --color-ready: #62d3a4;
+  --color-caution: #e5b55c;
+  --color-strain: #e8796a;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+
+  --ease-kadenz: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--color-ground);
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-ground);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  /* iOS: verhindert Gummiband-Scrollen über die Tab-Leiste hinaus */
+  overscroll-behavior-y: none;
+}
+
+/* Zahlen sind in dieser App das Hauptmotiv — enges Tracking,
+   damit große Werte wie Instrumentenanzeigen wirken. */
+.num {
+  font-weight: 680;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-fg-faint);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+/* Eingabefelder im Gym: 16px verhindert den iOS-Auto-Zoom beim Fokus */
+input {
+  font-size: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

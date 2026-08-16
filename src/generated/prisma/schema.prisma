@@ -1,0 +1,61 @@
+// Kadenz — Datenmodell
+//
+// Bewusst schlank: Gewicht, Schlaf, Ruhepuls und HRV bleiben in Google Health,
+// das ist dort die Quelle der Wahrheit und wird nicht dupliziert. Hier liegt
+// nur, was Google Health nicht kennt — die Trainingslogs.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7: die Verbindungs-URLs stehen nicht mehr hier, sondern in
+// prisma.config.ts (Migrationen) bzw. im Adapter in src/lib/db.ts (Laufzeit).
+datasource db {
+  provider = "postgresql"
+}
+
+/// Schlüssel-Wert-Ablage für Dinge, die App und MCP-Server gemeinsam brauchen.
+///
+/// Vor allem der Google-Refresh-Token: der liegt sonst nur in einem
+/// httpOnly-Cookie, an das ein separater Prozess nicht herankommt. In der
+/// Datenbank hat ihn genau eine Stelle, und der spätere Nacht-Job kann ihn
+/// ebenfalls nutzen, ohne dass ein Browser offen sein muss.
+model Einstellung {
+  schluessel   String   @id
+  wert         String
+  aktualisiert DateTime @updatedAt
+}
+
+model Workout {
+  id         String    @id @default(cuid())
+  /// Trainingstag in Ortszeit — nicht der Zeitstempel, sonst rutscht ein
+  /// spätes Training über Mitternacht auf den Folgetag.
+  date       DateTime  @db.Date
+  /// "push" (anterior) oder "pull" (posterior) — Jakobs eigene Einteilung
+  kind       String
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  note       String?
+  sets       SetLog[]
+
+  @@index([date])
+}
+
+model SetLog {
+  id        String  @id @default(cuid())
+  workoutId String
+  workout   Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  /// Übungsname als Text statt Fremdschlüssel: Übungen wechseln (Gerät belegt,
+  /// Schulter zwickt), und ein starrer Katalog würde das nur behindern.
+  exercise String
+  setIndex Int
+  kg       Float
+  reps     Int
+  loggedAt DateTime @default(now())
+
+  /// Deckt die häufigste Abfrage ab: "was habe ich bei X zuletzt gemacht?"
+  @@unique([workoutId, exercise, setIndex])
+  @@index([exercise, loggedAt])
+}
