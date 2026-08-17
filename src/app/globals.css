@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Tailwind durchsucht von sich aus alles, was nicht in .gitignore steht.
+   Dort steht nur /.next/ — nicht das Verzeichnis .next-build, in das
+   next.config.ts einen Produktionsbau über NEXT_DIST_DIR umlenkt. Aus dessen
+   Binärdateien (.rsc-Segmente) las Tailwind Klassennamen-Bruchstücke samt
+   Steuerzeichen und brach dann beim Erzeugen des CSS ab: jede Seite lieferte
+   500. Beide Baurverzeichnisse sind Ergebnis, nie Quelle. */
+@source not "../../.next";
+@source not "../../.next-build";
+
 /* ─────────────────────────────────────────────────────────────
    Kadenz — Designsystem
    Bewusst nur Dark Mode: die App wird um 6 Uhr früh und im
@@ -17,7 +26,11 @@
 
   --color-fg: #e9eef2;
   --color-fg-dim: #94a3ae;
-  --color-fg-faint: #5d6a75;
+  /* Aufgehellt von #5d6a75: darauf standen Vorgabewerte, Eyebrows und die
+     ZULETZT-Spalte bei 3,55:1 gegen den Grund — unter der 4,5:1-Grenze und
+     damit genau die Schrift, die im halbdunklen Gym zuerst wegfällt.
+     Jetzt 5,9:1 gegen ground, 5,5:1 auf der Karte, 4,7:1 auf surface-3. */
+  --color-fg-faint: #808e9b;
 
   --color-accent: #a9c9ff;
   --color-accent-deep: #6e9be8;
@@ -51,6 +64,27 @@ body {
   overflow-x: hidden;
   /* iOS: verhindert Gummiband-Scrollen über die Tab-Leiste hinaus */
   overscroll-behavior-y: none;
+  /* Als installierte PWA läuft der Inhalt mit viewportFit "cover" und
+     durchsichtiger Statusleiste bis unter Uhr und Batterie des iPhone. Ohne
+     diese Polsterung beginnt jede Seite hinter der Uhr. Im Browser ist der
+     Wert 0, dort ändert sich nichts. */
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Eine klebende Kopfleiste hält sich an die Bildschirmkante, nicht an die
+   Polsterung des body. Sie braucht die Höhe der Statusleiste deshalb in der
+   eigenen Innenpolsterung und zieht die des body wieder ab — sonst klafft
+   oben eine doppelte Lücke, solange noch nicht gescrollt ist. */
+.kopfleiste-oben {
+  margin-top: calc(env(safe-area-inset-top) * -1);
+  padding-top: calc(0.875rem + env(safe-area-inset-top));
+}
+
+@media (width >= 48rem) {
+  .kopfleiste-oben {
+    margin-top: 0;
+    padding-top: 0.875rem;
+  }
 }
 
 /* Zahlen sind in dieser App das Hauptmotiv — enges Tracking,
@@ -62,14 +96,6 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.eyebrow {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-fg-faint);
-}
-
 :focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 3px;
@@ -79,6 +105,28 @@ body {
 /* Eingabefelder im Gym: 16px verhindert den iOS-Auto-Zoom beim Fokus */
 input {
   font-size: 16px;
+}
+
+/* Ohne touch-action wartet iOS nach jedem Tipp ~300 ms auf einen möglichen
+   Doppeltipp zum Zoomen. Beim Abhaken von 16 Sätzen ist das eine spürbare
+   Verzögerung zwischen Tipp und Haken. */
+button,
+input,
+a[href] {
+  touch-action: manipulation;
+}
+
+button {
+  /* Bleibt der schwitzige Finger eine Sekunde auf der Haken-Taste liegen,
+     zeigt iOS sonst die Auswahl-Blase ("Kopieren / Nachschlagen") über dem
+     Satz, den man gerade eintragen wollte. */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
 }
 
 @media (prefers-reduced-motion: reduce) {

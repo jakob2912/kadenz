@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { listDataPoints, refreshAccessToken } from "@/lib/google-health";
+import {
+  listDataPoints,
+  refreshAccessToken,
+  type ListResult,
+} from "@/lib/google-health";
 import {
   buildDailySeries,
   deriveBaseline,
@@ -14,6 +18,7 @@ import {
   type ApiWeightPoint,
 } from "@/lib/health-mapper";
 import { assessTrend, movingAverage, readiness } from "@/lib/coach";
+import { fehlendeGoogleVariablen } from "@/lib/konfiguration";
 
 /**
  * /api/health/summary — der ausgewertete Stand.
@@ -23,6 +28,20 @@ import { assessTrend, movingAverage, readiness } from "@/lib/coach";
  * Mit ?roh=1 gibt es zusätzlich je drei Rohpunkte zum Nachschauen.
  */
 export async function GET(request: Request) {
+  // Zuerst die Konfiguration: fehlt eine Variable, hilft "nicht verbunden"
+  // niemandem weiter — die Meldung soll den Namen nennen, der fehlt.
+  const fehlend = fehlendeGoogleVariablen();
+  if (fehlend.length > 0) {
+    return NextResponse.json(
+      {
+        fehler: "Google Health ist nicht eingerichtet.",
+        fehlend,
+        tipp: "Variablen in den Vercel-Projekteinstellungen bzw. in .env.local nachtragen und neu deployen.",
+      },
+      { status: 500 }
+    );
+  }
+
   const jar = await cookies();
   const refresh = jar.get("kadenz_google_refresh")?.value;
   if (!refresh) {
@@ -51,12 +70,34 @@ export async function GET(request: Request) {
   }
 
   const range = { from, to };
-  const [sleepRes, hrRes, hrvRes, weightRes] = await Promise.all([
-    listDataPoints<ApiSleepPoint>(accessToken, "sleep", range),
-    listDataPoints<ApiRestingHrPoint>(accessToken, "restingHeartRate", range),
-    listDataPoints<ApiHrvPoint>(accessToken, "hrv", range),
-    listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
-  ]);
+
+  // Der Abruf lag bisher ungesichert da: eine 403 von Google (Testnutzer
+  // abgelaufen, Scope entzogen) wurde damit zu einem nackten 500 ohne Grund.
+  // Die Typangabe steht ausdrücklich hier — ohne sie hätte TypeScript für die
+  // vier Variablen nur "any" und der Rest der Route wäre ungeprüft.
+  let ergebnisse: [
+    ListResult<ApiSleepPoint>,
+    ListResult<ApiRestingHrPoint>,
+    ListResult<ApiHrvPoint>,
+    ListResult<ApiWeightPoint>,
+  ];
+  try {
+    ergebnisse = await Promise.all([
+      listDataPoints<ApiSleepPoint>(accessToken, "sleep", range),
+      listDataPoints<ApiRestingHrPoint>(accessToken, "restingHeartRate", range),
+      listDataPoints<ApiHrvPoint>(accessToken, "hrv", range),
+      listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
+    ]);
+  } catch (e) {
+    return NextResponse.json(
+      {
+        fehler: "Google Health hat die Abfrage abgelehnt.",
+        detail: e instanceof Error ? e.message : String(e),
+      },
+      { status: 502 }
+    );
+  }
+  const [sleepRes, hrRes, hrvRes, weightRes] = ergebnisse;
 
   const nights = mapSleep(sleepRes.points);
   const { series, unvollstaendig } = buildDailySeries(

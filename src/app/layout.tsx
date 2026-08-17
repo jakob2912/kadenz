@@ -25,9 +25,15 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             und pointer-events-none, damit es keine Klicks abfängt. */}
         <div aria-hidden className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
           <span className="absolute -left-[18%] -top-[22%] block h-[70vw] max-h-[520px] w-[70vw] max-w-[520px] rounded-full bg-accent/15 blur-[90px]" />
-          <span className="absolute -bottom-[14%] -right-[22%] block h-[60vw] max-h-[440px] w-[60vw] max-w-[440px] rounded-full bg-caution/10 blur-[90px]" />
+          {/* Zweiter Schein in Eisblau statt Amber: Amber ist in dieser App
+              Regenerationszustand. Als dauerhafte Deko im Hintergrund würde es
+              den Signalwert der amberfarbenen Warnkarten aufbrauchen. */}
+          <span className="absolute -bottom-[14%] -right-[22%] block h-[60vw] max-h-[440px] w-[60vw] max-w-[440px] rounded-full bg-accent-deep/10 blur-[90px]" />
         </div>
 
+        {/* Die Statusleisten-Höhe sitzt als Polsterung am body (globals.css),
+            nicht hier: klebende Kopfleisten messen sich an der
+            Bildschirmkante und müssen sie eigens abziehen können. */}
         <main className="relative z-10 mx-auto max-w-[1180px] px-5 pb-28 md:pb-10 md:pt-16">
           {children}
         </main>

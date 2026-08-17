@@ -69,10 +69,25 @@ export async function satzSpeichern(input: {
   }
 }
 
-/** Letzte Ausführung je Übung — Grundlage für PREV-Spalte und Progression. */
+/**
+ * Letzte Ausführung je Übung — Grundlage für die ZULETZT-Spalte und die
+ * Progression.
+ *
+ * Das heutige Training wird ausdrücklich ausgeschlossen. Ohne diesen Filter
+ * gewinnt die gerade laufende Einheit das `orderBy: loggedAt desc`, und dann
+ * frisst sich die Seite selbst auf: nach dem Abhaken von Satz 1 einer Übung
+ * mit zwei Sätzen liefert die Historie nur noch diesen einen Satz, beim
+ * nächsten Server-Rendern verschwindet die zweite Satzzeile, und der Zähler
+ * fällt von 16 auf 15. Im Gym wäre nach einem Tabwechsel die Hälfte weg.
+ *
+ * "Zuletzt" meint die letzte ABGESCHLOSSENE Einheit — genau das, wogegen man
+ * sich heute vergleicht.
+ */
 export async function letzteSaetze(exercise: string): Promise<SetLog[]> {
+  const heute = new Date(`${heuteIso()}T00:00:00Z`);
+
   const letzter = await prisma.setLog.findFirst({
-    where: { exercise },
+    where: { exercise, workout: { date: { lt: heute } } },
     orderBy: { loggedAt: "desc" },
     select: { workoutId: true },
   });

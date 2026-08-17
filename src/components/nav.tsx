@@ -36,9 +36,18 @@ export function TabBar() {
               key={t.href}
               href={t.href}
               aria-current={active ? "page" : undefined}
-              className={`flex min-h-[54px] flex-1 flex-col items-center justify-center gap-1 rounded-xl transition-colors
+              /* Inaktive Beschriftungen liefen auf text-fg-faint: 10px fett bei
+                 3,55:1 gegen den Grund. Die kleinste Schrift der App war
+                 gleichzeitig die kontrastärmste — auf fg-dim sind es 7,6:1.
+                 active: statt nur hover:, weil es auf dem Handy kein Hover
+                 gibt und der Tipp sonst ohne jede Rückmeldung bleibt. */
+              className={`flex min-h-[54px] flex-1 flex-col items-center justify-center gap-1 rounded-md transition-colors
                           md:min-h-[42px] md:flex-none md:flex-row md:gap-2 md:px-4
-                          ${active ? "bg-accent/10 text-accent" : "text-fg-faint hover:text-fg-dim"}`}
+                          ${
+                            active
+                              ? "bg-accent/10 text-accent"
+                              : "text-fg-dim active:bg-surface-2 active:text-fg md:hover:text-fg"
+                          }`}
             >
               <svg
                 viewBox="0 0 24 24"

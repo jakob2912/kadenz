@@ -1,6 +1,10 @@
 import { cookies } from "next/headers";
 import { refreshTokenLesen } from "./auth-store";
-import { listDataPoints, refreshAccessToken } from "./google-health";
+import {
+  listDataPoints,
+  refreshAccessToken,
+  type ListResult,
+} from "./google-health";
 import {
   buildDailySeries,
   deriveBaseline,
@@ -22,6 +26,7 @@ import {
   type TrendVerdict,
   type WeightEntry,
 } from "./coach";
+import { datenbankKonfiguriert, fehlendeGoogleVariablen } from "./konfiguration";
 
 /**
  * Eine Quelle für Dashboard und API-Route — sonst driften die beiden
@@ -44,12 +49,39 @@ export type Dashboard =
     };
 
 export async function loadDashboard(days = 30): Promise<Dashboard> {
+  // Fehlende Variablen zuerst, und mit Namen: auf Vercel ist das der
+  // wahrscheinlichste Grund, warum nichts kommt. "Nicht verbunden" würde Jakob
+  // zum Login schicken, der dann aus demselben Grund auch scheitert.
+  const fehlend = fehlendeGoogleVariablen();
+  if (fehlend.length > 0) {
+    return {
+      verbunden: false,
+      grund: `Google Health ist nicht eingerichtet — es fehlt: ${fehlend.join(
+        ", "
+      )}. In den Vercel-Projekteinstellungen bzw. in .env.local nachtragen.`,
+    };
+  }
+
   // Cookie zuerst, Datenbank als Rückfall: so funktioniert das Dashboard auch
   // in einem Browser, in dem noch nie eingeloggt wurde, solange der Login
   // irgendwann einmal stattgefunden hat.
   const jar = await cookies();
-  const refresh =
-    jar.get("kadenz_google_refresh")?.value ?? (await refreshTokenLesen());
+  let refresh: string | null = jar.get("kadenz_google_refresh")?.value ?? null;
+
+  if (!refresh && datenbankKonfiguriert()) {
+    try {
+      refresh = await refreshTokenLesen();
+    } catch (e) {
+      // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
+      // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
+      return {
+        verbunden: false,
+        grund: `Die Datenbank ist gerade nicht erreichbar: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      };
+    }
+  }
 
   if (!refresh) {
     return { verbunden: false, grund: "Noch nicht mit Google Health verbunden." };
@@ -69,12 +101,30 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
   const from = new Date(to.getTime() - days * 864e5);
   const range = { from, to };
 
-  const [sleepRes, hrRes, hrvRes, weightRes] = await Promise.all([
-    listDataPoints<ApiSleepPoint>(accessToken, "sleep", range),
-    listDataPoints<ApiRestingHrPoint>(accessToken, "restingHeartRate", range),
-    listDataPoints<ApiHrvPoint>(accessToken, "hrv", range),
-    listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
-  ]);
+  // Bisher ungesichert: eine Absage von Google — abgelaufener Testnutzer,
+  // entzogener Scope, Netzwerk weg — riss alle drei Seiten in einen 500.
+  let ergebnisse: [
+    ListResult<ApiSleepPoint>,
+    ListResult<ApiRestingHrPoint>,
+    ListResult<ApiHrvPoint>,
+    ListResult<ApiWeightPoint>,
+  ];
+  try {
+    ergebnisse = await Promise.all([
+      listDataPoints<ApiSleepPoint>(accessToken, "sleep", range),
+      listDataPoints<ApiRestingHrPoint>(accessToken, "restingHeartRate", range),
+      listDataPoints<ApiHrvPoint>(accessToken, "hrv", range),
+      listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
+    ]);
+  } catch (e) {
+    return {
+      verbunden: false,
+      grund: `Google Health hat die Abfrage abgelehnt: ${
+        e instanceof Error ? e.message : String(e)
+      }`,
+    };
+  }
+  const [sleepRes, hrRes, hrvRes, weightRes] = ergebnisse;
 
   const nights = mapSleep(sleepRes.points);
   const { series, unvollstaendig } = buildDailySeries(

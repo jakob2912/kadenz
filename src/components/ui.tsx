@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 /* Gemeinsame Bausteine. Bewusst Server-Komponenten: nichts hier braucht
@@ -16,10 +17,41 @@ export function Card({
   const border = tone === "warnung" ? "border-caution/30" : "border-hair";
   return (
     <section
-      className={`rounded-[22px] border ${border} bg-gradient-to-b from-surface-2 to-surface p-5 ${className}`}
+      className={`rounded-lg border ${border} bg-gradient-to-b from-surface-2 to-surface p-5 ${className}`}
     >
       {children}
     </section>
+  );
+}
+
+/**
+ * Sackgasse ohne Google-Verbindung auflösen.
+ *
+ * Bis hierher stand der Verbinden-Knopf nur auf der Startseite; wer über die
+ * Tab-Leiste auf Verlauf oder Coach landete, las dort nur, dass keine
+ * Verbindung besteht, ohne einen Weg heraus. Ein Grund ohne Ausweg ist keine
+ * Fehlermeldung, sondern eine Wand.
+ */
+export function NichtVerbunden({
+  titel,
+  grund,
+}: {
+  titel: string;
+  grund: string;
+}) {
+  return (
+    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+      <Eyebrow>Kadenz</Eyebrow>
+      <h1 className="mt-2 text-[27px] font-bold leading-tight tracking-[-0.025em]">{titel}</h1>
+      <p className="mt-3 text-sm leading-relaxed text-fg-dim">{grund}</p>
+      <Link
+        href="/api/auth/google"
+        className="mt-6 flex min-h-[52px] items-center justify-center rounded-md bg-accent
+                   font-semibold text-on-accent transition active:scale-[0.98]"
+      >
+        Mit Google verbinden
+      </Link>
+    </div>
   );
 }
 
@@ -66,12 +98,16 @@ export function Tag({
   tone = "akzent",
 }: {
   children: ReactNode;
-  tone?: "akzent" | "warnung" | "gut";
+  /* "schlecht" fehlte: ein Tag mit Regenerationsband "schlecht" bekam
+     denselben amberfarbenen Tag wie ein mittelmäßiger — der schlechteste Tag
+     der Woche sah aus wie ein durchschnittlicher. */
+  tone?: "akzent" | "warnung" | "gut" | "schlecht";
 }) {
   const map = {
     akzent: "text-accent border-accent/30 bg-accent/10",
     warnung: "text-caution border-caution/30 bg-caution/10",
     gut: "text-ready border-ready/30 bg-ready/10",
+    schlecht: "text-strain border-strain/30 bg-strain/10",
   } as const;
   return (
     <span
@@ -122,8 +158,11 @@ export function Gauge({
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-px">
         <b className="text-[31px] font-bold leading-none tracking-[-0.04em]">{score}</b>
+        {/* "von 100" statt "bereit": der Coach-Screen nennt denselben Wert
+            "X von 100". Zwei Namen für dieselbe Zahl auf zwei Screens zwingen
+            zum Nachdenken, ob es dieselbe Zahl ist. */}
         <span className="text-[9px] font-semibold uppercase tracking-[0.13em] text-fg-faint">
-          bereit
+          von 100
         </span>
       </div>
     </div>
@@ -132,6 +171,49 @@ export function Gauge({
 
 export function minToHm(min: number): string {
   return `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")} m`;
+}
+
+/**
+ * Heutiger Tag als ISO, ausdrücklich in Wiener Zeit.
+ *
+ * Nicht die Serverzeit: auf Vercel laufen die Server in UTC, und zwischen
+ * Mitternacht und 02:00 Wiener Zeit wäre "heute" dort noch der Vortag.
+ */
+export function heuteWien(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Vienna",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/** "Sa., 15. Aug." — kurz genug, um neben einer Zahl in einer Zeile zu stehen. */
+export function kurzDatum(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("de-AT", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/Vienna",
+  });
+}
+
+/**
+ * Wie alt ist ein Messwert.
+ *
+ * "heute" und "gestern" sind die Antworten, an denen hängt, ob man der Zahl
+ * glauben darf. Ein nacktes "2026-08-13" muss man erst gegen den Kalender
+ * rechnen, um zu merken, dass der Wert drei Tage alt ist — und genau das tut
+ * man verschlafen um sechs Uhr früh nicht.
+ */
+export function alterLabel(iso: string, heute = heuteWien()): string {
+  const tage = Math.round(
+    (Date.parse(`${heute}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`)) / 864e5
+  );
+  if (tage <= 0) return "heute";
+  if (tage === 1) return "gestern";
+  if (tage < 7) return `vor ${tage} Tagen`;
+  return kurzDatum(iso);
 }
 
 export function de(n: number, digits = 1): string {

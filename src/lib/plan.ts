@@ -1,4 +1,5 @@
 import { progression, type SetLog } from "./coach";
+import { datenbankKonfiguriert } from "./konfiguration";
 
 /**
  * Jakobs Split. "Push/Pull" meint bei ihm Anterior/Posterior — Beine sind an
@@ -209,11 +210,26 @@ export function planFor(session: Session): PlannedExercise[] {
  * ein Satz in der Datenbank liegt, zählt ausschließlich der.
  */
 export async function planMitHistorie(session: Session): Promise<PlannedExercise[]> {
+  // Ist gar keine Datenbank konfiguriert, wären die Abfragen unten acht
+  // vergebliche Verbindungsversuche — bei einem Pool mit max 1 nacheinander.
+  // Dann lieber gleich die Referenzwerte.
+  if (!datenbankKonfiguriert()) return planFor(session);
+
   const { letzteSaetze } = await import("./workouts");
 
   return Promise.all(
     session.exercises.map(async (ex) => {
-      const ausDb = await letzteSaetze(ex.name);
+      let ausDb: SetLog[] = [];
+      try {
+        ausDb = await letzteSaetze(ex.name);
+      } catch (e) {
+        // Im Gym zählt, dass der Plan dasteht. Ist die Datenbank kurz weg,
+        // fällt diese Übung auf ihren Referenzwert zurück, statt die ganze
+        // Seite mit einem 500 abzuräumen. Das Loggen meldet den Ausfall
+        // ohnehin sichtbar — satzSpeichern gibt { ok: false, fehler } zurück
+        // und die Karte zeigt das an.
+        console.error(`Historie für "${ex.name}" nicht lesbar, nutze Referenzwerte:`, e);
+      }
       return baue(ex, ausDb.length > 0 ? ausDb : ex.last);
     })
   );

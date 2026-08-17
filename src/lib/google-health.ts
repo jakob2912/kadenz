@@ -8,6 +8,8 @@
  * Nur serverseitig verwenden — greift auf das Client Secret zu.
  */
 
+import { googleRedirectUri, pflichtVariable } from "./konfiguration";
+
 const OAUTH_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const OAUTH_TOKEN = "https://oauth2.googleapis.com/token";
 const API_BASE = "https://health.googleapis.com/v4";
@@ -22,20 +24,16 @@ export const SCOPES = [
   `${SCOPE_PREFIX}.activity_and_fitness.readonly`,
 ];
 
-function env(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`${name} fehlt in .env.local`);
-  return v;
-}
-
 // ─────────────────────────────────────────────────────────────
 // OAuth
 // ─────────────────────────────────────────────────────────────
 
 export function authUrl(state: string): string {
   const p = new URLSearchParams({
-    client_id: env("GOOGLE_CLIENT_ID"),
-    redirect_uri: env("GOOGLE_REDIRECT_URI"),
+    client_id: pflichtVariable("GOOGLE_CLIENT_ID"),
+    // Nicht mehr direkt aus der Umgebung: lokal steht dort localhost:3000,
+    // auf Vercel muss dieselbe Variable die Deployment-Adresse ergeben.
+    redirect_uri: googleRedirectUri(),
     response_type: "code",
     scope: SCOPES.join(" "),
     // offline + consent sind nötig, damit Google einen refresh_token liefert.
@@ -76,9 +74,11 @@ async function tokenRequest(body: Record<string, string>): Promise<Tokens> {
 export function exchangeCode(code: string): Promise<Tokens> {
   return tokenRequest({
     code,
-    client_id: env("GOOGLE_CLIENT_ID"),
-    client_secret: env("GOOGLE_CLIENT_SECRET"),
-    redirect_uri: env("GOOGLE_REDIRECT_URI"),
+    client_id: pflichtVariable("GOOGLE_CLIENT_ID"),
+    client_secret: pflichtVariable("GOOGLE_CLIENT_SECRET"),
+    // Muss zeichengenau dieselbe sein wie in authUrl(), sonst lehnt Google den
+    // Tausch mit redirect_uri_mismatch ab — deshalb dieselbe Funktion.
+    redirect_uri: googleRedirectUri(),
     grant_type: "authorization_code",
   });
 }
@@ -86,8 +86,8 @@ export function exchangeCode(code: string): Promise<Tokens> {
 export function refreshAccessToken(refreshToken: string): Promise<Tokens> {
   return tokenRequest({
     refresh_token: refreshToken,
-    client_id: env("GOOGLE_CLIENT_ID"),
-    client_secret: env("GOOGLE_CLIENT_SECRET"),
+    client_id: pflichtVariable("GOOGLE_CLIENT_ID"),
+    client_secret: pflichtVariable("GOOGLE_CLIENT_SECRET"),
     grant_type: "refresh_token",
   });
 }

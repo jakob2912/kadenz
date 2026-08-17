@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/google-health";
+import { datenbankKonfiguriert, istKonfigurationsFehler } from "@/lib/konfiguration";
+import { fehlerSeite } from "@/lib/fehlerseite";
 
 /** Rücksprung von Google nach der Zustimmung. */
 export async function GET(request: Request) {
@@ -32,6 +34,15 @@ export async function GET(request: Request) {
     const tokens = await exchangeCode(code);
     refreshToken = tokens.refresh_token;
   } catch (e) {
+    // Eine fehlende Variable ist etwas anderes als eine Absage von Google:
+    // das eine muss Jakob nachtragen, das andere kann er nochmal versuchen.
+    if (istKonfigurationsFehler(e)) {
+      return fehlerSeite({
+        titel: "Google-Login nicht eingerichtet",
+        nachricht: `${e.message} In den Projekteinstellungen bei Vercel bzw. in .env.local nachtragen und neu deployen.`,
+        status: 500,
+      });
+    }
     return fail(e instanceof Error ? e.message : "Token-Tausch fehlgeschlagen.");
   }
 
@@ -46,11 +57,18 @@ export async function GET(request: Request) {
   // Zusätzlich in die Datenbank: der MCP-Server und spätere Hintergrundjobs
   // laufen ohne Browser und kommen an das Cookie nicht heran. Schlägt das
   // fehl, soll der Login im Browser trotzdem gelingen.
-  try {
-    const { refreshTokenSpeichern } = await import("@/lib/auth-store");
-    await refreshTokenSpeichern(refreshToken);
-  } catch (e) {
-    console.error("Refresh-Token konnte nicht in der Datenbank abgelegt werden:", e);
+  if (datenbankKonfiguriert()) {
+    try {
+      const { refreshTokenSpeichern } = await import("@/lib/auth-store");
+      await refreshTokenSpeichern(refreshToken);
+    } catch (e) {
+      console.error("Refresh-Token konnte nicht in der Datenbank abgelegt werden:", e);
+    }
+  } else {
+    console.error(
+      "DATABASE_URL ist nicht gesetzt — der Refresh-Token liegt nur im Cookie, " +
+        "der MCP-Server findet ihn dort nicht."
+    );
   }
 
   jar.set("kadenz_google_refresh", refreshToken, {
@@ -65,22 +83,9 @@ export async function GET(request: Request) {
 }
 
 function fail(message: string) {
-  return new NextResponse(
-    `<!doctype html><meta charset="utf-8">
-     <title>Login fehlgeschlagen</title>
-     <body style="background:#090b0d;color:#e9eef2;font:16px/1.6 -apple-system,system-ui,sans-serif;padding:2.5rem;max-width:38rem">
-       <h1 style="font-size:1.35rem;letter-spacing:-.02em">Login fehlgeschlagen</h1>
-       <p style="color:#94a3ae">${escapeHtml(message)}</p>
-       <p><a href="/api/auth/google" style="color:#a9c9ff">Nochmal versuchen</a></p>
-     </body>`,
-    { status: 400, headers: { "Content-Type": "text/html; charset=utf-8" } }
-  );
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!
-  );
+  return fehlerSeite({
+    titel: "Login fehlgeschlagen",
+    nachricht: message,
+    aktion: { text: "Nochmal versuchen", href: "/api/auth/google" },
+  });
 }

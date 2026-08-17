@@ -19,6 +19,11 @@ import { planMitHistorie, sessionFor, SESSIONS } from "../src/lib/plan";
 import { satzSpeichern } from "../src/lib/workouts";
 import { prisma } from "../src/lib/db";
 import { refreshTokenLesen } from "../src/lib/auth-store";
+import {
+  basisUrl,
+  datenbankKonfiguriert,
+  fehlendeGoogleVariablen,
+} from "../src/lib/konfiguration";
 import { listDataPoints, refreshAccessToken } from "../src/lib/google-health";
 import {
   buildDailySeries,
@@ -37,15 +42,42 @@ const ZIEL_KG = 97;
 const MAX_RATE = 0.5;
 
 /**
+ * Ohne DATABASE_URL meldet der Postgres-Treiber "connect ECONNREFUSED
+ * 127.0.0.1:5432" — was aussieht wie eine kaputte Datenbank, obwohl nur die
+ * Variable fehlt. Der häufigste Grund dafür: der Server wurde ohne
+ * --env-file=.env.local gestartet.
+ */
+function datenbankPruefen(): void {
+  if (!datenbankKonfiguriert()) {
+    throw new Error(
+      "DATABASE_URL ist nicht gesetzt. Der Server braucht --env-file=.env.local " +
+        "(siehe mcp/README.md), sonst findet er die Datenbank nicht."
+    );
+  }
+}
+
+/**
  * Gesundheitsdaten laden — eigene Fassung statt health-service.ts, weil jene
  * den Token über next/headers aus einem Cookie liest. Hier gibt es keinen
  * Request und keine Cookies; der Token kommt aus der Datenbank.
  */
 async function ladeGesundheit(tage = 30) {
+  datenbankPruefen();
+
+  const fehlend = fehlendeGoogleVariablen();
+  if (fehlend.length > 0) {
+    throw new Error(
+      `Google Health ist nicht eingerichtet — es fehlt: ${fehlend.join(", ")}. ` +
+        "Der Server wird mit --env-file=.env.local gestartet; steht die Variable dort?"
+    );
+  }
+
   const refresh = await refreshTokenLesen();
   if (!refresh) {
+    // Nicht mehr fest auf localhost: derselbe Server läuft auch gegen eine
+    // deployte Instanz, und dann ginge der Hinweis ins Leere.
     throw new Error(
-      "Kein Google-Refresh-Token in der Datenbank. Einmal über http://localhost:3000/api/auth/google anmelden."
+      `Kein Google-Refresh-Token in der Datenbank. Einmal über ${basisUrl()}/api/auth/google anmelden.`
     );
   }
 
@@ -181,6 +213,7 @@ server.registerTool(
   },
   async ({ anzahl }) => {
     try {
+      datenbankPruefen();
       const workouts = await prisma.workout.findMany({
         orderBy: { date: "desc" },
         take: anzahl ?? 10,
@@ -222,6 +255,7 @@ server.registerTool(
   },
   async ({ uebung, satz, kg, wdh }) => {
     try {
+      datenbankPruefen();
       const heute = sessionFor(new Date());
       const kind = heute.art === "training" ? heute.session.key : SESSIONS.pull.key;
       const r = await satzSpeichern({
