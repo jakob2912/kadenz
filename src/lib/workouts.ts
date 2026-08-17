@@ -100,11 +100,58 @@ export async function letzteSaetze(exercise: string): Promise<SetLog[]> {
   });
 }
 
+export type LaufendesTraining = {
+  startedAtMs: number;
+  beendet: boolean;
+};
+
+/**
+ * Läuft heute schon eine Einheit?
+ *
+ * Davon hängt ab, ob die Trainingsseite den Startbildschirm oder den Logger
+ * zeigt — und vor allem, ab wann die Laufzeit zählt. Vorher begann sie beim
+ * Laden der Seite: wer mittags kurz nachsieht, was ansteht, und abends
+ * trainiert, bekam mehrere Stunden Laufzeit angezeigt, die nichts gemessen
+ * haben.
+ */
+export async function laufendesTraining(
+  kind: "push" | "pull"
+): Promise<LaufendesTraining | null> {
+  const date = new Date(`${heuteIso()}T00:00:00Z`);
+  const workout = await prisma.workout.findFirst({ where: { date, kind } });
+  if (!workout) return null;
+
+  return {
+    startedAtMs: workout.startedAt.getTime(),
+    beendet: workout.finishedAt !== null,
+  };
+}
+
+/** Einheit beginnen. Idempotent — ein zweiter Aufruf setzt die Uhr nicht zurück. */
+export async function trainingStarten(
+  kind: "push" | "pull"
+): Promise<{ ok: true; startedAtMs: number } | { ok: false; fehler: string }> {
+  try {
+    const workout = await workoutHeute(kind);
+    return { ok: true, startedAtMs: workout.startedAt.getTime() };
+  } catch (e) {
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+  }
+}
+
 /** Trainingseinheit abschließen. */
-export async function trainingBeenden(kind: "push" | "pull", note?: string) {
-  const workout = await workoutHeute(kind);
-  await prisma.workout.update({
-    where: { id: workout.id },
-    data: { finishedAt: new Date(), note },
-  });
+export async function trainingBeenden(
+  kind: "push" | "pull",
+  note?: string
+): Promise<{ ok: true } | { ok: false; fehler: string }> {
+  try {
+    const workout = await workoutHeute(kind);
+    await prisma.workout.update({
+      where: { id: workout.id },
+      data: { finishedAt: new Date(), note },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+  }
 }

@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import type { PlannedExercise, Session } from "@/lib/plan";
-import { satzSpeichern } from "@/lib/workouts";
+import { useRouter } from "next/navigation";
+import { satzSpeichern, trainingStarten } from "@/lib/workouts";
 import { Card, Eyebrow, Tag, de } from "@/components/ui";
 
 const PAUSE_SEKUNDEN = 180;
@@ -21,9 +22,12 @@ type Logged = { kg: number; reps: number };
 export function TrainingLogger({
   uebungen,
   session,
+  startedAtMs,
 }: {
   uebungen: PlannedExercise[];
   session: Session;
+  /** Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des Seitenaufrufs. */
+  startedAtMs: number;
 }) {
   const [logged, setLogged] = useState<Record<string, Logged>>({});
   const [zuletzt, setZuletzt] = useState<string | null>(null);
@@ -32,7 +36,7 @@ export function TrainingLogger({
   const [pauseVorbei, setPauseVorbei] = useState(false);
   const [ansage, setAnsage] = useState("");
   const [laufzeit, setLaufzeit] = useState(0);
-  const start = useRef(Date.now());
+  const start = useRef(startedAtMs);
   const reduce = useReducedMotion();
 
   useEffect(() => {
@@ -546,4 +550,113 @@ function Ring({ fortschritt, farbe }: { fortschritt: number; farbe: string }) {
 
 function mmss(s: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Startbildschirm der Einheit.
+ *
+ * Erst ein Tipp hier legt die Einheit an und setzt den Beginn — vorher lief
+ * die Uhr ab dem Seitenaufruf. Wer mittags nachsieht, was ansteht, und abends
+ * trainiert, sah sonst eine Laufzeit von Stunden, die nichts gemessen hat.
+ *
+ * Der Bildschirm zeigt zugleich, was ansteht: bei acht Übungen will man vor
+ * dem ersten Satz wissen, ob heute die schwere Einheit dran ist.
+ */
+export function TrainingStart({
+  session,
+  uebungen,
+}: {
+  session: Session;
+  uebungen: PlannedExercise[];
+}) {
+  const router = useRouter();
+  const [laeuft, setLaeuft] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  const saetze = uebungen.reduce((n, e) => n + e.last.length, 0);
+  const aenderungen = uebungen.filter((e) => e.delta !== 0);
+
+  async function starten() {
+    setLaeuft(true);
+    setFehler(null);
+    const r = await trainingStarten(session.key);
+    if (r.ok) {
+      // Die Seite lädt neu und zeigt dann den Logger — der Beginn kommt dabei
+      // aus der Datenbank, nicht aus dem Browser.
+      router.refresh();
+    } else {
+      setFehler(r.fehler);
+      setLaeuft(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+      <Eyebrow>{session.focus}</Eyebrow>
+      <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em] md:text-[33px]">
+        {session.title}
+      </h1>
+      <p className="mt-1.5 text-sm text-fg-dim">
+        {uebungen.length} Übungen · {saetze} Sätze · Satzpause 3 Minuten
+      </p>
+
+      <button
+        type="button"
+        onClick={starten}
+        disabled={laeuft}
+        className="mt-6 flex min-h-[56px] w-full items-center justify-center rounded-md bg-accent
+                   text-base font-semibold text-on-accent transition active:scale-[0.98]
+                   disabled:opacity-60"
+      >
+        {laeuft ? "Wird gestartet…" : "Training starten"}
+      </button>
+
+      {fehler && (
+        <p className="mt-3 rounded-md border border-strain/30 bg-strain/10 px-3.5 py-2.5 text-xs leading-relaxed text-strain">
+          Start fehlgeschlagen: {fehler}
+        </p>
+      )}
+
+      {aenderungen.length > 0 && (
+        <Card className="mt-5">
+          <Eyebrow>Heute geändert</Eyebrow>
+          <ul className="mt-3 flex flex-col gap-2.5">
+            {aenderungen.map((ex) => (
+              <li key={ex.name} className="flex items-start gap-3">
+                <Tag tone={ex.delta > 0 ? "gut" : "warnung"}>
+                  {ex.delta > 0 ? "+" : "−"}
+                  {de(Math.abs(ex.delta), 1)} kg
+                </Tag>
+                <span className="min-w-0 flex-1">
+                  <b className="block text-[13px] font-semibold">{ex.name}</b>
+                  {ex.grund && (
+                    <span className="mt-0.5 block text-[11px] leading-relaxed text-fg-faint">
+                      {ex.grund}
+                    </span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <Card className="mt-3.5">
+        <Eyebrow>Übungen</Eyebrow>
+        <ol className="mt-3 flex flex-col gap-2">
+          {uebungen.map((ex, i) => (
+            <li key={ex.name} className="flex items-center gap-3">
+              <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-sm bg-surface-3 text-[11px] font-bold text-fg-dim">
+                {i + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg-dim">{ex.name}</span>
+              <span className="shrink-0 text-[11px] tabular-nums text-fg-faint">
+                {ex.last.length} × {de(ex.ziel, 1)} kg
+              </span>
+            </li>
+          ))}
+        </ol>
+      </Card>
+    </div>
+  );
 }

@@ -51,7 +51,7 @@ export default async function Coach() {
         <Nachricht titel="Training">
           {heuteTraining.art === "training"
             ? `Heute ${heuteTraining.session.focus} — ${heuteTraining.session.title}.`
-            : `Heute Pausentag. Als nächstes ${heuteTraining.naechste.focus}.`}
+            : `Heute Rest Day. Als nächstes ${heuteTraining.naechste.focus}.`}
         </Nachricht>
 
         <Nachricht titel="Gewicht">

@@ -1,5 +1,6 @@
 import { planMitHistorie, sessionFor } from "@/lib/plan";
-import { TrainingLogger } from "@/components/training-logger";
+import { laufendesTraining } from "@/lib/workouts";
+import { TrainingLogger, TrainingStart } from "@/components/training-logger";
 import { Card, Eyebrow } from "@/components/ui";
 
 // Die Startgewichte hängen an der Trainingshistorie und ändern sich nach
@@ -14,13 +15,13 @@ export default async function Training() {
     return (
       <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
         <Eyebrow>Heute</Eyebrow>
-        <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Pausentag</h1>
+        <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-          Deine Rotation ist Push – Pull – Pause. Nach einem Pausentag folgt immer Push,
+          Deine Rotation ist Push – Pull – Rest Day. Nach einem Rest Day folgt immer Push,
           morgen also <b className="font-semibold text-fg">{naechste.focus}</b>.
         </p>
 
-        {/* Vorher endete die Seite hier. Wer am Pausentag auf "Training" tippt,
+        {/* Vorher endete die Seite hier. Wer am Rest Day auf "Training" tippt,
             will wissen, was ansteht — nicht nur, dass heute nichts ansteht.
             Die Übungsliste liegt ohnehin im Plan und kostet keine Abfrage. */}
         <Card className="mt-5">
@@ -59,5 +60,28 @@ export default async function Training() {
   }
 
   const uebungen = await planMitHistorie(heute.session);
-  return <TrainingLogger uebungen={uebungen} session={heute.session} />;
+
+  // Ist die Datenbank kurz nicht erreichbar, soll man trotzdem loggen können:
+  // dann gilt "jetzt" als Beginn, statt die Seite mit einem Fehler abzuräumen.
+  let laufend = null;
+  try {
+    laufend = await laufendesTraining(heute.session.key);
+  } catch (e) {
+    console.error("Trainingsstatus nicht lesbar:", e);
+    return (
+      <TrainingLogger uebungen={uebungen} session={heute.session} startedAtMs={Date.now()} />
+    );
+  }
+
+  if (laufend === null) {
+    return <TrainingStart session={heute.session} uebungen={uebungen} />;
+  }
+
+  return (
+    <TrainingLogger
+      uebungen={uebungen}
+      session={heute.session}
+      startedAtMs={laufend.startedAtMs}
+    />
+  );
 }
