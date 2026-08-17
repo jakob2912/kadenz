@@ -32,9 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-# Die Vorlage enthält nur Variablennamen, keine Werte — sie soll ins Repo,
-# damit man beim Aufsetzen weiß, was gesetzt werden muss.
-!.env.example
+# Auch die Vorlage bleibt draußen: alles, was mit .env anfängt, gehört nicht
+# ins Repo. .env.example liegt weiter lokal im Projektordner und dient dort
+# als Nachschlagewerk, welche Variablen gesetzt werden müssen.
 
 # Von `prisma generate` erzeugt (läuft als postinstall, auch auf Vercel).
 # Rund 10 MB samt WASM-Engine, die sich bei jeder Schemaänderung ändern —
