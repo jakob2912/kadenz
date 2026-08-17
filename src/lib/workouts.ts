@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "./db";
+import { heuteWien } from "./datum";
 import type { SetLog } from "./coach";
 
 /**
@@ -9,12 +10,17 @@ import type { SetLog } from "./coach";
  * landen.
  */
 
-/** Ortsdatum statt UTC: ein Training um 22:00 gehört zum heutigen Tag. */
+/**
+ * Ortsdatum statt UTC: ein Training um 22:00 gehört zum heutigen Tag.
+ *
+ * Ausdrücklich Wiener Zeit, nicht die Zeitzone des Prozesses. Vorher standen
+ * hier getFullYear/getMonth/getDate — die lesen die Serverzeit. Lokal ist das
+ * Wien und stimmt; auf Vercel ist es UTC, und zwischen Mitternacht und 02:00
+ * Wiener Zeit lieferte diese Funktion den Vortag. Ein Satz, der um 00:30
+ * abgehakt wird, landete damit im Training von gestern.
+ */
 function heuteIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+  return heuteWien();
 }
 
 /**
@@ -24,10 +30,19 @@ function heuteIso(): string {
 async function workoutHeute(kind: "push" | "pull") {
   const date = new Date(`${heuteIso()}T00:00:00Z`);
 
-  const vorhanden = await prisma.workout.findFirst({ where: { date, kind } });
-  if (vorhanden) return vorhanden;
+  /* Ein einziger atomarer Aufruf statt findFirst-dann-create. Bei zwei
+     gleichzeitigen Aufrufen — zweiter Tab, PWA neben Safari, MCP-Server
+     parallel zur App — lasen vorher beide "nichts da" und legten beide eine
+     Zeile an. Die Sätze eines Tages verteilten sich dann auf zwei Einheiten,
+     und letzteSaetze() liest nur eine davon.
 
-  return prisma.workout.create({ data: { date, kind } });
+     Möglich wird das durch @@unique([date, kind]) im Schema: die Datenbank
+     entscheidet, wer zuerst da war, statt dass die Anwendung es errät. */
+  return prisma.workout.upsert({
+    where: { date_kind: { date, kind } },
+    update: {},
+    create: { date, kind },
+  });
 }
 
 /**

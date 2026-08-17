@@ -213,15 +213,27 @@ export default async function Heute() {
  * Die Stunde wird ausdrücklich in Wiener Zeit bestimmt, nicht aus der
  * Serverzeit: auf Vercel laufen die Server in UTC, und dort stünde um
  * 8 Uhr früh sonst "Gute Nacht".
+ *
+ * Ausgelesen wird über formatToParts, nicht über Number(...format(...)):
+ * de-AT formatiert eine Stunde als "18 Uhr", nicht als "18". Number("18 Uhr")
+ * ist NaN, und jeder Vergleich gegen NaN ist falsch — damit fiel die Funktion
+ * rund um die Uhr auf den letzten Zweig durch und grüßte auch um 14 Uhr mit
+ * "Gute Nacht". formatToParts liefert die Stunde als eigenen Teil, ohne die
+ * Beschriftung der Sprache.
+ *
+ * hourCycle: "h23" statt hour12: false, damit Mitternacht 0 ergibt und nicht
+ * 24 — h24 wäre kein Treffer in den Bereichen unten.
  */
 function gruss(): string {
-  const stunde = Number(
-    new Intl.DateTimeFormat("de-AT", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: "Europe/Vienna",
-    }).format(new Date())
-  );
+  const stundenTeil = new Intl.DateTimeFormat("de-AT", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: "Europe/Vienna",
+  })
+    .formatToParts(new Date())
+    .find((teil) => teil.type === "hour");
+
+  const stunde = Number(stundenTeil?.value);
 
   if (stunde >= 5 && stunde < 11) return "Guten Morgen";
   if (stunde >= 11 && stunde < 18) return "Guten Tag";

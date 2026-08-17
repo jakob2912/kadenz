@@ -1,4 +1,5 @@
 import { progression, type SetLog } from "./coach";
+import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 
 /**
@@ -165,8 +166,18 @@ export type Today =
   | { art: "training"; session: Session }
   | { art: "pause"; naechste: Session };
 
+/**
+ * Welche Einheit an einem Zeitpunkt ansteht.
+ *
+ * Der Kalendertag wird ausdrücklich in Wiener Zeit bestimmt. Vorher standen
+ * hier getFullYear/getMonth/getDate — die lesen die Zeitzone des Prozesses.
+ * Lokal ist das Wien, auf Vercel UTC, und zwischen Mitternacht und 02:00
+ * Wiener Zeit zeigte die Trainingsseite dort die Einheit von gestern: Rest Day
+ * statt Push, Push statt Pull. Die Startseite rechnete gleichzeitig über
+ * heuteWien() richtig — zwei Seiten, zwei Meinungen darüber, welcher Tag ist.
+ */
 export function sessionFor(date: Date): Today {
-  const day = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const day = Date.parse(`${wienerDatum(date)}T00:00:00Z`);
   const diff = Math.round((day - ANKER_PUSH) / 864e5);
   const slot = ((diff % 3) + 3) % 3;
 

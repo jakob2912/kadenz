@@ -16,6 +16,10 @@
 # next.js
 /.next/
 /out/
+# Zielverzeichnis von `NEXT_DIST_DIR=.next-build npm run build` (siehe
+# .env.example). Ohne diese Zeile landete ein kompletter Produktionsbau im
+# Repo, weil oben nur /.next/ ausgeschlossen ist.
+/.next-build/
 
 # production
 /build

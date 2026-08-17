@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { heuteWien } from "@/lib/datum";
 
 /* Gemeinsame Bausteine. Bewusst Server-Komponenten: nichts hier braucht
    Interaktivität, und alles, was serverseitig gerendert wird, steht sofort
@@ -178,15 +179,12 @@ export function minToHm(min: number): string {
  *
  * Nicht die Serverzeit: auf Vercel laufen die Server in UTC, und zwischen
  * Mitternacht und 02:00 Wiener Zeit wäre "heute" dort noch der Vortag.
+ *
+ * Liegt seit dem Zeitzonen-Befund in lib/datum.ts, weil plan.ts und
+ * workouts.ts dieselbe Antwort brauchen und diese Datei nicht importieren
+ * dürfen. Hier weiter exportiert, damit die Seiten unverändert bleiben.
  */
-export function heuteWien(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Vienna",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
+export { heuteWien };
 
 /** "Sa., 15. Aug." — kurz genug, um neben einer Zahl in einer Zeile zu stehen. */
 export function kurzDatum(iso: string): string {

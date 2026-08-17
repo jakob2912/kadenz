@@ -39,6 +39,15 @@ model Workout {
   note       String?
   sets       SetLog[]
 
+  /// Eine Einheit pro Tag und Art — von der Datenbank erzwungen, nicht nur von
+  /// der Anwendung angenommen.
+  ///
+  /// workoutHeute() prüft erst mit findFirst und legt dann mit create an. Zwei
+  /// gleichzeitige Aufrufe (zweiter Tab, PWA neben Safari, MCP-Server parallel
+  /// zur App) lesen beide "nichts da" und legen beide an. Die Sätze eines Tages
+  /// verteilen sich dann auf zwei Zeilen, und letzteSaetze() liest nur eine
+  /// davon — beim nächsten Training fehlt die Hälfte.
+  @@unique([date, kind])
   @@index([date])
 }
 
