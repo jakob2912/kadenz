@@ -10,6 +10,20 @@ const TABS = [
     d: "M12 2v3M4.9 6.9 7 9M19.1 6.9 17 9M2 15h20M6 15a6 6 0 0 1 12 0M3 20h18",
   },
   { href: "/training", label: "Training", d: "M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9" },
+  /* Fünfter Eintrag statt einer Unterseite des Coaches: den Plan liest Jakob
+     mehrmals täglich nach ("was gehört in Meal 3?"), und ein wartender
+     Kalorienvorschlag braucht eine Stelle, an der er von selbst auffällt.
+     Zwei Tipps tief unter "Coach" wäre beides verfehlt.
+
+     Eingeordnet nach Training, nicht hinten angehängt: Training und Essen sind
+     das, was heute zu tun ist, Verlauf und Coach das, was daraus folgt. Die
+     App ist zwei Tage alt — die Reihenfolge jetzt zu ordnen kostet weniger als
+     später. */
+  {
+    href: "/ernaehrung",
+    label: "Essen",
+    d: "M2.5 11.5h19a9.5 9.5 0 0 1-19 0M8.5 7.6c0-1.7 1.2-2 1.2-3.6M12.5 7.2c0-1.7 1.2-2 1.2-3.6M16.5 7.6c0-1.7 1.2-2 1.2-3.6",
+  },
   { href: "/verlauf", label: "Verlauf", d: "M3 3v18h18M7 15l4-4 3 3 5-6M19 8h-3M19 8v3" },
   {
     href: "/coach",

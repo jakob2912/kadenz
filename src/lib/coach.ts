@@ -367,3 +367,231 @@ export function weeksToGoal(
   if (kgPerWeek <= 0) return null;
   return Math.ceil((goalKg - currentKg) / kgPerWeek);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Kalorienziel anpassen
+// ─────────────────────────────────────────────────────────────
+
+/** Ein vollständiges Tagesziel. */
+export type Makros = {
+  kcal: number;
+  kohlenhydrateG: number;
+  eiweissG: number;
+  fettG: number;
+};
+
+/**
+ * Zielkorridor der Gewichtszunahme in kg pro Woche.
+ *
+ * 0,50 ist Jakobs Obergrenze, nicht sein Wunsch — darüber geht der Überschuss
+ * vor allem ins Fett. Unter 0,25 passiert zu wenig, um im Aufbau etwas zu
+ * bringen. Dieselben beiden Zahlen stehen im Urteil auf der Startseite; sie
+ * gehören hierher, damit es nur eine Definition davon gibt.
+ */
+export const ZIEL_RATE_UNTEN = 0.25;
+export const ZIEL_RATE_OBEN = 0.5;
+
+/**
+ * Angepeilt wird die Mitte des Korridors, nicht die nächstgelegene Kante.
+ *
+ * Wer auf 0,25 zielt, landet bei der nächsten Messung mit gleicher
+ * Wahrscheinlichkeit knapp darunter wie knapp darüber — und bekommt zehn Tage
+ * später den nächsten Vorschlag in dieselbe Richtung. Die Mitte hat nach oben
+ * wie nach unten Luft.
+ */
+const ZIEL_RATE_MITTE = (ZIEL_RATE_UNTEN + ZIEL_RATE_OBEN) / 2;
+
+/**
+ * Mindestabstand zwischen zwei Anpassungen in Tagen.
+ *
+ * Kürzer geht nicht: die Tagesschwankung des Gewichts liegt bei ±0,4 kg, und
+ * ob 170 kcal mehr etwas bewirkt haben, ist darunter nicht von Rauschen zu
+ * unterscheiden. Wer alle drei Tage nachschraubt, misst nur noch sich selbst.
+ */
+export const MIN_TAGE_ZWISCHEN_ANPASSUNGEN = 10;
+
+/**
+ * Schrittweite einer Anpassung.
+ *
+ * Nicht "auf einen Schlag die fehlenden 400 kcal": ein großer Sprung landet
+ * regelmäßig über dem Korridor, und die Korrektur nach unten kostet mehr Zeit
+ * als der kleinere Schritt gespart hätte.
+ */
+const SCHRITT_MIN_KCAL = 150;
+const SCHRITT_MAX_KCAL = 200;
+
+const KCAL_PRO_G_KOHLENHYDRAT = 4;
+
+/**
+ * Eiweiß bleibt bei einer Anpassung stehen, die Kalorien gehen in die
+ * Kohlenhydrate.
+ *
+ * Grund: 180 g decken bei Jakobs Gewicht rund 2,2 g/kg ab, und mehr Eiweiß
+ * bringt im Aufbau nachweislich nichts. Kohlenhydrate füllen dagegen das
+ * Glykogen und tragen das Training. Fett bleibt bei 65 g, weil darunter die
+ * Hormonlage leidet und darüber nur die Verdrängung anderer Makros stünde.
+ *
+ * Die Untergrenze ist kein Rechenwert, sondern eine Meldeschwelle: fällt das
+ * Verhältnis darunter, weil er schwerer geworden ist, sagt der Vorschlag das —
+ * er entscheidet es nicht still um.
+ */
+const EIWEISS_G_PRO_KG_UNTERGRENZE = 1.8;
+
+export type Anpassung = {
+  richtung: "hoch" | "runter";
+  /** Vorzeichenbehaftet: negativ bei einer Senkung. */
+  deltaKcal: number;
+  neu: Makros;
+  gemesseneRate: number;
+  zielRate: number;
+  begruendung: string;
+  /** Nur gesetzt, wenn das Eiweiß nicht mehr zum Körpergewicht passt. */
+  eiweissNotiz: string | null;
+};
+
+export type AnpassungsUrteil =
+  | { art: "vorschlag"; anpassung: Anpassung }
+  | { art: "kein-vorschlag"; grund: string };
+
+/**
+ * Soll das Kalorienziel geändert werden?
+ *
+ * Die Funktion darf ausdrücklich "weiß ich noch nicht" antworten, und tut das
+ * öfter als sie einen Vorschlag macht. Drei Tore stehen davor:
+ *
+ *  1. Seit der letzten Anpassung müssen MIN_TAGE_ZWISCHEN_ANPASSUNGEN vergangen
+ *     sein. Vorher misst man die Änderung nicht, sondern das Wasser danach.
+ *  2. Gemessen wird nur ab der letzten Anpassung. Eine Rate, die quer über eine
+ *     Kalorienänderung hinweg gebildet wird, mittelt zwei verschiedene
+ *     Ernährungen zu einer Zahl, die keine von beiden beschreibt.
+ *  3. assessTrend() muss die Reihe für verwertbar halten. Sagt es nein — zu
+ *     wenige Messungen, Lücke nach dem Urlaub, noch nicht stabilisiert —, wird
+ *     dessen Begründung durchgereicht, statt eine Zahl zu erfinden.
+ *
+ * Aus 2 und 3 zusammen folgt, dass die tatsächliche Wartezeit nach einer
+ * Anpassung oft über zehn Tagen liegt: assessTrend verlangt zusätzlich eine
+ * Spanne von 14 Tagen. Das ist beabsichtigt — zehn Tage sind das Minimum,
+ * nicht das Versprechen.
+ */
+export function kalorienAnpassung(opts: {
+  aktuell: Makros;
+  gewicht: WeightEntry[];
+  /** Stichtag der letzten Anpassung als ISO. null = noch nie angepasst. */
+  letzteAnpassung: string | null;
+  /** Heutiger Kalendertag als ISO, in Ortszeit ermittelt. */
+  heute: string;
+  /** Für die Eiweiß-Meldeschwelle. null = kein aktueller Messwert. */
+  koerpergewichtKg: number | null;
+}): AnpassungsUrteil {
+  const { aktuell, letzteAnpassung, heute, koerpergewichtKg } = opts;
+
+  let reihe = opts.gewicht;
+
+  if (letzteAnpassung !== null) {
+    const tage = daysBetween(letzteAnpassung, heute);
+    if (tage < MIN_TAGE_ZWISCHEN_ANPASSUNGEN) {
+      const rest = MIN_TAGE_ZWISCHEN_ANPASSUNGEN - tage;
+      return {
+        art: "kein-vorschlag",
+        grund:
+          `Das Ziel steht seit ${tage === 1 ? "einem Tag" : `${tage} Tagen`}. ` +
+          `Unter ${MIN_TAGE_ZWISCHEN_ANPASSUNGEN} Tagen ist nicht zu erkennen, ob die Änderung ` +
+          `gewirkt hat oder ob das nur Wasser war — noch ${rest === 1 ? "ein Tag" : `${rest} Tage`}.`,
+      };
+    }
+    reihe = opts.gewicht.filter((e) => e.date >= letzteAnpassung);
+  }
+
+  const trend = assessTrend(reihe);
+  if (!trend.usable) return { art: "kein-vorschlag", grund: trend.detail };
+
+  const rate = trend.kgPerWeek;
+
+  if (rate >= ZIEL_RATE_UNTEN && rate <= ZIEL_RATE_OBEN) {
+    return {
+      art: "kein-vorschlag",
+      grund:
+        `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — im Zielkorridor von ` +
+        `${komma(ZIEL_RATE_UNTEN, 2)} bis ${komma(ZIEL_RATE_OBEN, 2)}. Am Ziel ist nichts zu ändern.`,
+    };
+  }
+
+  const deltaKcal = schritt(ZIEL_RATE_MITTE - rate);
+  const richtung: "hoch" | "runter" = deltaKcal > 0 ? "hoch" : "runter";
+
+  /* Die neuen Kohlenhydrate aus dem TATSÄCHLICHEN Delta, nicht aus dem
+     ungekappten Wunsch: sonst stünde im Vorschlag eine Kalorienzahl, die zu
+     den Gramm daneben nicht passt. */
+  const kohlenhydrateNeu =
+    aktuell.kohlenhydrateG + Math.round(deltaKcal / KCAL_PRO_G_KOHLENHYDRAT);
+
+  const erwarteteRate = rate + (deltaKcal * 7) / KCAL_PER_KG;
+
+  const kopf =
+    richtung === "hoch"
+      ? `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — unter dem Zielkorridor ` +
+        `von ${komma(ZIEL_RATE_UNTEN, 2)} bis ${komma(ZIEL_RATE_OBEN, 2)}.`
+      : `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — über deiner Obergrenze ` +
+        `von ${komma(ZIEL_RATE_OBEN, 2)}. Ab hier geht der Überschuss vor allem ins Fett.`;
+
+  const rechnung =
+    `${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "mehr" : "weniger"} ` +
+    `bringen dich rechnerisch auf ${komma(erwarteteRate, 2)} kg pro Woche. ` +
+    `Sie ${richtung === "hoch" ? "gehen in die" : "kommen aus den"} Kohlenhydrate` +
+    `${richtung === "hoch" ? "" : "n"}: ${aktuell.kohlenhydrateG} → ${kohlenhydrateNeu} g. ` +
+    `Eiweiß und Fett bleiben.`;
+
+  return {
+    art: "vorschlag",
+    anpassung: {
+      richtung,
+      deltaKcal,
+      neu: {
+        kcal: aktuell.kcal + deltaKcal,
+        kohlenhydrateG: kohlenhydrateNeu,
+        eiweissG: aktuell.eiweissG,
+        fettG: aktuell.fettG,
+      },
+      gemesseneRate: rate,
+      zielRate: ZIEL_RATE_MITTE,
+      begruendung: `${kopf} ${rechnung}`,
+      eiweissNotiz: eiweissNotiz(aktuell.eiweissG, koerpergewichtKg),
+    },
+  };
+}
+
+/**
+ * Vom rechnerischen Bedarf zur erlaubten Schrittweite.
+ *
+ * Gerundet wird auf 10 kcal, wie schon in calorieTarget() — eine Zahl wie
+ * 173 kcal täuscht eine Genauigkeit vor, die aus einer Gewichtsreihe mit
+ * ±0,4 kg Tagesschwankung nicht herauszuholen ist.
+ */
+function schritt(rateLuecke: number): number {
+  const roh = (rateLuecke * KCAL_PER_KG) / 7;
+  const betrag = Math.min(SCHRITT_MAX_KCAL, Math.max(SCHRITT_MIN_KCAL, Math.abs(roh)));
+  return Math.sign(roh) * Math.round(betrag / 10) * 10;
+}
+
+function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string | null {
+  if (koerpergewichtKg === null || koerpergewichtKg <= 0) return null;
+
+  const proKg = eiweissG / koerpergewichtKg;
+  if (proKg >= EIWEISS_G_PRO_KG_UNTERGRENZE) return null;
+
+  return (
+    `Eiweiß bleibt bei ${eiweissG} g — bei ${komma(koerpergewichtKg, 1)} kg sind das nur noch ` +
+    `${komma(proKg, 2)} g/kg. Ab hier gehört der nächste Schritt ins Eiweiß statt in die ` +
+    `Kohlenhydrate. Das ist eine Frage an Fitnessbell, nicht an mich.`
+  );
+}
+
+/**
+ * Deutsches Dezimalkomma.
+ *
+ * Eigene Fassung statt de() aus components/ui.tsx: dieses Modul ist rein und
+ * darf keine Komponentendatei importieren — ui.tsx zieht next/link nach.
+ */
+function komma(n: number, digits: number): string {
+  return n.toFixed(digits).replace(".", ",");
+}

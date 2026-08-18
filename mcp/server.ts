@@ -17,6 +17,13 @@ import { z } from "zod";
 import { assessTrend, movingAverage, readiness, weeksToGoal } from "../src/lib/coach";
 import { planMitHistorie, sessionFor, SESSIONS } from "../src/lib/plan";
 import { satzSpeichern } from "../src/lib/workouts";
+import {
+  aktuellesZiel,
+  mahlzeitenLesen,
+  offenerVorschlag,
+  vorschlagLage,
+  zielHistorie,
+} from "../src/lib/ernaehrung";
 import { prisma } from "../src/lib/db";
 import { refreshTokenLesen } from "../src/lib/auth-store";
 import {
@@ -268,6 +275,84 @@ server.registerTool(
       return r.ok
         ? antwort({ gespeichert: true, uebung, satz, kg, wdh })
         : fehler(new Error(r.fehler));
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+/**
+ * Ernährung
+ *
+ * Bewusst nur lesen und vorschlagen, kein Werkzeug zum Setzen des Ziels.
+ * "Der Coach schlägt vor, entscheidet aber nicht allein" — ein Werkzeugaufruf
+ * ist Jakobs Ja nicht, auch dann nicht, wenn er im Chat zustimmt. Das Ziel
+ * ändert sich ausschließlich über die Ja-Taste in der App; die dafür nötige
+ * Server Action liegt in src/lib/ernaehrung-actions.ts und wird hier
+ * absichtlich nicht importiert.
+ */
+
+server.registerTool(
+  "ernaehrungsplan",
+  {
+    title: "Ernährungsplan",
+    description:
+      "Jakobs Mahlzeiten aus dem Fitnessbell-Plan mit Zutaten und Mengen, dazu das aktuell gültige Kalorien- und Makroziel. Der Plan ist nicht auf einzelne Mahlzeiten aufgeschlüsselt — die Makros sind Tagessummen.",
+  },
+  async () => {
+    try {
+      datenbankPruefen();
+      const [mahlzeiten, ziel] = await Promise.all([mahlzeitenLesen(), aktuellesZiel()]);
+      return antwort({ ziel, essensfenster: "05:20–18:00", mahlzeiten });
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
+  "kalorienziel",
+  {
+    title: "Kalorienziel",
+    description:
+      "Das aktuelle Kalorien- und Makroziel, die vollständige Historie (wann wurde was warum gesetzt) und ein eventuell offener Vorschlag. Löst nichts aus — die Frage allein erzeugt keinen Vorschlag.",
+    inputSchema: { anzahl: z.number().int().min(1).max(50).optional() },
+  },
+  async ({ anzahl }) => {
+    try {
+      datenbankPruefen();
+      const [aktuell, historie, offen] = await Promise.all([
+        aktuellesZiel(),
+        zielHistorie(anzahl ?? 12),
+        offenerVorschlag(),
+      ]);
+      return antwort({ aktuell, historie, offenerVorschlag: offen });
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
+  "kalorienvorschlag_pruefen",
+  {
+    title: "Kalorienvorschlag prüfen",
+    description:
+      "Prüft, ob das Kalorienziel angepasst werden sollte, und legt bei Bedarf einen Vorschlag an, den Jakob in der App mit Ja oder Nein beantwortet. Ändert das Ziel NICHT. Antwortet ausdrücklich auch mit dem Grund, warum gerade nichts vorgeschlagen wird — etwa weil der Gewichtstrend nach einer Messlücke nicht verwertbar ist oder die letzte Anpassung noch keine zehn Tage zurückliegt.",
+  },
+  async () => {
+    try {
+      datenbankPruefen();
+      // Dieselben 30 Tage wie loadDashboard() in der App: eine andere Spanne
+      // ergäbe eine andere Rate, und der Vorschlag hinge davon ab, wer gefragt
+      // hat — App oder Claude Desktop.
+      const { gewicht } = await ladeGesundheit(30);
+      return antwort(
+        await vorschlagLage({
+          gewicht,
+          koerpergewichtKg: gewicht.at(-1)?.kg ?? null,
+        })
+      );
     } catch (e) {
       return fehler(e);
     }

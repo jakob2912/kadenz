@@ -2,7 +2,7 @@
 //
 // Bewusst schlank: Gewicht, Schlaf, Ruhepuls und HRV bleiben in Google Health,
 // das ist dort die Quelle der Wahrheit und wird nicht dupliziert. Hier liegt
-// nur, was Google Health nicht kennt — die Trainingslogs.
+// nur, was Google Health nicht kennt — die Trainingslogs und die Ernährung.
 
 generator client {
   provider = "prisma-client-js"
@@ -67,4 +67,137 @@ model SetLog {
   /// Deckt die häufigste Abfrage ab: "was habe ich bei X zuletzt gemacht?"
   @@unique([workoutId, exercise, setIndex])
   @@index([exercise, loggedAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Ernährung
+// ─────────────────────────────────────────────────────────────
+
+/// Eine Mahlzeit aus Jakobs Fitnessbell-Plan.
+///
+/// Warum in der Datenbank und nicht als Konstante im Code wie SESSIONS in
+/// plan.ts: der Plan ändert sich, wenn Fitnessbell ihn ändert — und dann soll
+/// nicht deployt werden müssen. Das Trainingsprogramm steht im Code, weil die
+/// Progression daran rechnet; am Essensplan rechnet nichts, er wird gelesen.
+model Mahlzeit {
+  id String @id @default(cuid())
+
+  /// Reihenfolge im Tag, 1-basiert. Nicht die Uhrzeit: das Essensfenster
+  /// verschiebt sich mit dem Trainingszeitpunkt, die Reihenfolge nie.
+  position Int    @unique
+  /// "Meal 1" … "Intra" — die Bezeichnung aus dem Plan, unverändert.
+  name     String
+  /// "Frühstück", "Shake", "Pre", "Training", "Post", "Abend"
+  fenster  String
+
+  zutaten Zutat[]
+}
+
+model Zutat {
+  id         String   @id @default(cuid())
+  mahlzeitId String
+  mahlzeit   Mahlzeit @relation(fields: [mahlzeitId], references: [id], onDelete: Cascade)
+
+  position Int
+  name     String
+  menge    Float
+  /// "g" oder "Stk" — im Plan gibt es nur diese beiden.
+  einheit  String
+
+  /// Ausdrücklich erlaubte Ersetzung, etwa "oder 250 g Beeren" bei der Banane
+  /// in Meal 3. Als eigenes Feld statt im Namen, damit die Zeile lesbar
+  /// bleibt und die Alternative nicht wie ein Teil der Zutat aussieht.
+  alternative String?
+
+  @@unique([mahlzeitId, position])
+}
+
+/// Ein Kalorien- und Makroziel ab einem Stichtag — die Historie.
+///
+/// Jede Änderung legt eine neue Zeile an, nichts wird überschrieben. Nur so
+/// ist später beantwortbar, warum das Ziel bei 3800 statt 3600 steht und wann
+/// das entschieden wurde. Das aktuelle Ziel ist die jüngste Zeile.
+model Ernaehrungsziel {
+  id String @id @default(cuid())
+
+  /// Erster Tag, an dem dieses Ziel gilt — Kalendertag in Wiener Zeit.
+  /// Gleichzeitig der Beginn der neuen Messreihe: der Trend vor einer
+  /// Anpassung sagt nichts über die Zeit danach.
+  gueltigAb DateTime @db.Date
+
+  kcal           Int
+  kohlenhydrateG Int
+  eiweissG       Int
+  fettG          Int
+
+  /// Von wem das Ziel stammt:
+  /// "plan"   — aus dem Fitnessbell-Plan übernommen, nicht berechnet
+  /// "coach"  — von Kadenz vorgeschlagen UND von Jakob bestätigt; anders
+  ///            kommt ein Coach-Ziel nicht in diese Tabelle
+  /// "jakob"  — von Hand gesetzt
+  quelle String
+
+  /// Warum. Bei "coach" die Begründung des Vorschlags im Wortlaut, damit sie
+  /// auch dann noch lesbar ist, wenn die Gewichtsreihe längst weitergelaufen ist.
+  begruendung String
+
+  gesetztAm DateTime @default(now())
+
+  /// Der Vorschlag, aus dem dieses Ziel hervorging. Eins zu eins: ein
+  /// angenommener Vorschlag erzeugt genau ein Ziel.
+  vorschlagId String?            @unique
+  vorschlag   Kalorienvorschlag? @relation(fields: [vorschlagId], references: [id], onDelete: SetNull)
+
+  @@index([gesetztAm])
+}
+
+/// Ein Vorschlag des Coaches, das Kalorienziel zu ändern.
+///
+/// Getrennt vom Ziel, weil ein Vorschlag kein Ziel ist: er wartet auf Jakobs
+/// Ja. Erst das Ja legt ein Ernaehrungsziel an. Ein Nein bleibt trotzdem
+/// stehen — sonst schlüge der Coach zwei Tage später dasselbe wieder vor.
+model Kalorienvorschlag {
+  id         String   @id @default(cuid())
+  erstelltAm DateTime @default(now())
+
+  /// Alter und neuer Zustand vollständig, nicht nur das Delta: der Vorschlag
+  /// muss auch dann noch lesbar sein, wenn das Ziel inzwischen dreimal
+  /// weitergewandert ist.
+  kcalAlt           Int
+  kcalNeu           Int
+  kohlenhydrateAltG Int
+  kohlenhydrateNeuG Int
+  /// Bleiben bei einer Anpassung unverändert — die zusätzlichen Kalorien
+  /// gehen in die Kohlenhydrate. Trotzdem mitgeschrieben, damit der Vorschlag
+  /// ein vollständiges Ziel beschreibt und nicht nur zwei Zahlen davon.
+  eiweissG          Int
+  fettG             Int
+
+  /// Die gemessene Rate in kg/Woche, auf der der Vorschlag beruht, und der
+  /// Zielwert, gegen den verglichen wurde. Ohne diese beiden ist im Nachhinein
+  /// nicht mehr nachvollziehbar, ob der Vorschlag richtig war.
+  gemesseneRate Float
+  zielRate      Float
+
+  begruendung String
+
+  /// "offen" | "angenommen" | "abgelehnt" | "ersetzt"
+  status        String    @default("offen")
+  entschiedenAm DateTime?
+
+  /// Erzwingt: höchstens ein offener Vorschlag.
+  ///
+  /// Steht auf dem festen Wert "offen", solange der Vorschlag offen ist, und
+  /// auf NULL, sobald entschieden wurde — Postgres lässt beliebig viele NULL
+  /// in einem eindeutigen Index zu, aber nur ein einziges "offen".
+  ///
+  /// Nötig, weil der Vorschlag beim Rendern der Ernährungsseite entsteht:
+  /// zwei gleichzeitige Aufrufe (zweiter Tab, PWA neben Safari, MCP-Server
+  /// parallel) läsen sonst beide "noch keiner da" und legten beide einen an —
+  /// derselbe Fehler, den @@unique([date, kind]) bei Workout verhindert.
+  offenSchluessel String? @unique
+
+  ziel Ernaehrungsziel?
+
+  @@index([erstelltAm])
 }
