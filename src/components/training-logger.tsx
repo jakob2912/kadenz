@@ -2,10 +2,10 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
-import type { PlannedExercise, Session } from "@/lib/plan";
+import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
 import { useRouter } from "next/navigation";
 import { satzSpeichern, trainingStarten } from "@/lib/workouts";
-import { Card, Eyebrow, Tag, de } from "@/components/ui";
+import { Card, Eyebrow, Tag, de, uebungsVorschau } from "@/components/ui";
 
 const PAUSE_SEKUNDEN = 180;
 
@@ -25,7 +25,7 @@ export function TrainingLogger({
   startedAtMs,
 }: {
   uebungen: PlannedExercise[];
-  session: Session;
+  session: Einheitskopf;
   /** Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des Seitenaufrufs. */
   startedAtMs: number;
 }) {
@@ -70,7 +70,7 @@ export function TrainingLogger({
     return () => clearTimeout(id);
   }, [pauseVorbei]);
 
-  const saetzeGesamt = uebungen.reduce((n, e) => n + e.last.length, 0);
+  const saetzeGesamt = uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0);
   const saetzeFertig = Object.keys(logged).length;
   const volumen = Object.values(logged).reduce((v, s) => v + s.kg * s.reps, 0);
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
@@ -225,7 +225,9 @@ export function TrainingLogger({
 
       <div className="mt-5 flex flex-col gap-3.5">
         {uebungen.map((ex, i) => {
-          const alleFertig = ex.last.every((_, si) => logged[`${i}-${si}`]);
+          const saetze = heutigeSaetze(ex);
+          const alleFertig =
+            saetze.length > 0 && saetze.every((_, si) => logged[`${i}-${si}`]);
           return (
             /* Kein opacity mehr auf der ganzen Karte: 55 % Deckkraft senkt
                jeden Kontrast darin unter die Lesbarkeitsgrenze — ausgerechnet
@@ -272,19 +274,29 @@ export function TrainingLogger({
                 ))}
               </div>
 
-              {ex.last.map((satz, si) => (
+              {saetze.map((satz, si) => (
                 <SatzZeile
                   key={si}
                   nummer={si + 1}
                   prev={ex.prev[si]}
-                  zielKg={ex.ziel}
-                  zielReps={satz.reps}
+                  zielKg={satz.kg}
+                  zielReps={satz.wdh}
+                  amrap={satz.amrap}
                   logged={logged[`${i}-${si}`]}
                   hervorgehoben={zuletzt === `${i}-${si}`}
                   onLog={(kg, reps) => abhaken(`${i}-${si}`, ex.name, si, kg, reps)}
                   onKorrigieren={() => korrigieren(`${i}-${si}`)}
                 />
               ))}
+
+              {/* Ohne Trainingsmax steht der Bank-Slot ohne Zahlen da. Die
+                  Karte bleibt trotzdem, statt die Übung zu verstecken: dass
+                  hier etwas fehlt, ist die Information. */}
+              {saetze.length === 0 && ex.programmHinweis && (
+                <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+                  {ex.programmHinweis}
+                </p>
+              )}
             </Card>
           );
         })}
@@ -322,15 +334,18 @@ function SatzZeile({
   prev,
   zielKg,
   zielReps,
+  amrap = false,
   logged,
   hervorgehoben,
   onLog,
   onKorrigieren,
 }: {
   nummer: number;
-  prev: string;
+  prev?: string;
   zielKg: number;
   zielReps: number;
+  /** Satz auf Maximalwiederholungen: zielReps ist die Untergrenze, nicht das Ziel. */
+  amrap?: boolean;
   logged?: Logged;
   hervorgehoben: boolean;
   onLog: (kg: number, reps: number) => void;
@@ -374,7 +389,10 @@ function SatzZeile({
     >
       <span className="text-center text-xs font-semibold text-fg-faint">{nummer}</span>
       <span className="whitespace-nowrap rounded-sm bg-surface-2 py-1.5 text-center text-xs text-fg-faint">
-        {prev}
+        {/* Beim Bankdrücken im ersten Zyklus gibt es noch keine letzte
+            Ausführung. Ein Gedankenstrich sagt das; ein leeres Feld sähe
+            nach einem Ladefehler aus. */}
+        {prev ?? "—"}
       </span>
       <Feld
         wert={fertig ? String(logged!.kg).replace(".", ",") : kg}
@@ -390,7 +408,10 @@ function SatzZeile({
           setReps(v);
           setRepsUngueltig(false);
         }}
-        platzhalter={String(zielReps)}
+        /* Beim AMRAP-Satz steht "5+" im Feld: die Zahl ist die Untergrenze,
+           über die hinaus gegangen werden soll. Die Rückfallzahl beim Abhaken
+           bleibt zielReps — Number("5+") wäre NaN. */
+        platzhalter={amrap ? `${zielReps}+` : String(zielReps)}
         fertig={fertig}
         ungueltig={repsUngueltig}
         // Wiederholungen sind ganze Zahlen: die reine Zifferntastatur spart
@@ -565,15 +586,25 @@ function mmss(s: number): string {
 export function TrainingStart({
   session,
   uebungen,
+  bankKarte,
 }: {
-  session: Session;
+  session: Einheitskopf;
   uebungen: PlannedExercise[];
+  /**
+   * Der Bank-Slot als fertig gerenderter Serverknoten.
+   *
+   * Als Prop statt als eigener Abschnitt in der Seite: der Startbildschirm ist
+   * eine Client-Komponente und ersetzt die ganze Seite. Was zum 5/3/1 gehört,
+   * braucht aber Datenbankzugriff — also rendert die Seite es und reicht es
+   * hier durch.
+   */
+  bankKarte?: ReactNode;
 }) {
   const router = useRouter();
   const [laeuft, setLaeuft] = useState(false);
   const [fehler, setFehler] = useState<string | null>(null);
 
-  const saetze = uebungen.reduce((n, e) => n + e.last.length, 0);
+  const saetze = uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0);
   const aenderungen = uebungen.filter((e) => e.delta !== 0);
 
   async function starten() {
@@ -617,6 +648,8 @@ export function TrainingStart({
         </p>
       )}
 
+      {bankKarte}
+
       {aenderungen.length > 0 && (
         <Card className="mt-5">
           <Eyebrow>Heute geändert</Eyebrow>
@@ -651,7 +684,7 @@ export function TrainingStart({
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px] text-fg-dim">{ex.name}</span>
               <span className="shrink-0 text-[11px] tabular-nums text-fg-faint">
-                {ex.last.length} × {de(ex.ziel, 1)} kg
+                {uebungsVorschau(ex)}
               </span>
             </li>
           ))}

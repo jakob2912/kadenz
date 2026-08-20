@@ -34,3 +34,31 @@ export function wienerDatum(zeitpunkt: Date): string {
 export function heuteWien(): string {
   return wienerDatum(new Date());
 }
+
+/**
+ * Die Stunde in Wiener Zeit, 0–23.
+ *
+ * Ausgelesen über formatToParts, nicht über Number(...format(...)): de-AT
+ * formatiert eine Stunde als "18 Uhr", nicht als "18". Number("18 Uhr") ist
+ * NaN, und jeder Vergleich gegen NaN ist falsch — genau daran scheiterte der
+ * Gruß auf der Startseite, der deshalb rund um die Uhr "Gute Nacht" sagte.
+ *
+ * hourCycle "h23" statt hour12: false, damit Mitternacht 0 ergibt und nicht
+ * 24 — h24 wäre in keinem Stundenbereich ein Treffer.
+ *
+ * Hier und nicht in der Seite, weil inzwischen drei Stellen sie brauchen:
+ * der Gruß, die Koffein-Regel im Briefing und der MCP-Server. Die Zeitzone
+ * gehört ohnehin in dieses Modul — es ist die eine Stelle, die entscheidet,
+ * welcher Tag und welche Stunde in Wien gerade sind.
+ */
+export function wienerStunde(jetzt: Date = new Date()): number {
+  const teil = new Intl.DateTimeFormat("de-AT", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: "Europe/Vienna",
+  })
+    .formatToParts(jetzt)
+    .find((t) => t.type === "hour");
+
+  return Number(teil?.value);
+}

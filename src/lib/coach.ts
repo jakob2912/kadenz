@@ -595,3 +595,177 @@ function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string
 function komma(n: number, digits: number): string {
   return n.toFixed(digits).replace(".", ",");
 }
+
+// ─────────────────────────────────────────────────────────────
+// Tagesbriefing
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Ab dieser Uhrzeit kein Koffein mehr.
+ *
+ * Kreatin und Koffein nimmt Jakob täglich; als Checkliste haben sie im
+ * Dashboard nichts verloren. Der eine Fall, der eine Ansage wert ist: das
+ * Training rutscht hinter den Cutoff. Dann ist die Frage nicht mehr "hast du
+ * genommen", sondern "heute besser ohne".
+ */
+export const KOFFEIN_CUTOFF_STUNDE = 15;
+
+export type Vorschlag = {
+  /** Was zu tun ist — als Handlung, nicht als Zustandsbeschreibung. */
+  text: string;
+  /** Der gemessene Wert, aus dem er folgt. */
+  grund: string;
+};
+
+export type Briefing = {
+  /** Wie die Nacht war, gegen die persönliche Referenz. */
+  schlaf: string;
+  /** Die Freigabe für heute, in einem Satz. */
+  befund: string;
+  vorschlaege: Vorschlag[];
+};
+
+export type BriefingEingabe = {
+  heute: ReadinessInput;
+  baseline: ReadinessBaseline;
+  urteil: ReadinessVerdict;
+  /** Aufwachtag der ausgewerteten Nacht, ISO. */
+  nachtDatum: string;
+  /** Heutiger Kalendertag in Wiener Zeit, ISO. */
+  heuteIso: string;
+  /** Steht heute eine Einheit an? Nur dann ist die Koffein-Regel eine Frage. */
+  trainingHeute: boolean;
+  /** Stunde in Wiener Zeit, 0–23. */
+  stunde: number;
+};
+
+/**
+ * Das Tagesbriefing: wie die Nacht war und was daraus folgt.
+ *
+ * Jeder Vorschlag hängt an einem gemessenen Treiber. Liegt keiner vor, ist
+ * die Liste leer — und das ist die Aussage. Eine Liste, die immer drei Punkte
+ * hat, wird nach einer Woche überblättert, weil sie an guten Tagen dasselbe
+ * sagt wie an schlechten.
+ *
+ * Rein wie der Rest der Datei: den Text erzeugen App und MCP-Server aus
+ * derselben Funktion, sonst gäbe Kadenz im Chat einen anderen Rat als auf der
+ * Startseite.
+ */
+export function briefing(e: BriefingEingabe): Briefing {
+  const { heute, baseline, urteil } = e;
+
+  const schlafDelta = heute.sleepMin - baseline.sleepMin;
+  const tiefDelta = heute.deepMin - baseline.deepMin;
+  const hrElevation = heute.restingHr - baseline.restingHr;
+  const hrvAnteil = heute.hrv / baseline.hrv;
+
+  const tageAlt = Math.round(
+    (Date.parse(`${e.heuteIso}T00:00:00Z`) - Date.parse(`${e.nachtDatum}T00:00:00Z`)) / 864e5
+  );
+
+  const vorschlaege: Vorschlag[] = [];
+
+  /* Die Schwellen sind dieselben, die readiness() zu drivers führen. Zwei
+     verschiedene Grenzen für dieselbe Aussage hießen, dass die Karte einen
+     Treiber nennt, zu dem darunter kein Vorschlag steht. */
+  if (schlafDelta < -45) {
+    vorschlaege.push({
+      text: `Geh heute rund ${Math.round(-schlafDelta / 5) * 5} Minuten früher ins Bett als gestern.`,
+      grund: `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)}.`,
+    });
+  }
+
+  if (tiefDelta < -20) {
+    vorschlaege.push({
+      text: "Heute nichts Schweres mehr in den letzten drei Stunden vor dem Schlafen, und das Training nicht in den späten Abend schieben.",
+      grund:
+        `${Math.round(heute.deepMin)} statt ${Math.round(baseline.deepMin)} Minuten Tiefschlaf. ` +
+        `Woran es lag, misst die Uhr nicht — Alkohol, spätes Essen und ein spätes Training ` +
+        `sind die drei üblichen, und alle drei kannst du heute anders machen.`,
+    });
+  }
+
+  if (hrElevation >= 3) {
+    vorschlaege.push({
+      text: "Heute keine zusätzliche Ausdauerbelastung. Kraft ja, aber ohne Extras drumherum.",
+      grund:
+        `Ruhepuls ${komma(hrElevation, 1)} Schläge über deinem Normalwert. Krafttraining ` +
+        `belastet vor allem lokal und verträgt das; Cardio zieht die Erholung in die Länge, ` +
+        `ohne dir im Aufbau etwas zu bringen.`,
+    });
+  }
+
+  if (hrvAnteil <= 0.85) {
+    vorschlaege.push({
+      text: "Nimm heute Volumen raus statt Gewicht — einen Satz weniger je Übung, die Gewichte lässt du stehen.",
+      grund:
+        `HRV bei ${Math.round(hrvAnteil * 100)} % deines Normalwerts. Das ist der Marker, der ` +
+        `am empfindlichsten auf Gesamtbelastung reagiert. Weniger Sätze senken sie, ` +
+        `leichtere Gewichte kosten dich nur den Reiz.`,
+    });
+  }
+
+  if (e.trainingHeute && e.stunde >= KOFFEIN_CUTOFF_STUNDE) {
+    vorschlaege.push({
+      text: "Heute ohne Koffein trainieren.",
+      grund:
+        `Es ist nach ${KOFFEIN_CUTOFF_STUNDE}:00, deinem Cutoff. Jetzt noch genommen steht es ` +
+        `dir nachts im Weg — und der Schlaf ist der Hebel, an dem alles andere hängt.`,
+    });
+  }
+
+  return {
+    schlaf: schlafSatz(heute, baseline, schlafDelta, tiefDelta, tageAlt, e.nachtDatum),
+    befund: befundSatz(urteil),
+    vorschlaege,
+  };
+}
+
+function schlafSatz(
+  heute: ReadinessInput,
+  baseline: ReadinessBaseline,
+  schlafDelta: number,
+  tiefDelta: number,
+  tageAlt: number,
+  nachtDatum: string
+): string {
+  /* Bei veralteten Daten steht das Datum vorne, nicht als Fußnote. "Du hast
+     6 h 10 geschlafen" ist schlicht falsch, wenn die Nacht drei Tage her ist,
+     und wer den Satz liest, bezieht ihn sonst auf heute. */
+  const kopf =
+    tageAlt >= 1
+      ? `Die letzte ausgewertete Nacht ist die auf ${nachtDatum} — nicht heute Nacht. Damals: `
+      : "";
+
+  const dauer =
+    Math.abs(schlafDelta) < 15
+      ? `${hm(heute.sleepMin)}, praktisch genau deine übliche Länge`
+      : schlafDelta < 0
+        ? `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)} — ${Math.round(-schlafDelta)} Minuten weniger`
+        : `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)} — ${Math.round(schlafDelta)} Minuten mehr`;
+
+  const tief =
+    Math.abs(tiefDelta) < 10
+      ? `Tiefschlaf ${Math.round(heute.deepMin)} Minuten, auf Referenzniveau.`
+      : tiefDelta < 0
+        ? `Tiefschlaf ${Math.round(heute.deepMin)} statt ${Math.round(baseline.deepMin)} Minuten.`
+        : `Tiefschlaf ${Math.round(heute.deepMin)} Minuten, ${Math.round(tiefDelta)} über Referenz.`;
+
+  return `${kopf}${dauer}. ${tief}`;
+}
+
+function befundSatz(urteil: ReadinessVerdict): string {
+  if (urteil.band === "gut") {
+    return "Volle Freigabe. Deine Werte liegen auf Normalniveau — Training läuft wie geplant, Cardio ist frei.";
+  }
+  if (urteil.allowLifting) {
+    return "Krafttraining ja, Cardio nein.";
+  }
+  return "Heute nur locker.";
+}
+
+/** Minuten als "7 h 05". Eigene Fassung, damit das Modul rein bleibt. */
+function hm(minuten: number): string {
+  const m = Math.round(minuten);
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+}

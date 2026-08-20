@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 import { loadDashboard } from "@/lib/health-service";
 import { Eyebrow, NichtVerbunden, de } from "@/components/ui";
-import { sessionFor } from "@/lib/plan";
+import { SESSIONS, rotationFor } from "@/lib/plan";
 
 export const dynamic = "force-dynamic";
 
 export default async function Coach() {
   const data = await loadDashboard(30);
-  const heuteTraining = sessionFor(new Date());
+  const heuteTraining = rotationFor(new Date());
 
   if (!data.verbunden) {
     return <NichtVerbunden titel="Der Coach braucht deine Daten" grund={data.grund} />;
@@ -49,9 +49,12 @@ export default async function Coach() {
         </Nachricht>
 
         <Nachricht titel="Training">
+          {/* Nur die Bezeichnung der Einheit, keine Übungsliste: die stünde
+              seit dem Übungskatalog in der Datenbank und wäre eine Abfrage
+              für einen Satz, der sie nicht braucht. */}
           {heuteTraining.art === "training"
-            ? `Heute ${heuteTraining.session.focus} — ${heuteTraining.session.title}.`
-            : `Heute Rest Day. Als nächstes ${heuteTraining.naechste.focus}.`}
+            ? `Heute ${SESSIONS[heuteTraining.einheit].focus} — ${SESSIONS[heuteTraining.einheit].title}.`
+            : `Heute Rest Day. Als nächstes ${SESSIONS[heuteTraining.naechste].focus}.`}
         </Nachricht>
 
         <Nachricht titel="Gewicht">

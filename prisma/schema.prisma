@@ -201,3 +201,92 @@ model Kalorienvorschlag {
 
   @@index([erstelltAm])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Trainingsprogramm
+// ─────────────────────────────────────────────────────────────
+
+/// Eine Übung im Split.
+///
+/// Stand bis hierher als Konstante SESSIONS in src/lib/plan.ts — die Datei
+/// hat es selbst angekündigt: "sobald die Datenbank steht, kommen sie von
+/// dort". Der Grund, es jetzt zu tun: eine Übung tauschen (Gerät belegt,
+/// Schulter zwickt) brauchte bisher ein Deployment. Aus Claude Desktop heraus
+/// soll das ein Werkzeugaufruf sein.
+///
+/// Ausdrücklich KEIN Fremdschlüssel von SetLog hierher. Der Kommentar dort
+/// gilt weiter: geloggt wird auch, was nicht im Katalog steht.
+model Uebung {
+  id String @id @default(cuid())
+
+  /// "push" (anterior) oder "pull" (posterior)
+  einheit  String
+  /// Reihenfolge in der Einheit, 1-basiert.
+  position Int
+  /// Der Name, unter dem auch geloggt wird — die Verbindung zu SetLog.exercise.
+  name     String
+  notiz    String?
+
+  /// Nicht-null heißt: die Sätze dieser Übung gibt ein Programm vor, nicht
+  /// progression(). Bisher nur "531" für das Bankdrücken.
+  programm String?
+
+  /// Referenzwerte aus dem Kraftwerte-Log, solange die Übung noch nie
+  /// geloggt wurde. Sobald ein Satz in SetLog liegt, zählt ausschließlich der.
+  ///
+  /// Die Wiederholungen als Liste statt als Zahl plus Satzanzahl: Jakobs
+  /// zweiter Satz ist meist einen weniger, aber nicht immer — bei Crunch und
+  /// Trizeps-Pushdown stehen zweimal 5. Eine abgeleitete Regel wäre bei zwei
+  /// von sechzehn Übungen falsch gewesen.
+  startKg  Float?
+  startWdh Int[]
+
+  /// Kein aktiv-Kennzeichen: eine getauschte Übung wird gelöscht.
+  ///
+  /// Ihre Sätze überleben das ohnehin — SetLog.exercise ist Freitext ohne
+  /// Fremdschlüssel, der Kraftverlauf findet sie weiter unter ihrem Namen.
+  /// Eine stillgelegte Zeile würde dagegen ihren Platz in
+  /// @@unique([einheit, position]) weiter belegen und müsste beim Umsortieren
+  /// mitgeschoben werden, ohne dass sie irgendwo angezeigt wird.
+
+  /// Beide erzwungen: keine zwei Übungen auf demselben Platz, kein Name
+  /// zweimal in derselben Einheit — sonst wäre nicht mehr entscheidbar,
+  /// welche Zeile zu einem SetLog gehört.
+  @@unique([einheit, position])
+  @@unique([einheit, name])
+}
+
+/// Der Trainingsmax fürs Bankdrücken, je Zyklus eine Zeile.
+///
+/// Anhängend wie Ernaehrungsziel: nichts wird überschrieben. Nur so ist
+/// später beantwortbar, warum der Trainingsmax steht, wo er steht — ob er
+/// gestiegen ist oder nach einem verfehlten AMRAP-Satz zurückgesetzt wurde.
+model BankTrainingsmax {
+  id String @id @default(cuid())
+
+  /// Fortlaufend ab 1, aus dem Kalender abgeleitet (siehe bankPosition()).
+  ///
+  /// Eindeutig, und das ist der Zweck: der nächste Trainingsmax entsteht
+  /// beiläufig beim Aufrufen des Plans. Zwei gleichzeitige Aufrufe — zweiter
+  /// Tab, PWA neben Safari, MCP-Server parallel — läsen sonst beide "für
+  /// diesen Zyklus noch nichts da" und legten beide eine Zeile an. Derselbe
+  /// Griff wie offenSchluessel bei Kalorienvorschlag.
+  zyklus Int @unique
+
+  /// Erster Tag, an dem dieser Trainingsmax gilt — Kalendertag in Wiener Zeit.
+  gueltigAb DateTime @db.Date
+
+  tmKg Float
+
+  /// "start"  — von Jakob einmalig eingetragen, es gab keine Historie
+  /// "zyklus" — von Kadenz aus dem AMRAP-Satz fortgeschrieben
+  /// "jakob"  — von Hand korrigiert
+  quelle String
+
+  /// Warum. Bei "zyklus" der Wortlaut aus naechsterTm().
+  begruendung String
+
+  gesetztAm DateTime @default(now())
+
+  @@index([gesetztAm])
+}

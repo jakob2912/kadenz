@@ -1,5 +1,7 @@
 import { loadDashboard } from "@/lib/health-service";
-import { SCHULSTART, phaseFor } from "@/lib/coach";
+import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
+import { rotationFor } from "@/lib/plan";
+import { wienerStunde } from "@/lib/datum";
 import { GewichtEingabe } from "@/components/gewicht-eingabe";
 import {
   Card,
@@ -155,8 +157,18 @@ export default async function Heute() {
                 >
                   K
                 </div>
-                <div className="text-sm leading-relaxed text-fg-dim">
-                  {coachText(heute.regeneration, heute.restingHr - baseline.restingHr)}
+                <div className="min-w-0 flex-1 text-sm leading-relaxed text-fg-dim">
+                  <Tagesbriefing
+                    briefing={briefing({
+                      heute,
+                      baseline,
+                      urteil: heute.regeneration,
+                      nachtDatum: heute.date,
+                      heuteIso,
+                      trainingHeute: rotationFor(new Date()).art === "training",
+                      stunde: wienerStunde(),
+                    })}
+                  />
                 </div>
               </div>
             </Card>
@@ -225,15 +237,7 @@ export default async function Heute() {
  * 24 — h24 wäre kein Treffer in den Bereichen unten.
  */
 function gruss(): string {
-  const stundenTeil = new Intl.DateTimeFormat("de-AT", {
-    hour: "numeric",
-    hourCycle: "h23",
-    timeZone: "Europe/Vienna",
-  })
-    .formatToParts(new Date())
-    .find((teil) => teil.type === "hour");
-
-  const stunde = Number(stundenTeil?.value);
+  const stunde = wienerStunde();
 
   if (stunde >= 5 && stunde < 11) return "Guten Morgen";
   if (stunde >= 11 && stunde < 18) return "Guten Tag";
@@ -276,34 +280,39 @@ function deltaLabel(diff: number, unit: string): string {
   return `${sign}${de(Math.abs(rounded), digits)}${unit ? " " + unit : ""}`;
 }
 
-/** Text aus dem tatsächlichen Befund — nicht aus einer Liste von Floskeln. */
-function coachText(
-  v: { band: string; allowLifting: boolean; allowCardio: boolean; drivers: string[] },
-  hrElevation: number
-) {
-  if (v.band === "gut") {
-    return (
-      <p>
-        <b className="font-semibold text-fg">Volle Freigabe.</b> Deine Werte liegen auf
-        Normalniveau — Training läuft wie geplant, Cardio ist frei.
-      </p>
-    );
-  }
-
+/**
+ * Das Briefing als Karte.
+ *
+ * Vorher standen hier zwei Absätze über die Freigabe. Was fehlte, war das
+ * Naheliegende: wie die Nacht war und was man heute anders machen kann. Die
+ * Vorschlagsliste steht ausdrücklich nur da, wenn es einen gemessenen Grund
+ * gibt — eine Liste, die immer drei Punkte hat, wird nach einer Woche
+ * überblättert.
+ */
+function Tagesbriefing({ briefing }: { briefing: Briefing }) {
   return (
     <>
       <p>
-        <b className="font-semibold text-fg">
-          {v.allowLifting ? "Krafttraining ja, Cardio nein." : "Heute nur locker."}
-        </b>{" "}
-        Dein Ruhepuls liegt {de(hrElevation, 1)} Schläge über deinem Normalwert
-        {v.drivers.length > 1 ? `, dazu ${v.drivers.slice(1).join(" und ")}` : ""}.
+        <b className="font-semibold text-fg">{briefing.befund}</b> {briefing.schlaf}
       </p>
-      <p className="mt-2.5">
-        Krafttraining belastet vor allem lokal und verträgt das. Zusätzliche
-        Ausdauerbelastung würde die Erholung verzögern, ohne dir im Aufbau etwas zu bringen —
-        die kommt zurück, sobald Ruhepuls und HRV wieder stehen.
-      </p>
+
+      {briefing.vorschlaege.length > 0 ? (
+        <ul className="mt-3 flex flex-col gap-2.5">
+          {briefing.vorschlaege.map((v) => (
+            <li key={v.text} className="border-l-2 border-accent/40 pl-3">
+              <b className="block font-semibold text-fg">{v.text}</b>
+              <span className="mt-0.5 block text-[13px] leading-relaxed text-fg-faint">
+                {v.grund}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2.5 text-[13px] leading-relaxed text-fg-faint">
+          Nichts zu verbessern — kein Wert liegt weit genug daneben, um daraus einen Rat zu
+          machen. Weiter wie gestern.
+        </p>
+      )}
     </>
   );
 }

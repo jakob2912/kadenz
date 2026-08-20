@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { heuteWien } from "@/lib/datum";
+import { heutigeSaetze, type PlannedExercise } from "@/lib/plan";
 
 /* Gemeinsame Bausteine. Bewusst Server-Komponenten: nichts hier braucht
    Interaktivität, und alles, was serverseitig gerendert wird, steht sofort
@@ -216,4 +217,27 @@ export function alterLabel(iso: string, heute = heuteWien()): string {
 
 export function de(n: number, digits = 1): string {
   return n.toFixed(digits).replace(".", ",");
+}
+
+/**
+ * Die Kurzfassung einer Übung für Vorschau-Listen.
+ *
+ * Beim 5/3/1 wäre "3 × 92,5 kg" falsch — die drei Sätze haben drei
+ * verschiedene Gewichte. Dort steht die Spanne. Und solange der Trainingsmax
+ * fehlt, gibt es gar keine Sätze: dann ein Gedankenstrich statt "0 × 0,0 kg",
+ * was aussieht, als wäre eine Zahl kaputtgerechnet worden.
+ *
+ * Hier und nicht im Trainings-Logger, weil die Rest-Day-Vorschau dieselbe
+ * Zeile braucht — und genau dort stand vorher das "0 × 0,0 kg".
+ */
+export function uebungsVorschau(ex: PlannedExercise): string {
+  const saetze = heutigeSaetze(ex);
+  if (saetze.length === 0) return "—";
+
+  const gewichte = saetze.map((s) => s.kg);
+  const min = Math.min(...gewichte);
+  const max = Math.max(...gewichte);
+
+  if (min === max) return `${saetze.length} × ${de(max, 1)} kg`;
+  return `${saetze.length} × ${de(min, 1)}–${de(max, 1)} kg`;
 }

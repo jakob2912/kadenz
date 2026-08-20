@@ -51,3 +51,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# CodeGraph-Index: lokal erzeugt, nicht teilen
+/.codegraph/
