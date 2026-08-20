@@ -11,7 +11,9 @@ function bau(heute: Partial<ReadinessInput>, extra: Partial<Parameters<typeof br
     urteil: readiness(werte, baseline),
     nachtDatum: "2026-08-20",
     heuteIso: "2026-08-20",
-    trainingHeute: false,
+    // Trainingstag ist der Normalfall dieser Tests; die Rest-Day-Fassung der
+    // Texte steht weiter unten in eigenen Fällen.
+    trainingHeute: true,
     stunde: 9,
     ...extra,
   });
@@ -44,6 +46,26 @@ describe("briefing", () => {
     const b = bau({ deepMin: 40 });
     const tief = b.vorschlaege.find((v) => v.grund.includes("Tiefschlaf"));
     expect(tief?.grund).toContain("misst die Uhr nicht");
+  });
+
+  it("spricht am Rest Day keine Freigabe fürs Krafttraining aus", () => {
+    /* "Krafttraining ja" an einem Tag, an dem keins ansteht, beantwortet eine
+       Frage, die niemand gestellt hat — und liest sich wie eine Aufforderung,
+       den Rest Day zu überspringen. */
+    for (const werte of [{}, { restingHr: 56 }, { hrv: 40, restingHr: 60, sleepMin: 300 }]) {
+      const b = bau(werte, { trainingHeute: false });
+      expect(b.befund).toContain("Rest Day");
+      expect(b.befund).not.toContain("Krafttraining");
+      expect(b.befund).not.toContain("Freigabe");
+    }
+  });
+
+  it("schiebt den Volumen-Rat am Rest Day auf die nächste Einheit", () => {
+    // Heute gibt es kein Volumen, aus dem sich etwas herausnehmen ließe.
+    const b = bau({ hrv: 54 }, { trainingHeute: false });
+    const hrvRat = b.vorschlaege.find((v) => v.grund.includes("HRV"));
+    expect(hrvRat?.text).toContain("nächste Einheit");
+    expect(hrvRat?.text).not.toContain("Heute");
   });
 
   it("rät bei erhöhtem Ruhepuls von Cardio ab, nicht vom Krafttraining", () => {

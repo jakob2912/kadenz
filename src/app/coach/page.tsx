@@ -39,9 +39,14 @@ export default async function Coach() {
                 <> — {data.heute.regeneration.drivers.join(", ")}</>
               )}
               .{" "}
-              {data.heute.regeneration.allowCardio
-                ? "Cardio ist frei."
-                : "Krafttraining läuft, Cardio setze ich aus."}
+              {/* An einem Rest Day ist die Freigabe zum Heben keine Frage —
+                  dann sagt der Satz etwas über die Pause statt über Training,
+                  das heute ohnehin nicht ansteht. */}
+              {heuteTraining.art !== "training"
+                ? "Heute ist Rest Day."
+                : data.heute.regeneration.allowCardio
+                  ? "Cardio ist frei."
+                  : "Krafttraining läuft, Cardio setze ich aus."}
             </>
           ) : (
             "Noch keine vollständige Nacht mit Ruhepuls und HRV."

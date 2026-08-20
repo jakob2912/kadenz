@@ -115,16 +115,50 @@ export type Trainingsplan = {
 
 export type Tagesplan =
   | ({ art: "training" } & Trainingsplan)
-  | { art: "pause"; naechste: Trainingsplan };
+  | {
+      art: "pause";
+      naechste: Trainingsplan;
+      /** Kalendertag der nächsten Einheit, ISO. Nicht zwingend morgen. */
+      naechsterTag: string;
+    };
 
 export async function einheitFuerTag(date: Date): Promise<Tagesplan> {
   const rotation = rotationFor(date);
 
   if (rotation.art === "pause") {
-    return { art: "pause", naechste: await trainingsplanFuer(morgen(date)) };
+    const naechsterTag = naechsterTrainingstag(date);
+    return {
+      art: "pause",
+      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`)),
+      naechsterTag,
+    };
   }
 
   return { art: "training", ...(await trainingsplanFuer(date)) };
+}
+
+/**
+ * Der nächste Tag mit einer Einheit, als ISO-Datum.
+ *
+ * Vorher stand hier schlicht "morgen": auf einen Rest Day folgte immer Push.
+ * Mit eingeschobenen Rest Days stimmt das nicht mehr — zwei Pausentage
+ * hintereinander sind möglich, und trainingsplanFuer() wirft für einen
+ * Pausentag. Die Schranke von sieben Tagen ist großzügig: drei Tage Rotation
+ * plus jeder denkbare Einschub liegen darunter. Wird sie erreicht, ist etwas
+ * an den Einschüben falsch, und ein Fehler ist besser als eine Endlosschleife.
+ */
+function naechsterTrainingstag(date: Date): string {
+  let tag = date;
+
+  for (let n = 0; n < 7; n++) {
+    tag = morgen(tag);
+    if (rotationFor(tag).art === "training") return wienerDatum(tag);
+  }
+
+  throw new Error(
+    `Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an. ` +
+      `Das kann nur an den eingeschobenen Rest Days liegen.`
+  );
 }
 
 /**

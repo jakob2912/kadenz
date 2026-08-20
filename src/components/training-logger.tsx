@@ -301,6 +301,7 @@ export function TrainingLogger({
                   zielKg={satz.kg}
                   zielReps={satz.wdh}
                   amrap={satz.amrap}
+                  vorgegeben={ex.programmSaetze.length > 0}
                   logged={logged[`${i}-${si}`]}
                   hervorgehoben={zuletzt === `${i}-${si}`}
                   onLog={(kg, reps) => abhaken(`${i}-${si}`, ex.name, si, kg, reps)}
@@ -354,6 +355,7 @@ function SatzZeile({
   zielKg,
   zielReps,
   amrap = false,
+  vorgegeben = false,
   logged,
   hervorgehoben,
   onLog,
@@ -365,13 +367,30 @@ function SatzZeile({
   zielReps: number;
   /** Satz auf Maximalwiederholungen: zielReps ist die Untergrenze, nicht das Ziel. */
   amrap?: boolean;
+  /**
+   * Ein Programm gibt den Satz vor — beim 5/3/1 rechnet sich das Gewicht aus
+   * dem Trainingsmax und ist für jeden Satz ein anderes. Dann stehen die Werte
+   * im Feld statt bloß als Platzhalter dahinter.
+   */
+  vorgegeben?: boolean;
   logged?: Logged;
   hervorgehoben: boolean;
   onLog: (kg: number, reps: number) => void;
   onKorrigieren: () => void;
 }) {
-  const [kg, setKg] = useState("");
-  const [reps, setReps] = useState("");
+  /* Bei einer vorgegebenen Übung stehen Gewicht und Wiederholungen schon im
+     Feld: beim Bankdrücken hat jeder der drei Sätze ein eigenes Gewicht
+     (65/75/85 % des Trainingsmax), und das im Gym aus einem Platzhalter
+     abzutippen ist genau das Rechnen, das das Programm abnehmen soll.
+
+     Der AMRAP-Satz ist die Ausnahme. Seine Wiederholungen sind kein Ziel,
+     sondern die Messung, aus der der nächste Trainingsmax folgt. Stünde dort
+     die Untergrenze schon drin, wäre ein Satz mit acht Wiederholungen mit
+     einem Tipp als Fünfer gespeichert — der Trainingsmax bliebe stehen, und
+     niemand sähe, warum. Das Gewicht steht auch dort im Feld, nur die Zahl
+     der Wiederholungen bleibt leer. */
+  const [kg, setKg] = useState(vorgegeben ? String(zielKg).replace(".", ",") : "");
+  const [reps, setReps] = useState(vorgegeben && !amrap ? String(zielReps) : "");
   const [repsUngueltig, setRepsUngueltig] = useState(false);
   const fertig = Boolean(logged);
 

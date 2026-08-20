@@ -172,6 +172,26 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
 const ANKER_PUSH = Date.UTC(2026, 7, 15);
 
 /**
+ * Einzeln eingeschobene Rest Days.
+ *
+ * Die Rotation läuft stur alle drei Tage. Wer einen Tag zusätzlich pausiert,
+ * schiebt damit alles Folgende um einen Tag nach hinten — die Vergangenheit
+ * aber nicht: der 15.08. war ein Push-Tag und bleibt einer, egal welche Pause
+ * danach kam. Deshalb steht hier ein Datum je Einschub, statt den Anker zu
+ * verschieben. Ein verschobener Anker hätte rückwirkend jeden zurückliegenden
+ * Tag neu beschriftet, und die Push-Indizes wären mitgewandert — der
+ * 5/3/1-Zyklus hinge dann plötzlich an anderen Kalendertagen.
+ *
+ * Aufsteigend halten. Ein neuer Einschub kommt hinten dazu.
+ */
+export const EINGESCHOBENE_PAUSEN: readonly string[] = ["2026-08-21"];
+
+/** Wie viele Einschübe bis einschließlich dieses Tages liegen. */
+function pausenBis(tagMs: number): number {
+  return EINGESCHOBENE_PAUSEN.filter((iso) => Date.parse(`${iso}T00:00:00Z`) <= tagMs).length;
+}
+
+/**
  * Der Kalendertag eines Push-Tags, rückwärts aus seinem Index.
  *
  * Gegenstück zu rotationFor(). Gebraucht vom 5/3/1: um den Trainingsmax
@@ -181,7 +201,20 @@ const ANKER_PUSH = Date.UTC(2026, 7, 15);
  * und gepflegt werden; so ist sie jederzeit neu ausrechenbar.
  */
 export function datumFuerPushIndex(pushIndex: number): string {
-  return new Date(ANKER_PUSH + pushIndex * 3 * 864e5).toISOString().slice(0, 10);
+  /* Die Einschübe verschieben das Datum nach hinten, und ein weiter hinten
+     liegendes Datum kann wieder über einen Einschub hinwegkommen. Deshalb
+     nicht einmal addieren, sondern bis zum Festpunkt rechnen. Die Schleife
+     läuft höchstens so oft, wie es Einschübe gibt; die Schranke fängt nur den
+     Fall ab, dass die Liste einmal unsortiert oder doppelt befüllt wird. */
+  let ms = ANKER_PUSH + pushIndex * 3 * 864e5;
+
+  for (let n = 0; n <= EINGESCHOBENE_PAUSEN.length; n++) {
+    const soll = ANKER_PUSH + (pushIndex * 3 + pausenBis(ms)) * 864e5;
+    if (soll === ms) break;
+    ms = soll;
+  }
+
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /**
@@ -196,7 +229,8 @@ export function datumFuerPushIndex(pushIndex: number): string {
  * Woche 3 mit 95 %.
  */
 export function pushIndexAbDatum(iso: string): number {
-  const tage = (Date.parse(`${iso}T00:00:00Z`) - ANKER_PUSH) / 864e5;
+  const day = Date.parse(`${iso}T00:00:00Z`);
+  const tage = (day - ANKER_PUSH) / 864e5 - pausenBis(day);
   return Math.ceil(tage / 3);
 }
 
@@ -230,8 +264,13 @@ export type Rotation =
  * war, und der Teil, den ein Test greifen kann.
  */
 export function rotationFor(date: Date): Rotation {
-  const day = Date.parse(`${wienerDatum(date)}T00:00:00Z`);
-  const diff = Math.round((day - ANKER_PUSH) / 864e5);
+  const iso = wienerDatum(date);
+  const day = Date.parse(`${iso}T00:00:00Z`);
+
+  // Ein eingeschobener Rest Day ist einer, egal was die Rotation sagen würde.
+  if (EINGESCHOBENE_PAUSEN.includes(iso)) return { art: "pause", naechste: "push" };
+
+  const diff = Math.round((day - ANKER_PUSH) / 864e5) - pausenBis(day);
   const slot = ((diff % 3) + 3) % 3;
 
   if (slot === 0) {

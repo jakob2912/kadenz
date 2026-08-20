@@ -6,6 +6,7 @@ import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { TrainingLogger, TrainingStart } from "@/components/training-logger";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { Card, Eyebrow, de, kurzDatum, uebungsVorschau } from "@/components/ui";
+import { wienerDatum } from "@/lib/datum";
 
 // Die Startgewichte hängen an der Trainingshistorie und ändern sich nach
 // jedem Satz — hier darf nichts zwischengespeichert werden. Seit dem
@@ -17,20 +18,38 @@ export default async function Training() {
 
   if (heute.art === "pause") {
     const naechste = heute.naechste;
+
+    /* Seit es eingeschobene Rest Days gibt, ist die nächste Einheit nicht
+       zwingend die von morgen — zwei Pausentage hintereinander sind möglich.
+       Der Text muss das sagen, sonst sucht man morgen früh eine Einheit, die
+       erst übermorgen ansteht. */
+    const istMorgen = heute.naechsterTag === naechsterKalendertag();
+
     return (
       <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
         <Eyebrow>Heute</Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
         <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-          Deine Rotation ist Push – Pull – Rest Day. Nach einem Rest Day folgt immer Push,
-          morgen also <b className="font-semibold text-fg">{naechste.fokus}</b>.
+          Deine Rotation ist Push – Pull – Rest Day.{" "}
+          {istMorgen ? (
+            <>
+              Als nächstes steht morgen{" "}
+              <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+            </>
+          ) : (
+            <>
+              Heute und morgen ist Pause; als nächstes steht am{" "}
+              <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>{" "}
+              <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+            </>
+          )}
         </p>
 
         {/* Vorher endete die Seite hier. Wer am Rest Day auf "Training" tippt,
             will wissen, was ansteht — nicht nur, dass heute nichts ansteht. */}
         <Card className="mt-5">
           <div className="flex items-baseline justify-between gap-3">
-            <Eyebrow>Morgen</Eyebrow>
+            <Eyebrow>{istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}</Eyebrow>
             <span className="text-[11px] text-fg-faint">
               {naechste.uebungen.length} Übungen ·{" "}
               {naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0)} Sätze
@@ -56,11 +75,16 @@ export default async function Training() {
           </ol>
           <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
             Gewichte aus der letzten Ausführung. Das tatsächliche Zielgewicht rechnet
-            Kadenz morgen aus deinen Wiederholungen.
+            Kadenz am Trainingstag aus deinen Wiederholungen.
           </p>
         </Card>
 
-        {naechste.bank && <BankHinweis bank={naechste.bank} morgen />}
+        {naechste.bank && (
+          <BankHinweis
+            bank={naechste.bank}
+            wann={istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}
+          />
+        )}
       </div>
     );
   }
@@ -107,8 +131,7 @@ export default async function Training() {
  * ist), oder Bank-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil
  * heute nichts ansteht, hieße jedes Mal neu nachzurechnen, wann wieder.
  */
-function BankHinweis({ bank, morgen = false }: { bank: Bankstand; morgen?: boolean }): ReactNode {
-  const wann = morgen ? "Morgen" : "Heute";
+function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string }): ReactNode {
 
   if (bank.tm === null) {
     return <BankTrainingsmax aktuellerTm={null} zyklus={bank.position.zyklus} />;
@@ -153,4 +176,10 @@ function BankHinweis({ bank, morgen = false }: { bank: Bankstand; morgen?: boole
       </p>
     </Card>
   );
+}
+
+/** Der morgige Kalendertag in Wiener Zeit, ISO. */
+function naechsterKalendertag(): string {
+  const heute = Date.parse(`${wienerDatum(new Date())}T00:00:00Z`);
+  return new Date(heute + 864e5).toISOString().slice(0, 10);
 }

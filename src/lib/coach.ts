@@ -687,7 +687,9 @@ export function briefing(e: BriefingEingabe): Briefing {
 
   if (hrElevation >= 3) {
     vorschlaege.push({
-      text: "Heute keine zusätzliche Ausdauerbelastung. Kraft ja, aber ohne Extras drumherum.",
+      text: e.trainingHeute
+        ? "Heute keine zusätzliche Ausdauerbelastung. Kraft ja, aber ohne Extras drumherum."
+        : "Heute keine zusätzliche Ausdauerbelastung — der Rest Day trifft sich gut.",
       grund:
         `Ruhepuls ${komma(hrElevation, 1)} Schläge über deinem Normalwert. Krafttraining ` +
         `belastet vor allem lokal und verträgt das; Cardio zieht die Erholung in die Länge, ` +
@@ -697,7 +699,12 @@ export function briefing(e: BriefingEingabe): Briefing {
 
   if (hrvAnteil <= 0.85) {
     vorschlaege.push({
-      text: "Nimm heute Volumen raus statt Gewicht — einen Satz weniger je Übung, die Gewichte lässt du stehen.",
+      /* An einem Rest Day gibt es kein Volumen, aus dem sich heute etwas
+         herausnehmen ließe. Der Wert ist trotzdem eine Ansage — nur eine für
+         die nächste Einheit. */
+      text: e.trainingHeute
+        ? "Nimm heute Volumen raus statt Gewicht — einen Satz weniger je Übung, die Gewichte lässt du stehen."
+        : "Geh die nächste Einheit mit einem Satz weniger je Übung an, die Gewichte lässt du stehen.",
       grund:
         `HRV bei ${Math.round(hrvAnteil * 100)} % deines Normalwerts. Das ist der Marker, der ` +
         `am empfindlichsten auf Gesamtbelastung reagiert. Weniger Sätze senken sie, ` +
@@ -716,7 +723,7 @@ export function briefing(e: BriefingEingabe): Briefing {
 
   return {
     schlaf: schlafSatz(heute, baseline, schlafDelta, tiefDelta, tageAlt, e.nachtDatum),
-    befund: befundSatz(urteil),
+    befund: befundSatz(urteil, e.trainingHeute),
     vorschlaege,
   };
 }
@@ -754,7 +761,26 @@ function schlafSatz(
   return `${kopf}${dauer}. ${tief}`;
 }
 
-function befundSatz(urteil: ReadinessVerdict): string {
+/**
+ * Die Freigabe für heute, in einem Satz.
+ *
+ * An einem Rest Day steht hier nichts über Krafttraining. "Krafttraining ja"
+ * an einem Tag, an dem ohnehin keins ansteht, beantwortet eine Frage, die
+ * niemand gestellt hat — und liest sich wie eine Aufforderung, den Rest Day
+ * zu überspringen. Die Regenerationswerte sind an so einem Tag trotzdem eine
+ * Aussage, nur eine über die Pause statt über die Freigabe.
+ */
+function befundSatz(urteil: ReadinessVerdict, trainingHeute: boolean): string {
+  if (!trainingHeute) {
+    if (urteil.band === "gut") {
+      return "Rest Day, und deine Werte sind auf Normalniveau.";
+    }
+    if (urteil.allowLifting) {
+      return "Rest Day — trifft sich gut, deine Werte liegen unter deinem Normalwert.";
+    }
+    return "Rest Day, und deine Werte sagen dasselbe: heute nichts draufpacken.";
+  }
+
   if (urteil.band === "gut") {
     return "Volle Freigabe. Deine Werte liegen auf Normalniveau — Training läuft wie geplant, Cardio ist frei.";
   }
