@@ -68,14 +68,15 @@ export default async function Training() {
   const kopf: Einheitskopf = { key: heute.einheit, title: heute.titel, focus: heute.fokus };
 
   // Ist die Datenbank kurz nicht erreichbar, soll man trotzdem loggen können:
-  // dann gilt "jetzt" als Beginn, statt die Seite mit einem Fehler abzuräumen.
+  // dann setzt der Logger den Beginn selbst, statt die Seite mit einem Fehler
+  // abzuräumen.
   let laufend = null;
   try {
     laufend = await laufendesTraining(heute.einheit);
   } catch (e) {
     console.error("Trainingsstatus nicht lesbar:", e);
     return (
-      <TrainingLogger uebungen={heute.uebungen} session={kopf} startedAtMs={Date.now()} />
+      <TrainingLogger uebungen={heute.uebungen} session={kopf} startedAtMs={null} />
     );
   }
 

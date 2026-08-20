@@ -26,8 +26,12 @@ export function TrainingLogger({
 }: {
   uebungen: PlannedExercise[];
   session: Einheitskopf;
-  /** Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des Seitenaufrufs. */
-  startedAtMs: number;
+  /**
+   * Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des
+   * Seitenaufrufs. `null`, wenn die Datenbank ihn gerade nicht hergibt: dann
+   * zählt die Zeit ab dem Moment, in dem der Logger auf dem Schirm steht.
+   */
+  startedAtMs: number | null;
 }) {
   const [logged, setLogged] = useState<Record<string, Logged>>({});
   const [zuletzt, setZuletzt] = useState<string | null>(null);
@@ -40,8 +44,13 @@ export function TrainingLogger({
   const reduce = useReducedMotion();
 
   useEffect(() => {
+    /* Der Rückfall auf "jetzt" steht hier und nicht im Server-Render: Date.now()
+       während des Renderns ist unrein, und der Wert wäre ohnehin der Zeitpunkt
+       der Anfrage gewesen, nicht der, an dem der Logger vor dir liegt. */
+    start.current ??= Date.now();
+
     const id = setInterval(
-      () => setLaufzeit(Math.floor((Date.now() - start.current) / 1000)),
+      () => setLaufzeit(Math.floor((Date.now() - (start.current ?? Date.now())) / 1000)),
       1000
     );
     return () => clearInterval(id);
@@ -49,14 +58,24 @@ export function TrainingLogger({
 
   useEffect(() => {
     if (pause === null) return;
-    if (pause <= 0) {
-      // Abgelaufen, nicht abgebrochen: nur dann ist die Meldung fällig.
-      setPause(null);
-      setPauseVorbei(true);
-      setAnsage("Satzpause vorbei.");
-      return;
-    }
-    const id = setTimeout(() => setPause((p) => (p === null ? null : p - 1)), 1000);
+
+    /* Das Ende der Pause fällt in den Timeout und nicht in den Rumpf des
+       Effekts. Vorher zählte der Countdown bis 0 herunter, und der nächste
+       Effektlauf räumte diese 0 sofort wieder weg: ein Renderdurchgang, der
+       im Gym als kurz aufblitzende "0:00" sichtbar war, und für React ein
+       setState mitten im Effekt. Jetzt geht die letzte Sekunde direkt auf
+       "vorbei" — dieselbe Dauer, ein Renderdurchgang weniger. */
+    const id = setTimeout(() => {
+      if (pause <= 1) {
+        // Abgelaufen, nicht abgebrochen: nur dann ist die Meldung fällig.
+        setPause(null);
+        setPauseVorbei(true);
+        setAnsage("Satzpause vorbei.");
+        return;
+      }
+      setPause(pause - 1);
+    }, 1000);
+
     return () => clearTimeout(id);
   }, [pause]);
 
