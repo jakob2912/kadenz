@@ -14,15 +14,20 @@ import { datenbankKonfiguriert } from "./konfiguration";
  * Datenbank konfiguriert ist (lokal ohne .env.local, im Build), und die
  * Bezeichnungen der beiden Einheiten — title und focus hängen an der Art,
  * nicht an den Übungen, und haben in einer Übungstabelle nichts verloren.
- *
- * Der Katalog kennt zusätzlich Bankdrücken auf Push-Platz 1. Hier fehlt es
- * bewusst: ohne Datenbank gibt es auch keinen Trainingsmax, und ein
- * 5/3/1-Slot ohne Trainingsmax ist eine leere Zeile.
  */
 
 export type Exercise = {
   name: string;
   note?: string;
+  /**
+   * Wie viele Sätze heute anstehen.
+   *
+   * Kommt aus dem Katalog, nicht aus `last`. Vorher zählte heutigeSaetze()
+   * die Sätze der letzten Einheit — eine Übung ohne Historie und ohne
+   * startWdh bekam damit gar keine, und ein halb abgehaktes Training
+   * schrumpfte den Plan beim nächsten Mal still zusammen.
+   */
+  saetze: number;
   /** Letzte Ausführung — Grundlage für PREV-Spalte und Progression. */
   last: SetLog[];
 };
@@ -34,6 +39,19 @@ export type Session = {
   exercises: Exercise[];
 };
 
+/**
+ * Die Rückfallebene, wenn keine Datenbank erreichbar ist.
+ *
+ * Muss namentlich mit dem Katalog übereinstimmen — SetLog.exercise hält den
+ * Übungsnamen als Text, und wer hier "Lat Pulldown" liefert, während in der
+ * Datenbank "Latzug" steht, findet keinen einzigen geloggten Satz. Die Seite
+ * zeigte dann Referenzgewichte und behauptete, die Übung sei nie gemacht
+ * worden. Genau so war es hier auseinandergelaufen, bevor die Namen am
+ * 25.08.2026 abgeglichen wurden.
+ *
+ * Bankdrücken fehlt weiterhin bewusst: ohne Datenbank gibt es auch keinen
+ * Trainingsmax, und ein 5/3/1-Slot ohne Trainingsmax ist eine leere Zeile.
+ */
 export const SESSIONS: Record<"push" | "pull", Session> = {
   pull: {
     key: "pull",
@@ -43,59 +61,67 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
       {
         name: "Iso-Lateral Row",
         note: "Maschine, unilateral",
+        saetze: 2,
         last: [
           { reps: 6, kg: 50 },
           { reps: 5, kg: 50 },
         ],
       },
       {
-        name: "Lat Pulldown",
+        name: "Latzug",
         note: "zur Brust ziehen",
+        saetze: 2,
         last: [
           { reps: 6, kg: 95 },
           { reps: 5, kg: 95 },
         ],
       },
       {
-        name: "T Bar Row",
+        name: "T-Bar Row",
+        saetze: 2,
         last: [
           { reps: 5, kg: 60 },
           { reps: 4, kg: 60 },
         ],
       },
       {
-        name: "Machine Reverse Fly",
-        last: [
-          { reps: 7, kg: 55 },
-          { reps: 6, kg: 55 },
-        ],
-      },
-      {
         name: "Preacher Curl",
+        saetze: 2,
         last: [
           { reps: 6, kg: 20 },
           { reps: 5, kg: 20 },
         ],
       },
       {
+        name: "Machine Reverse Fly",
+        saetze: 2,
+        last: [
+          { reps: 7, kg: 55 },
+          { reps: 6, kg: 55 },
+        ],
+      },
+      {
+        name: "Crunch (Maschine)",
+        saetze: 2,
+        last: [
+          { reps: 5, kg: 70 },
+          { reps: 5, kg: 70 },
+        ],
+      },
+      {
         name: "Leg Curl",
+        saetze: 2,
         last: [
           { reps: 7, kg: 125 },
           { reps: 6, kg: 125 },
         ],
       },
       {
-        name: "Stiff-Leg-Deadlift",
+        name: "Stiff-Leg Deadlift",
+        saetze: 2,
         last: [
           { reps: 8, kg: 100 },
           { reps: 7, kg: 100 },
-        ],
-      },
-      {
-        name: "Crunch (Maschine)",
-        last: [
-          { reps: 5, kg: 70 },
-          { reps: 5, kg: 70 },
         ],
       },
     ],
@@ -106,56 +132,64 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
     focus: "Push · Anterior",
     exercises: [
       {
-        name: "Incline Chest Press",
-        note: "Maschine",
-        last: [
-          { reps: 5, kg: 100 },
-          { reps: 4, kg: 100 },
-        ],
-      },
-      {
-        name: "Butterfly",
-        note: "Form laut dir verbesserungswürdig",
-        last: [
-          { reps: 7, kg: 85 },
-          { reps: 6, kg: 85 },
-        ],
-      },
-      {
-        name: "Shoulder Press",
-        note: "Maschine",
-        last: [
-          { reps: 6, kg: 100 },
-          { reps: 5, kg: 100 },
-        ],
-      },
-      {
         name: "Seitheben",
         note: "Maschine, unilateral",
+        saetze: 2,
         last: [
           { reps: 8, kg: 37.5 },
           { reps: 7, kg: 37.5 },
         ],
       },
       {
+        name: "Butterfly",
+        note: "Form laut dir verbesserungswürdig",
+        saetze: 2,
+        last: [
+          { reps: 7, kg: 85 },
+          { reps: 6, kg: 85 },
+        ],
+      },
+      {
+        name: "Incline Chest Press",
+        note: "Maschine",
+        saetze: 2,
+        last: [
+          { reps: 5, kg: 100 },
+          { reps: 4, kg: 100 },
+        ],
+      },
+      {
+        name: "Shoulder Press",
+        note: "Maschine",
+        saetze: 2,
+        last: [
+          { reps: 6, kg: 100 },
+          { reps: 5, kg: 100 },
+        ],
+      },
+      {
         name: "Trizeps-Pushdown",
         note: "Cuff am Kabelturm",
+        saetze: 2,
         last: [
           { reps: 5, kg: 20 },
           { reps: 5, kg: 20 },
         ],
       },
-      { name: "Hex Squat", note: "nur 1 Satz", last: [{ reps: 7, kg: 95 }] },
+      { name: "Hack Squat", note: "nur 1 Satz", saetze: 1, last: [{ reps: 7, kg: 95 }] },
       {
         name: "Leg Extension",
+        saetze: 2,
         last: [
           { reps: 7, kg: 90 },
           { reps: 6, kg: 90 },
         ],
       },
+      { name: "Adduktoren (Maschine)", note: "Maschine", saetze: 2, last: [] },
       {
         name: "Calf Raise",
         note: "Slab Press",
+        saetze: 2,
         last: [
           { reps: 6, kg: 130 },
           { reps: 5, kg: 130 },
@@ -371,32 +405,83 @@ export async function mitHistorie(uebungen: ZuPlanen[]): Promise<PlannedExercise
   // max 1 nacheinander. Dann lieber gleich die Referenzwerte.
   if (!datenbankKonfiguriert()) return uebungen.map((ex) => baue(ex, ex.last));
 
-  const { letzteSaetze } = await import("./workouts");
+  const { letzteSaetzeFuer } = await import("./workouts");
 
-  return Promise.all(
-    uebungen.map(async (ex) => {
-      let ausDb: SetLog[] = [];
-      try {
-        ausDb = await letzteSaetze(ex.name);
-      } catch (e) {
-        // Im Gym zählt, dass der Plan dasteht. Ist die Datenbank kurz weg,
-        // fällt diese Übung auf ihren Referenzwert zurück, statt die ganze
-        // Seite mit einem 500 abzuräumen. Das Loggen meldet den Ausfall
-        // ohnehin sichtbar — satzSpeichern gibt { ok: false, fehler } zurück
-        // und die Karte zeigt das an.
-        console.error(`Historie für "${ex.name}" nicht lesbar, nutze Referenzwerte:`, e);
-      }
-      return baue(ex, ausDb.length > 0 ? ausDb : ex.last);
-    })
-  );
+  /* Eine Abfrage für die ganze Einheit statt zwei je Übung. Vorher lief hier
+     ein Promise.all über letzteSaetze() — das sah nebenläufig aus, war es
+     aber nicht: der Pool in db.ts steht auf max 1, also gingen die zwanzig
+     Abfragen einer Push-Einheit nacheinander über die Leitung. Genau das war
+     die Wartezeit beim Wechsel auf den Trainings-Tab.
+
+     Der try umschließt jetzt den einen Aufruf statt jede Übung einzeln. Die
+     Haltung bleibt dieselbe: im Gym zählt, dass der Plan dasteht. Ist die
+     Datenbank kurz weg, fällt die Einheit auf ihre Referenzwerte zurück,
+     statt die Seite mit einem 500 abzuräumen. Das Loggen meldet den Ausfall
+     ohnehin sichtbar — satzSpeichern gibt { ok: false, fehler } zurück und
+     die Karte zeigt das an. */
+  let historie = new Map<string, SetLog[]>();
+  try {
+    historie = await letzteSaetzeFuer(uebungen.map((ex) => ex.name));
+  } catch (e) {
+    console.error("Trainingshistorie nicht lesbar, nutze Referenzwerte:", e);
+  }
+
+  return uebungen.map((ex) => {
+    const ausDb = historie.get(ex.name) ?? [];
+    return baue(ex, ausDb.length > 0 ? ausDb : ex.last);
+  });
 }
+
+/**
+ * Wie viele Sätze eine Übung an diesem Tag vorsieht.
+ *
+ * Die einzige Stelle, an der die Bank-Tag-Reduktion entschieden wird. Sie
+ * greift unter genau zwei Bedingungen zugleich: heute ist Bank-Tag, UND für
+ * diese Übung ist ausdrücklich eine abweichende Anzahl hinterlegt. Fehlt eines
+ * von beiden, gilt die gewöhnliche Anzahl.
+ *
+ * Hier und nicht in uebungen.ts, obwohl der Katalog dort liegt: das ist
+ * Planungslogik, keine Persistenz. Dieselbe Trennung wie bei rotationFor() —
+ * der Teil, der stimmen muss, soll ohne Datenbank prüfbar sein. "Nur dort, wo
+ * tatsächlich vorgesehen" ist eine Behauptung, und ein Test soll sie halten
+ * können, ohne dafür einen Trainingsmax anzulegen.
+ */
+export function saetzeFuerTag(
+  eintrag: { saetze: number; saetzeBankTag: number | null },
+  istBankTag: boolean
+): number {
+  if (istBankTag && eintrag.saetzeBankTag !== null) return eintrag.saetzeBankTag;
+  return eintrag.saetze;
+}
+
+/**
+ * Die Sollwiederholungen, wenn eine Übung noch nie geloggt wurde.
+ *
+ * Die Obergrenze von Jakobs Spanne 5–8, nicht die Mitte: dort erhöht
+ * progression() das Gewicht. Wer eine neue Übung mit einem konservativen Ziel
+ * beginnt, hängt eine Einheit länger am Startgewicht fest, ohne dass die Zahl
+ * ihm etwas gesagt hätte.
+ */
+const WDH_OHNE_HISTORIE = 8;
 
 /**
  * Die Sätze, die heute anstehen.
  *
  * Zwei Quellen, eine Liste: entweder gibt ein Programm die Sätze samt Gewicht
- * vor (5/3/1), oder sie leiten sich aus der letzten Ausführung ab — so viele
- * Sätze wie zuletzt, alle auf dem Zielgewicht aus progression().
+ * vor (5/3/1), oder es sind ex.saetze Sätze auf dem Zielgewicht aus
+ * progression().
+ *
+ * Die Anzahl kam bis zum 25.08.2026 aus ex.last — so viele Sätze wie zuletzt.
+ * Das hatte zwei Fehler auf einmal: eine Übung ohne Historie und ohne
+ * startWdh bekam gar keine Sätze (so stand der Adductor mit einer leeren
+ * Tabelle im Plan), und wer von zwei geplanten Sätzen nur einen abhakte,
+ * bekam beim nächsten Training nur noch einen vorgeschlagen. Der Plan
+ * schrumpfte still auf das, was zuletzt geschafft wurde.
+ *
+ * Die Wiederholungen kommen weiterhin aus der letzten Ausführung — sie sind
+ * die Vorlage, gegen die man sich vergleicht. Reicht die Historie nicht so
+ * weit (drei geplante Sätze, zwei geloggte), wiederholt sich der letzte
+ * bekannte Wert, statt die Zeile leer zu lassen.
  *
  * Der Logger rechnete das vorher selbst aus ex.last und ex.ziel. Mit dem
  * Bank-Slot hätte er eine zweite Fassung davon gebraucht, und zwei Stellen,
@@ -405,5 +490,10 @@ export async function mitHistorie(uebungen: ZuPlanen[]): Promise<PlannedExercise
  */
 export function heutigeSaetze(ex: PlannedExercise): GeplanterSatz[] {
   if (ex.programmSaetze.length > 0) return ex.programmSaetze;
-  return ex.last.map((s) => ({ kg: ex.ziel, wdh: s.reps, amrap: false }));
+
+  return Array.from({ length: Math.max(0, ex.saetze) }, (_, i) => ({
+    kg: ex.ziel,
+    wdh: ex.last[Math.min(i, ex.last.length - 1)]?.reps ?? WDH_OHNE_HISTORIE,
+    amrap: false,
+  }));
 }

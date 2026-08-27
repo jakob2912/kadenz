@@ -99,25 +99,105 @@ export async function satzSpeichern(input: {
  * sich heute vergleicht.
  */
 export async function letzteSaetze(exercise: string): Promise<SetLog[]> {
+  return (await letzteSaetzeFuer([exercise])).get(exercise) ?? [];
+}
+
+/**
+ * Dasselbe für eine ganze Einheit — in EINER Abfrage.
+ *
+ * Der Grund ist der Verbindungspool. Vorher rief mitHistorie() letzteSaetze()
+ * je Übung auf, und jeder Aufruf brauchte zwei Abfragen: erst die jüngste
+ * Einheit finden, dann deren Sätze holen. Bei zehn Push-Übungen sind das
+ * zwanzig. Das Promise.all darum sah nach Nebenläufigkeit aus, war aber
+ * keine: der Pool in db.ts steht bewusst auf max 1, also liefen alle zwanzig
+ * nacheinander gegen Supabase. Zusammen mit Katalog, Bankstand und
+ * laufendesTraining wurde daraus die Wartezeit, die man beim Tippen auf
+ * "Training" gesehen hat.
+ *
+ * Statt zwei Abfragen je Übung eine für alle: der Index
+ * @@index([exercise, loggedAt]) trägt sie, und die Zuordnung "welche Einheit
+ * war die letzte" fällt beim Durchgehen der nach loggedAt absteigend
+ * sortierten Zeilen von selbst ab — die erste Zeile je Übung gehört
+ * definitionsgemäß zur jüngsten Einheit.
+ *
+ * Das heutige Training bleibt ausgeschlossen, aus demselben Grund wie oben.
+ */
+export async function letzteSaetzeFuer(
+  uebungen: string[]
+): Promise<Map<string, SetLog[]>> {
+  /* Der setIndex wird zum Sortieren gebraucht, gehört aber nicht ins
+     Ergebnis: SetLog ist der Typ, mit dem progression() und die
+     ZULETZT-Spalte rechnen, und der kennt nur Gewicht und Wiederholungen. */
+  type Zeile = SetLog & { setIndex: number };
+  const gesammelt = new Map<string, Zeile[]>();
+
+  const ergebnis = new Map<string, SetLog[]>();
+  if (uebungen.length === 0) return ergebnis;
+
   const heute = new Date(`${heuteIso()}T00:00:00Z`);
 
-  const letzter = await prisma.setLog.findFirst({
-    where: { exercise, workout: { date: { lt: heute } } },
-    orderBy: { loggedAt: "desc" },
-    select: { workoutId: true },
+  const zeilen = await prisma.setLog.findMany({
+    where: { exercise: { in: uebungen }, workout: { date: { lt: heute } } },
+    orderBy: [{ loggedAt: "desc" }, { setIndex: "asc" }],
+    select: { exercise: true, workoutId: true, kg: true, reps: true, setIndex: true },
   });
-  if (!letzter) return [];
 
-  return prisma.setLog.findMany({
-    where: { exercise, workoutId: letzter.workoutId },
-    orderBy: { setIndex: "asc" },
-    select: { kg: true, reps: true },
-  });
+  /* Je Übung zählt ausschließlich die jüngste Einheit. Welche das ist, sagt
+     die erste Zeile, die für diese Übung auftaucht — danach werden nur noch
+     Zeilen mit derselben workoutId angenommen. Ohne diese Klammer stünden in
+     der ZULETZT-Spalte Sätze aus mehreren Trainings untereinander. */
+  const jüngsteEinheit = new Map<string, string>();
+
+  for (const zeile of zeilen) {
+    const bekannt = jüngsteEinheit.get(zeile.exercise);
+    if (bekannt === undefined) {
+      jüngsteEinheit.set(zeile.exercise, zeile.workoutId);
+    } else if (bekannt !== zeile.workoutId) {
+      continue;
+    }
+
+    const satz: Zeile = { kg: zeile.kg, reps: zeile.reps, setIndex: zeile.setIndex };
+    const liste = gesammelt.get(zeile.exercise);
+    if (liste) liste.push(satz);
+    else gesammelt.set(zeile.exercise, [satz]);
+  }
+
+  /* Die Sätze innerhalb einer Einheit gehören in ihrer Reihenfolge sortiert.
+     Das orderBy oben sortiert primär nach loggedAt — bei nachgetragenen
+     Sätzen (satz_eintragen aus Claude Desktop) läuft das auseinander. */
+  for (const [uebung, liste] of gesammelt) {
+    liste.sort((a, b) => a.setIndex - b.setIndex);
+    ergebnis.set(
+      uebung,
+      liste.map(({ kg, reps }) => ({ kg, reps }))
+    );
+  }
+
+  return ergebnis;
 }
 
 export type LaufendesTraining = {
   startedAtMs: number;
+  /** Zeitpunkt des Abschlusses, oder null solange die Einheit läuft. */
+  finishedAtMs: number | null;
   beendet: boolean;
+  /**
+   * Was heute schon abgehakt ist, je Übungsname und Satznummer.
+   *
+   * Der Logger hielt das bis zum 25.08.2026 ausschließlich im React-State.
+   * Beim Neuladen oder nach einem Tabwechsel stand die Einheit damit wieder
+   * bei "0 von 17", obwohl sämtliche Sätze längst in der Datenbank lagen —
+   * und weil daran auch der Abschluss hing, war eine fertige Einheit nie
+   * fertig.
+   */
+  geloggt: GeloggterSatz[];
+};
+
+export type GeloggterSatz = {
+  exercise: string;
+  setIndex: number;
+  kg: number;
+  reps: number;
 };
 
 /**
@@ -133,12 +213,22 @@ export async function laufendesTraining(
   kind: "push" | "pull"
 ): Promise<LaufendesTraining | null> {
   const date = new Date(`${heuteIso()}T00:00:00Z`);
-  const workout = await prisma.workout.findFirst({ where: { date, kind } });
+  const workout = await prisma.workout.findFirst({
+    where: { date, kind },
+    include: {
+      sets: {
+        orderBy: [{ exercise: "asc" }, { setIndex: "asc" }],
+        select: { exercise: true, setIndex: true, kg: true, reps: true },
+      },
+    },
+  });
   if (!workout) return null;
 
   return {
     startedAtMs: workout.startedAt.getTime(),
+    finishedAtMs: workout.finishedAt?.getTime() ?? null,
     beendet: workout.finishedAt !== null,
+    geloggt: workout.sets,
   };
 }
 
@@ -154,18 +244,37 @@ export async function trainingStarten(
   }
 }
 
-/** Trainingseinheit abschließen. */
+/**
+ * Trainingseinheit abschließen.
+ *
+ * Diese Funktion gab es seit dem ersten Tag und wurde von keiner Oberfläche
+ * aufgerufen — `finishedAt` stand auf jeder Zeile der Tabelle auf NULL. Der
+ * Logger merkte sich den Abschluss allein im React-State, und der ist beim
+ * nächsten Seitenaufruf weg. Für Jakob sah das so aus, als hörten seine
+ * Trainings nie auf: die Laufzeit zählte stundenlang weiter, weil nichts
+ * festhielt, dass die Einheit vorbei war.
+ *
+ * Idempotent, und zwar ausdrücklich ohne den Zeitstempel zu verschieben: wer
+ * einen Satz nachträglich korrigiert, hakt danach wieder alles ab, und ein
+ * zweiter Aufruf würde das Ende sonst auf jetzt setzen. Die Einheit wäre dann
+ * je nach Korrekturzeitpunkt Stunden länger gewesen, als sie war.
+ */
 export async function trainingBeenden(
   kind: "push" | "pull",
   note?: string
-): Promise<{ ok: true } | { ok: false; fehler: string }> {
+): Promise<{ ok: true; finishedAtMs: number } | { ok: false; fehler: string }> {
   try {
     const workout = await workoutHeute(kind);
-    await prisma.workout.update({
+    if (workout.finishedAt !== null) {
+      return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
+    }
+
+    const beendet = await prisma.workout.update({
       where: { id: workout.id },
       data: { finishedAt: new Date(), note },
     });
-    return { ok: true };
+
+    return { ok: true, finishedAtMs: beendet.finishedAt!.getTime() };
   } catch (e) {
     return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
   }

@@ -16,8 +16,10 @@ import {
   amrapSoll,
   bankPlan,
   bankPosition,
+  bankZusatzPlan,
   naechsterTm,
   TM_ANTEIL,
+  ZUSATZ_PROZENT,
   type BankPosition,
 } from "./kraft";
 import { datumFuerPushIndex, pushIndexAbDatum, type Programmvorgabe } from "./plan";
@@ -246,7 +248,13 @@ export type Bankstand = {
   position: BankPosition;
   tm: Trainingsmax | null;
   vorgabe: Programmvorgabe;
-  /** Nur gesetzt, wenn heute kein Bank-Tag ist — Kalendertag des nächsten. */
+  /**
+   * Kalendertag des nächsten TM-Tags. Nur gesetzt, wenn heute keiner ist.
+   *
+   * Meint ausdrücklich den Programmtag, nicht die nächste Einheit mit
+   * Bankdrücken — die ist seit dem Zusatz-Slot ohnehin die nächste
+   * Push-Einheit. Wissenswert ist, wann wieder schwer gebankt wird.
+   */
   naechsterBankTag: string | null;
 };
 
@@ -282,17 +290,51 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
 
   const start = (await startPushIndex()) ?? pushIndex;
   const position = bankPosition(pushIndex, start);
-  const naechsterBankTag = position.istBankTag ? null : datumFuerPushIndex(pushIndex + 1);
+
+  /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
+     sonst die nächste. Nach der Deload-Zusatzeinheit — art "keiner" bei
+     bereits laufendem Programm — gilt dasselbe: der TM-Tag liegt eine
+     Push-Einheit weiter. */
+  const naechsterBankTag =
+    position.art === "tm" ? null : datumFuerPushIndex(pushIndex + 1);
 
   if (tm.zyklus < position.zyklus) {
     tm = await aufZyklusBringen(position.zyklus, tm, start);
   }
 
+  return { position, tm, naechsterBankTag, vorgabe: vorgabeFuer(position, tm.tmKg) };
+}
+
+/**
+ * Die Sätze des Tages — aus der Welle oder aus dem Zusatz-Slot.
+ *
+ * Beide rechnen mit demselben Trainingsmax, und nur der TM-Tag schreibt ihn
+ * fort. Dass der Zusatz-Slot dabei außen vor bleibt, steht nicht hier, sondern
+ * folgt aus aufZyklusBringen(): das sucht den AMRAP-Satz über
+ * datumFuerPushIndex(startIndex + bankIndex * 2), also ausschließlich über
+ * gerade Versätze. Die Zusatz-Einheiten liegen auf ungeraden und werden nie
+ * gelesen, so schwer dort auch geloggt wird.
+ */
+function vorgabeFuer(position: BankPosition, tmKg: number): Programmvorgabe {
+  if (position.art === "tm") {
+    return { saetze: bankPlan(tmKg, position.woche), hinweis: null };
+  }
+
+  if (position.art === "zusatz") {
+    return {
+      saetze: bankZusatzPlan(tmKg),
+      hinweis:
+        `Zusatz-Einheit bei ${String(ZUSATZ_PROZENT).replace(".", ",")} % vom Trainingsmax. ` +
+        `Zählt nicht für die Trainingsmax-Progression — dafür ist der AMRAP-Satz am TM-Tag da. ` +
+        `Sauber und mit Reserve, nicht ausreizen.`,
+    };
+  }
+
   return {
-    position,
-    tm,
-    naechsterBankTag,
-    vorgabe: { saetze: bankPlan(tm.tmKg, position.woche), hinweis: null },
+    saetze: [],
+    hinweis:
+      "Heute keine Bankeinheit. In der Deload-Woche fällt die Zusatz-Einheit aus — " +
+      "die Woche ist zum Zurücknehmen da.",
   };
 }
 

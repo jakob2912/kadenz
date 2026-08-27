@@ -30,12 +30,21 @@ import {
   trainingsmaxSetzen,
 } from "../src/lib/bank";
 import { heuteWien, wienerStunde } from "../src/lib/datum";
+import {
+  ENDZIEL_KG,
+  MAX_RATE_PRO_WOCHE,
+  aktuellePhase,
+  phasenlauf,
+  sollGewichtAm,
+  zielKorridor,
+} from "../src/lib/gewichtsplan";
 import { heutigeSaetze, rotationFor, SESSIONS } from "../src/lib/plan";
 import {
   einheitFuerTag,
   katalogVollstaendig,
   uebungEntfernen,
   uebungHinzufuegen,
+  uebungSaetzeSetzen,
   uebungTauschen,
   uebungUmbenennen,
   uebungenUmsortieren,
@@ -44,7 +53,7 @@ import {
 import { satzSpeichern } from "../src/lib/workouts";
 import {
   aktuellesZiel,
-  mahlzeitenLesen,
+  ernaehrungsplanLesen,
   offenerVorschlag,
   vorschlagLage,
   zielHistorie,
@@ -70,8 +79,6 @@ import {
   type ApiWeightPoint,
 } from "../src/lib/health-mapper";
 
-const ZIEL_KG = 97;
-const MAX_RATE = 0.5;
 
 /**
  * Ohne DATABASE_URL meldet der Postgres-Treiber "connect ECONNREFUSED
@@ -180,22 +187,48 @@ server.registerTool(
   {
     title: "Gewichtstrend",
     description:
-      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil. Das Urteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat.",
+      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Aufbau 1 → Mini-Cut → Aufbau 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
     inputSchema: { tage: z.number().int().min(7).max(120).optional() },
   },
   async ({ tage }) => {
     try {
       const { gewicht } = await ladeGesundheit(tage ?? 30);
       const aktuell = gewicht.at(-1) ?? null;
+      const heute = heuteWien();
+      const phase = aktuellePhase(heute);
+      const soll = sollGewichtAm(heute);
+
       return antwort({
         aktuell,
         schnitt7: movingAverage(gewicht, 7),
         trend: assessTrend(gewicht),
-        ziel: {
-          kg: ZIEL_KG,
-          maxRateProWoche: MAX_RATE,
-          wochenBeiMaxRate: aktuell ? weeksToGoal(aktuell.kg, ZIEL_KG, MAX_RATE) : null,
+        plan: {
+          phase: phase.phase.label,
+          phaseNummer: `${phase.nummer} von ${phasenlauf().length}`,
+          zweck: phase.phase.zweck,
+          phasenzielKg: Math.round(phase.bisKg * 10) / 10,
+          phasenendeIso: phase.bisIso,
+          sollHeuteKg: soll,
+          abweichungKg:
+            aktuell !== null && soll !== null
+              ? Math.round((aktuell.kg - soll) * 10) / 10
+              : null,
+          zielKorridorKgProWoche: zielKorridor(heute),
+          endzielKg: ENDZIEL_KG,
+          maxRateProWoche: MAX_RATE_PRO_WOCHE,
+          wochenBisPhasenziel: aktuell
+            ? weeksToGoal(aktuell.kg, phase.bisKg, phase.phase.rateProWoche)
+            : null,
         },
+        allePhasen: phasenlauf().map((l) => ({
+          nummer: l.nummer,
+          label: l.phase.label,
+          vonIso: l.vonIso,
+          bisIso: l.bisIso,
+          vonKg: Math.round(l.vonKg * 10) / 10,
+          bisKg: Math.round(l.bisKg * 10) / 10,
+          rateProWoche: l.phase.rateProWoche,
+        })),
         reihe: gewicht,
       });
     } catch (e) {
@@ -227,7 +260,8 @@ server.registerTool(
         titel: heute.titel,
         bank: heute.bank
           ? {
-              bankTag: heute.bank.position.istBankTag,
+              art: heute.bank.position.art,
+              bankTag: heute.bank.position.art === "tm",
               zyklus: heute.bank.position.zyklus,
               woche: heute.bank.position.woche,
               trainingsmaxKg: heute.bank.tm?.tmKg ?? null,
@@ -342,13 +376,18 @@ server.registerTool(
   {
     title: "Ernährungsplan",
     description:
-      "Jakobs Mahlzeiten aus dem Fitnessbell-Plan mit Zutaten und Mengen, dazu das aktuell gültige Kalorien- und Makroziel. Der Plan ist nicht auf einzelne Mahlzeiten aufgeschlüsselt — die Makros sind Tagessummen.",
+      "Jakobs Mahlzeiten aus dem Fitnessbell-Plan mit Zutaten und Mengen, dazu das aktuell gültige Kalorien- und Makroziel. `menge` ist die heute gültige Menge, `mengeLautPlan` dieselbe Zutat im Ausgangsplan — sie gehen auseinander, sobald das Kalorienziel vom Ausgangsplan abweicht. `skalierung` sagt, in welchem Verhältnis: die Kohlenhydratquellen tragen die Änderung, Eiweiß und Fett bleiben. Der Plan ist nicht auf einzelne Mahlzeiten aufgeschlüsselt — die Makros sind Tagessummen, und je Zutat rechnet Kadenz keine Nährwerte.",
   },
   async () => {
     try {
       datenbankPruefen();
-      const [mahlzeiten, ziel] = await Promise.all([mahlzeitenLesen(), aktuellesZiel()]);
-      return antwort({ ziel, essensfenster: "05:20–18:00", mahlzeiten });
+      const [plan, ziel] = await Promise.all([ernaehrungsplanLesen(), aktuellesZiel()]);
+      return antwort({
+        ziel,
+        essensfenster: "05:20–18:00",
+        skalierung: plan.skalierung,
+        mahlzeiten: plan.mahlzeiten,
+      });
     } catch (e) {
       return fehler(e);
     }
@@ -448,12 +487,20 @@ server.registerTool(
       notiz: z.string().optional(),
       startKg: z.number().min(0).max(500).optional().describe("Referenzgewicht, solange nichts geloggt ist"),
       startWdh: z.array(z.number().int().min(1).max(50)).optional().describe("Wiederholungen je Satz, etwa [6, 5]"),
+      saetze: z.number().int().min(1).max(10).optional().describe("Wie viele Sätze die Übung vorsieht. Ohne Angabe 2 — Jakobs Regel."),
+      saetzeBankTag: z.number().int().min(1).max(10).optional().describe("Abweichende Satzanzahl an Bank-Tagen, etwa 1 statt 2. Ohne Angabe keine Reduktion."),
     },
   },
-  async ({ einheit, alt, neu, notiz, startKg, startWdh }) => {
+  async ({ einheit, alt, neu, notiz, startKg, startWdh, saetze, saetzeBankTag }) => {
     try {
       datenbankPruefen();
-      const r = await uebungTauschen(einheit as Einheit, alt, neu, { notiz, startKg, startWdh });
+      const r = await uebungTauschen(einheit as Einheit, alt, neu, {
+        notiz,
+        startKg,
+        startWdh,
+        saetze,
+        saetzeBankTag,
+      });
       return r.ok ? antwort({ getauscht: `${alt} → ${neu}`, katalog: r.katalog }) : fehler(new Error(r.fehler));
     } catch (e) {
       return fehler(e);
@@ -473,12 +520,21 @@ server.registerTool(
       notiz: z.string().optional(),
       startKg: z.number().min(0).max(500).optional(),
       startWdh: z.array(z.number().int().min(1).max(50)).optional(),
+      saetze: z.number().int().min(1).max(10).optional().describe("Wie viele Sätze die Übung vorsieht. Ohne Angabe 2 — Jakobs Regel."),
+      saetzeBankTag: z.number().int().min(1).max(10).optional().describe("Abweichende Satzanzahl an Bank-Tagen, etwa 1 statt 2. Ohne Angabe keine Reduktion."),
     },
   },
-  async ({ einheit, name, position, notiz, startKg, startWdh }) => {
+  async ({ einheit, name, position, notiz, startKg, startWdh, saetze, saetzeBankTag }) => {
     try {
       datenbankPruefen();
-      const r = await uebungHinzufuegen(einheit as Einheit, name, { position, notiz, startKg, startWdh });
+      const r = await uebungHinzufuegen(einheit as Einheit, name, {
+        position,
+        notiz,
+        startKg,
+        startWdh,
+        saetze,
+        saetzeBankTag,
+      });
       return r.ok ? antwort({ hinzugefuegt: name, katalog: r.katalog }) : fehler(new Error(r.fehler));
     } catch (e) {
       return fehler(e);
@@ -519,6 +575,41 @@ server.registerTool(
       const r = await uebungUmbenennen(einheit as Einheit, alt, neu);
       return r.ok
         ? antwort({ umbenannt: `${alt} → ${neu}`, saetzeUmgeschrieben: r.saetzeUmgeschrieben })
+        : fehler(new Error(r.fehler));
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
+  "uebung_saetze_setzen",
+  {
+    title: "Satzanzahl setzen",
+    description:
+      "Legt fest, wie viele Sätze eine Übung vorsieht. Grundsätzlich sind es 2. Mit saetzeBankTag lässt sich eine abweichende Anzahl für Bank-Tage hinterlegen — an Push-Einheiten mit schwerem Bankdrücken gibt die Incline Chest Press so einen Satz ab. Die Anzahl hing früher an der zuletzt geloggten Einheit; seit dem 25.08.2026 steht sie im Katalog und schrumpft nicht mehr mit, wenn ein Training nur halb abgehakt wird. Beim Bankdrücken wirkungslos: dort gibt der 5/3/1-Zyklus die Sätze vor.",
+    inputSchema: {
+      einheit: einheitSchema,
+      name: z.string().min(1),
+      saetze: z.number().int().min(1).max(10),
+      saetzeBankTag: z
+        .number()
+        .int()
+        .min(1)
+        .max(10)
+        .nullable()
+        .optional()
+        .describe(
+          "Anzahl an Bank-Tagen. Weglassen lässt eine bestehende Regel stehen, null nimmt sie weg."
+        ),
+    },
+  },
+  async ({ einheit, name, saetze, saetzeBankTag }) => {
+    try {
+      datenbankPruefen();
+      const r = await uebungSaetzeSetzen(einheit as Einheit, name, saetze, saetzeBankTag);
+      return r.ok
+        ? antwort({ gesetzt: name, saetze, saetzeBankTag: saetzeBankTag ?? null, katalog: r.katalog })
         : fehler(new Error(r.fehler));
     } catch (e) {
       return fehler(e);
@@ -602,7 +693,7 @@ server.registerTool(
   {
     title: "Bankdrücken heute",
     description:
-      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die drei Sätze mit Gewicht. Bank-Tag ist jede zweite Push-Einheit, also alle sechs Tage. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
+      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" die submaximale Einheit dazwischen (3 × 5 bei 72,5 % vom Trainingsmax, ohne Wirkung auf die Progression), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
   },
   async () => {
     try {
@@ -620,7 +711,8 @@ server.registerTool(
 
       const stand = await bankstandFuer(rotation.pushIndex);
       return antwort({
-        bankTag: stand.position.istBankTag,
+        art: stand.position.art,
+        bankTag: stand.position.art === "tm",
         zyklus: stand.position.zyklus,
         woche: stand.position.woche,
         naechsterBankTag: stand.naechsterBankTag,

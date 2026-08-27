@@ -1,41 +1,79 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
 import {
   Card,
   Eyebrow,
   Metric,
   NichtVerbunden,
+  Skelett,
   alterLabel,
   de,
   heuteWien,
   kurzDatum,
   minToHm,
 } from "@/components/ui";
-import { weeksToGoal } from "@/lib/coach";
 import { ReihenChart } from "@/components/reihen-chart";
 import { Kraftverlauf } from "@/components/kraftverlauf";
+import {
+  ENDZIEL_KG,
+  aktuellePhase,
+  phasenlauf,
+  sollGewichtAm,
+  sollKurve,
+} from "@/lib/gewichtsplan";
 
-export const dynamic = "force-dynamic";
+/**
+ * Gewicht und Referenzwerte kommen aus Google Health, der Kraftverlauf aus
+ * der eigenen Datenbank. Beide bekommen eine eigene Suspense-Grenze: der
+ * Kraftverlauf ist meist deutlich schneller da und soll nicht auf Google
+ * warten müssen. Vorher wartete die ganze Seite auf beides zugleich.
+ */
+export default function Verlauf() {
+  return (
+    <>
+      <Suspense
+        fallback={
+          <>
+            <div className="pt-10 md:pt-14">
+              <Skelett hoehe={16} className="w-56" />
+              <Skelett hoehe={38} className="mt-3 w-40" />
+              <Skelett hoehe={18} className="mt-3 w-72" />
+            </div>
+            <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
+              <Skelett hoehe={260} />
+              <div className="flex flex-col gap-3.5">
+                <Skelett hoehe={110} />
+                <Skelett hoehe={200} />
+              </div>
+            </div>
+          </>
+        }
+      >
+        <Gewichtsteil />
+      </Suspense>
 
-const ZIEL_KG = 97;
+      <Suspense fallback={<Skelett hoehe={240} className="mt-4" />}>
+        <Kraftverlauf />
+      </Suspense>
+    </>
+  );
+}
 
-/** Angenommenes Tempo, solange der gemessene Trend nicht verwertbar ist. */
-const ANNAHME_KG_WOCHE = 0.5;
+async function Gewichtsteil() {
+  /* alterLabel() und die Hochrechnung aufs Zielgewicht rechnen beide gegen
+     heute. Beim Bauen steht der Tag nicht fest. */
+  await connection();
 
-export default async function Verlauf() {
   const data = await loadDashboard(30);
 
   if (!data.verbunden) {
     /* Der Kraftverlauf hängt an der eigenen Datenbank, nicht an Google. Ihn
        mit auszublenden, weil das Token abgelaufen ist, nähme einem genau dann
-       die Trainingshistorie weg, wenn ohnehin schon etwas klemmt. */
-    return (
-      <>
-        <NichtVerbunden titel="Verlauf braucht Google Health" grund={data.grund} />
-        <div className="mt-4">
-          <Kraftverlauf />
-        </div>
-      </>
-    );
+       die Trainingshistorie weg, wenn ohnehin schon etwas klemmt. Er steht
+       jetzt eine Ebene höher in seiner eigenen Suspense-Grenze und bleibt
+       damit von selbst sichtbar. */
+    return <NichtVerbunden titel="Verlauf braucht Google Health" grund={data.grund} />;
   }
 
   const { gewicht, tagesreihe, baseline, unvollstaendig } = data;
@@ -55,7 +93,7 @@ export default async function Verlauf() {
           {gewicht.aktuell ? `${de(gewicht.aktuell.kg, 1)} kg` : "—"}
         </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-fg-dim">
-          {zielSatz(gewicht.aktuell?.kg ?? null, gewicht.trend)}
+          {zielSatz(gewicht.aktuell?.kg ?? null, heuteIso)}
         </p>
       </header>
 
@@ -72,8 +110,16 @@ export default async function Verlauf() {
                 : `${gewicht.reihe.length} Messungen · ab ${kurzDatum(gewicht.reihe[0].date)}`}
             </span>
           </div>
+          {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
+              Wochen: der ganze Plan reicht bis November 2027, und über diese
+              Achse gelegt schrumpfte der Monat mit echten Messungen zu einem
+              Strich am linken Rand. Die Frage an dieser Karte lautet "liege
+              ich gerade richtig", nicht "wo endet das". Letzteres beantwortet
+              die Zielkurven-Karte darunter. */}
           <ReihenChart
             reihe={gewicht.reihe.map((r) => ({ datum: r.date, wert: r.kg }))}
+            soll={sollAusschnitt(gewicht.reihe[0]?.date ?? heuteIso, 4)}
+            sollBezeichnung="Plan"
             bezeichnung="Gewichtsverlauf"
             leer="Noch keine Messung. Trag dein Morgengewicht auf der Startseite ein — ab zwei Messungen steht hier eine Kurve."
             einzeln="Erst eine Messung. Ab der zweiten steht hier eine Kurve."
@@ -142,50 +188,139 @@ export default async function Verlauf() {
         </div>
       </div>
 
-      <Kraftverlauf />
+      <Zielkurve reihe={gewicht.reihe.map((r) => ({ datum: r.date, wert: r.kg }))} heuteIso={heuteIso} />
     </>
   );
 }
 
 /**
- * Hochrechnung aufs Zielgewicht.
+ * Ein Ausschnitt der Sollkurve: ab einem Datum bis einige Wochen über heute
+ * hinaus.
  *
- * Vorher rechnete diese Zeile immer mit 0,5 kg pro Woche — auch dann, wenn
- * der gemessene Trend längst bei 0,2 lag. Das Zieldatum war damit ein Wunsch
- * im Gewand einer Berechnung. Gemessen schlägt angenommen; ist nichts
- * Verwertbares da, steht die Annahme ausdrücklich dabei.
+ * Gebraucht für die Karte oben, die neben der Messreihe steht. Der ganze Plan
+ * reicht bis November 2027 — über diese Zeitachse gelegt schrumpfte der Monat
+ * mit echten Messungen auf einen Strich.
  */
-function zielSatz(
-  aktuellKg: number | null,
-  trend: { usable: true; kgPerWeek: number } | { usable: false; detail: string }
-): string {
-  if (aktuellKg === null) return `Ziel ${ZIEL_KG} kg · noch keine Messung.`;
-  if (aktuellKg >= ZIEL_KG) return `Ziel ${ZIEL_KG} kg erreicht.`;
+function sollAusschnitt(abIso: string, wochenVoraus: number): { datum: string; wert: number }[] {
+  const von = Date.parse(`${abIso}T00:00:00Z`);
+  const bis = Date.now() + wochenVoraus * 7 * 864e5;
 
-  const fehlend = de(ZIEL_KG - aktuellKg, 1);
-
-  if (trend.usable && trend.kgPerWeek > 0) {
-    const wochen = weeksToGoal(aktuellKg, ZIEL_KG, trend.kgPerWeek);
-    return wochen === null
-      ? `Ziel ${ZIEL_KG} kg · noch ${fehlend} kg.`
-      : `Ziel ${ZIEL_KG} kg · noch ${fehlend} kg, bei deinem gemessenen Tempo in ${wochen} Wochen (${monat(wochen)}).`;
-  }
-
-  if (trend.usable) {
-    return `Ziel ${ZIEL_KG} kg · noch ${fehlend} kg. Beim aktuell gemessenen Tempo kommst du dort nicht an — du nimmst gerade nicht zu.`;
-  }
-
-  const wochen = weeksToGoal(aktuellKg, ZIEL_KG, ANNAHME_KG_WOCHE);
-  return `Ziel ${ZIEL_KG} kg · noch ${fehlend} kg. Gemessenes Tempo steht noch aus; angenommen mit ${de(
-    ANNAHME_KG_WOCHE,
-    2
-  )} kg pro Woche wären das ${wochen} Wochen.`;
+  return sollKurve()
+    .filter((p) => {
+      const t = Date.parse(`${p.datum}T00:00:00Z`);
+      return t >= von && t <= bis;
+    })
+    .map((p) => ({ datum: p.datum, wert: p.kg }));
 }
 
-function monat(inWochen: number): string {
-  return new Date(Date.now() + inWochen * 7 * 864e5).toLocaleDateString("de-AT", {
-    month: "long",
-    year: "numeric",
-    timeZone: "Europe/Vienna",
-  });
+/**
+ * Der ganze Plan in einer Karte.
+ *
+ * Die Karte oben beantwortet "liege ich gerade richtig". Diese beantwortet
+ * "wo führt das hin" — und dafür muss der Mini-Cut als Delle sichtbar sein,
+ * sonst ist er nur eine Behauptung im Fließtext.
+ */
+function Zielkurve({
+  reihe,
+  heuteIso,
+}: {
+  reihe: { datum: string; wert: number }[];
+  heuteIso: string;
+}) {
+  const laeufe = phasenlauf();
+  const jetzt = aktuellePhase(heuteIso);
+
+  return (
+    <Card className="mt-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <Eyebrow>Zielkurve · bis {ENDZIEL_KG} kg</Eyebrow>
+        <span className="text-[11px] text-fg-faint">
+          Phase {jetzt.nummer} von {laeufe.length} · {jetzt.phase.label}
+        </span>
+      </div>
+
+      <ReihenChart
+        reihe={reihe}
+        soll={sollKurve().map((p) => ({ datum: p.datum, wert: p.kg }))}
+        sollBezeichnung="Plan"
+        bezeichnung="Gewichtsplanung"
+        lueckeTage={9999}
+        leer="Noch keine Messung."
+        einzeln="Erst eine Messung."
+      />
+
+      <ol className="mt-4 flex flex-col gap-2.5">
+        {laeufe.map((lauf) => {
+          const laeuftGerade = lauf.nummer === jetzt.nummer;
+          return (
+            <li key={lauf.nummer} className="flex items-baseline gap-3">
+              <span
+                className={`grid h-[22px] w-[22px] shrink-0 place-items-center rounded-sm text-[10px] font-bold
+                            ${laeuftGerade ? "bg-accent/15 text-accent" : "bg-surface-3 text-fg-dim"}`}
+              >
+                {lauf.nummer}
+              </span>
+              <span className="min-w-0 flex-1">
+                <b className="text-[13px] font-semibold">{lauf.phase.label}</b>{" "}
+                <span className="text-[12px] tabular-nums text-fg-dim">
+                  {de(lauf.vonKg, 1)} → {de(lauf.bisKg, 1)} kg
+                </span>
+                <span className="block text-[11px] leading-relaxed text-fg-faint">
+                  {kurzDatum(lauf.vonIso)} bis {kurzDatum(lauf.bisIso)} ·{" "}
+                  {lauf.phase.rateProWoche > 0 ? "+" : ""}
+                  {de(lauf.phase.rateProWoche, 3).replace(/0$/, "")} kg/Woche · {lauf.phase.zweck}
+                </span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+
+      <p className="mt-4 text-[11px] leading-relaxed text-fg-faint">
+        Die Kurve ist am {kurzDatum("2026-08-25")} bei 82,5 kg verankert und wandert nicht mit —
+        nur so ist eine Abweichung überhaupt zu sehen. Ändern lässt sie sich an einer Stelle:
+        GEWICHTSPLAN in src/lib/gewichtsplan.ts. Der Kalorien-Coach liest den Korridor aus
+        derselben Liste und schlägt im Mini-Cut deshalb Senkungen statt Erhöhungen vor.
+      </p>
+    </Card>
+  );
 }
+
+/**
+ * Der Satz unter der großen Zahl: wo du stehst, gemessen am Plan.
+ *
+ * Vorher rechnete er gegen ein festes Ziel von 97 kg hoch und nannte ein
+ * Datum, das aus dem gemessenen Tempo folgte. Beides ist überholt: das Ziel
+ * ist keine einzelne Zahl mehr, sondern eine Folge von Phasen, und das
+ * nächste, was zählt, ist nicht die 100 — es ist die Marke der laufenden
+ * Phase.
+ *
+ * Die Abweichung steht ausdrücklich dabei. Eine Zielkurve, gegen die man sich
+ * nicht vergleichen kann, ist Dekoration.
+ */
+function zielSatz(aktuellKg: number | null, heuteIso: string): string {
+  const jetzt = aktuellePhase(heuteIso);
+  const soll = sollGewichtAm(heuteIso);
+  const marke = `${jetzt.phase.label} bis ${de(jetzt.bisKg, 1)} kg (${kurzDatum(jetzt.bisIso)})`;
+
+  if (aktuellKg === null) return `${marke} · noch keine Messung.`;
+
+  if (soll === null) return `${marke} · du liegst bei ${de(aktuellKg, 1)} kg.`;
+
+  const abweichung = aktuellKg - soll;
+  const lage =
+    Math.abs(abweichung) < 0.5
+      ? "das ist auf Plan"
+      : abweichung > 0
+        ? `das sind ${de(abweichung, 1)} kg über Plan`
+        : `das sind ${de(-abweichung, 1)} kg unter Plan`;
+
+  const fehlend = jetzt.bisKg - aktuellKg;
+  const rest =
+    fehlend <= 0
+      ? " Die Marke dieser Phase ist erreicht."
+      : ` Bis zur Marke fehlen ${de(fehlend, 1)} kg.`;
+
+  return `${marke} · heute wären ${de(soll, 1)} kg vorgesehen, ${lage}.${rest}`;
+}
+

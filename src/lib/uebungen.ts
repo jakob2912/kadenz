@@ -17,6 +17,7 @@ import {
   SESSIONS,
   mitHistorie,
   rotationFor,
+  saetzeFuerTag,
   type PlannedExercise,
   type ZuPlanen,
 } from "./plan";
@@ -31,6 +32,10 @@ export type Katalogeintrag = {
   notiz: string | null;
   /** Nicht-null heißt: ein Programm gibt die Sätze vor. Bisher nur "531". */
   programm: string | null;
+  /** Wie viele Sätze die Übung vorsieht. Grundsätzlich 2. */
+  saetze: number;
+  /** Abweichende Satzanzahl an Bank-Tagen. Null heißt: keine Reduktion. */
+  saetzeBankTag: number | null;
   startKg: number | null;
   startWdh: number[];
 };
@@ -87,15 +92,28 @@ function ausSessions(einheit: Einheit): Katalogeintrag[] {
     name: ex.name,
     notiz: ex.note ?? null,
     programm: null,
+    saetze: ex.saetze,
+    // Die Rückfallebene kennt keine Bank-Tage: ohne Datenbank gibt es keinen
+    // Trainingsmax, also auch keinen Bank-Slot, von dem etwas abzuziehen wäre.
+    saetzeBankTag: null,
     startKg: ex.last[0]?.kg ?? null,
     startWdh: ex.last.map((s) => s.reps),
   }));
 }
 
-function zuPlanen(eintrag: Katalogeintrag): ZuPlanen {
+/**
+ * Ein Katalogeintrag als planbare Übung.
+ *
+ * `istBankTag` meint den TM-Tag und kommt aus dem Bankstand. An Pull-Tagen ist
+ * er strukturell false — dort gibt es keinen Bankstand, die Reduktion kann
+ * nicht zuschlagen. An der Zusatz-Einheit ebenfalls false: die ist submaximal,
+ * sie kostet den übrigen Übungen nichts.
+ */
+function zuPlanen(eintrag: Katalogeintrag, istBankTag: boolean): ZuPlanen {
   return {
     name: eintrag.name,
     note: eintrag.notiz ?? undefined,
+    saetze: saetzeFuerTag(eintrag, istBankTag),
     last: eintrag.startWdh.map((reps) => ({ reps, kg: eintrag.startKg ?? 0 })),
   };
 }
@@ -109,7 +127,7 @@ export type Trainingsplan = {
   titel: string;
   fokus: string;
   uebungen: PlannedExercise[];
-  /** Nur an Push-Tagen gesetzt. Trägt auch die Auskunft "heute kein Bank-Tag". */
+  /** Nur an Push-Tagen gesetzt. Trägt auch die Auskunft "heute kein TM-Tag". */
   bank: Bankstand | null;
 };
 
@@ -198,16 +216,28 @@ async function trainingsplanFuer(date: Date): Promise<Trainingsplan> {
     }
   }
 
+  /* Zwei verschiedene Fragen, die vorher eine waren.
+
+     Ob heute schwer gebankt wird ("tm"), entscheidet über die Satzanzahl der
+     übrigen Übungen: nur an diesen Tagen greift saetzeBankTag.
+
+     Ob überhaupt gebankt wird, entscheidet über den Slot. Seit dem Zusatz-Slot
+     steht Bankdrücken an jeder Push-Einheit, an der das Programm läuft — nur
+     eben submaximal, wenn es kein TM-Tag ist. Die Vorgabe dafür kommt fertig
+     aus bankstandFuer(); hier ist bloß zu entscheiden, ob der Slot mitkommt. */
+  const istTmTag = bank !== null && bank.position.art === "tm";
+  const bankSlot = bank !== null && bank.position.art !== "keiner";
+
   const geplant: ZuPlanen[] = [];
   for (const eintrag of katalog) {
     if (eintrag.programm === PROGRAMM_BANK) {
-      // An einer Push-Einheit ohne Bank-Tag hat der Slot nichts verloren:
-      // schwer gebankt wird alle sechs Tage, nicht alle drei.
-      if (bank === null || !bank.position.istBankTag) continue;
-      geplant.push({ ...zuPlanen(eintrag), programm: bank.vorgabe });
+      // Vor dem Programmstart und in der Deload-Zusatzeinheit gibt es nichts
+      // vorzugeben — dann bleibt der Slot weg statt leer dazustehen.
+      if (!bankSlot) continue;
+      geplant.push({ ...zuPlanen(eintrag, istTmTag), programm: bank!.vorgabe });
       continue;
     }
-    geplant.push(zuPlanen(eintrag));
+    geplant.push(zuPlanen(eintrag, istTmTag));
   }
 
   return {
@@ -268,7 +298,13 @@ export async function uebungTauschen(
   einheit: Einheit,
   alterName: string,
   neuerName: string,
-  opts: { notiz?: string | null; startKg?: number | null; startWdh?: number[] } = {}
+  opts: {
+    notiz?: string | null;
+    startKg?: number | null;
+    startWdh?: number[];
+    saetze?: number;
+    saetzeBankTag?: number | null;
+  } = {}
 ): Promise<Aenderung> {
   const neu = sauber(neuerName);
   if (neu.length === 0) return { ok: false, fehler: "Die neue Übung braucht einen Namen." };
@@ -289,8 +325,12 @@ export async function uebungTauschen(
         startKg: opts.startKg ?? null,
         startWdh: opts.startWdh ?? alt.startWdh,
         // Ein Tausch nimmt das Programm mit: wer Bankdrücken ersetzt, ersetzt
-        // nicht den 5/3/1-Slot, sondern die Übung darin.
+        // nicht den 5/3/1-Slot, sondern die Übung darin. Dasselbe gilt für die
+        // Satzanzahl — der Platz im Split behält seinen Umfang, wenn nichts
+        // anderes gesagt wird.
         programm: alt.programm,
+        saetze: opts.saetze ?? alt.saetze,
+        saetzeBankTag: opts.saetzeBankTag !== undefined ? opts.saetzeBankTag : alt.saetzeBankTag,
       },
     });
 
@@ -308,6 +348,8 @@ export async function uebungHinzufuegen(
     notiz?: string | null;
     startKg?: number | null;
     startWdh?: number[];
+    saetze?: number;
+    saetzeBankTag?: number | null;
   } = {}
 ): Promise<Aenderung> {
   const neu = sauber(name);
@@ -331,6 +373,12 @@ export async function uebungHinzufuegen(
           notiz: opts.notiz ?? null,
           startKg: opts.startKg ?? null,
           startWdh: opts.startWdh ?? [],
+          /* Ohne Angabe greift der Spalten-Default 2. Vorher entschied allein
+             startWdh über die Satzanzahl, und das hier daneben stehende
+             `?? []` hieß damit: keine Sätze. Genau daran ist der Adductor
+             hängen geblieben. */
+          ...(opts.saetze !== undefined ? { saetze: opts.saetze } : {}),
+          ...(opts.saetzeBankTag !== undefined ? { saetzeBankTag: opts.saetzeBankTag } : {}),
         },
       });
 
@@ -411,6 +459,70 @@ export async function uebungUmbenennen(
     });
   } catch (e) {
     return { ok: false, fehler: fehlertext(e, neu, einheit) };
+  }
+}
+
+/**
+ * Die Satzanzahl einer Übung setzen.
+ *
+ * Eigene Funktion statt eines Umwegs über uebungTauschen(): eine Übung auf
+ * drei Sätze zu stellen ist kein Tausch, und wer sie dafür durch sich selbst
+ * ersetzen müsste, verlöre dabei jedes Mal startKg und startWdh.
+ *
+ * `saetzeBankTag` ausdrücklich dreiwertig: fehlt der Wert, bleibt die
+ * bestehende Regel stehen; null nimmt sie weg. Ohne diese Unterscheidung
+ * würde jedes Setzen der Satzanzahl nebenbei die Bank-Tag-Regel löschen.
+ */
+export async function uebungSaetzeSetzen(
+  einheit: Einheit,
+  name: string,
+  saetze: number,
+  saetzeBankTag?: number | null
+): Promise<Aenderung> {
+  if (!Number.isInteger(saetze) || saetze < 1 || saetze > 10) {
+    return { ok: false, fehler: "Die Satzanzahl muss zwischen 1 und 10 liegen." };
+  }
+  if (
+    saetzeBankTag !== undefined &&
+    saetzeBankTag !== null &&
+    (!Number.isInteger(saetzeBankTag) || saetzeBankTag < 1 || saetzeBankTag > saetze)
+  ) {
+    return {
+      ok: false,
+      fehler:
+        `Die Bank-Tag-Anzahl muss zwischen 1 und ${saetze} liegen. ` +
+        `Mehr als sonst wäre keine Reduktion — dafür ist das Feld nicht da.`,
+    };
+  }
+
+  try {
+    const zeile = await prisma.uebung.findUnique({
+      where: { einheit_name: { einheit, name: sauber(name) } },
+    });
+    if (!zeile) {
+      return { ok: false, fehler: `"${name}" steht nicht in der ${einheit}-Einheit.` };
+    }
+
+    if (zeile.programm !== null) {
+      return {
+        ok: false,
+        fehler:
+          `"${zeile.name}" hängt am Programm "${zeile.programm}" — dort gibt der Zyklus die ` +
+          `Sätze vor, eine Zahl hier hätte keine Wirkung.`,
+      };
+    }
+
+    await prisma.uebung.update({
+      where: { id: zeile.id },
+      data: {
+        saetze,
+        ...(saetzeBankTag !== undefined ? { saetzeBankTag } : {}),
+      },
+    });
+
+    return { ok: true, katalog: await katalogLesen(einheit) };
+  } catch (e) {
+    return { ok: false, fehler: fehlertext(e, name, einheit) };
   }
 }
 

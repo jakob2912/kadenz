@@ -7,6 +7,8 @@ import {
   type Makros,
   type WeightEntry,
 } from "./coach";
+import { zielKorridor } from "./gewichtsplan";
+import { mengeSkalieren, skalierung, type Skalierung } from "./portionen";
 
 /**
  * Kadenz — Ernährung: Plan lesen, Ziel führen, Vorschläge verwalten.
@@ -26,7 +28,10 @@ const OFFEN = "offen";
 
 export type Zutatplan = {
   name: string;
+  /** Die heute gültige Menge — auf das laufende Kalorienziel skaliert. */
   menge: number;
+  /** Dieselbe Zutat im Ausgangsplan von Fitnessbell. */
+  mengeLautPlan: number;
   einheit: string;
   alternative: string | null;
 };
@@ -35,6 +40,19 @@ export type Mahlzeitplan = {
   name: string;
   fenster: string;
   zutaten: Zutatplan[];
+};
+
+/**
+ * Der Plan, wie er heute gilt.
+ *
+ * Mengen und Skalierung zusammen, nicht getrennt: die Mengen allein wären
+ * eine Behauptung ohne Herkunft. Wer 135 g Reis liest, wo im Plan 150 stehen,
+ * soll daneben sehen, warum.
+ */
+export type Ernaehrungsplan = {
+  mahlzeiten: Mahlzeitplan[];
+  /** Null, solange der Ausgangsplan gilt oder kein Ziel hinterlegt ist. */
+  skalierung: Skalierung | null;
 };
 
 export type Ziel = Makros & {
@@ -73,22 +91,68 @@ export type VorschlagLage =
   | { art: "vorschlag"; vorschlag: Vorschlag }
   | { art: "kein-vorschlag"; grund: string };
 
-export async function mahlzeitenLesen(): Promise<Mahlzeitplan[]> {
-  const zeilen = await prisma.mahlzeit.findMany({
-    orderBy: { position: "asc" },
-    include: { zutaten: { orderBy: { position: "asc" } } },
-  });
+/**
+ * Der Ernährungsplan, auf das gültige Ziel gebracht.
+ *
+ * Die Mengen in der Datenbank sind der Ausgangsplan von Fitnessbell und
+ * bleiben unberührt — genau wie die geloggten Sätze beim Umbenennen einer
+ * Übung. Was sich ändert, ist die Anzeige: sie rechnet die
+ * Kohlenhydratquellen auf das Verhältnis zwischen Ausgangs- und laufendem
+ * Kohlenhydratziel um.
+ *
+ * Der Ausgangswert kommt aus der Zielhistorie (quelle "plan") und nicht aus
+ * einer Konstanten. Eine Konstante wäre eine zweite Meinung darüber, zu
+ * welchem Ziel die gespeicherten Mengen gehören, und sie liefe beim ersten
+ * neuen Ausgangsplan auseinander.
+ */
+export async function ernaehrungsplanLesen(): Promise<Ernaehrungsplan> {
+  const [zeilen, basis, ziel] = await Promise.all([
+    prisma.mahlzeit.findMany({
+      orderBy: { position: "asc" },
+      include: { zutaten: { orderBy: { position: "asc" } } },
+    }),
+    planZiel(),
+    aktuellesZiel(),
+  ]);
 
-  return zeilen.map((m) => ({
-    name: m.name,
-    fenster: m.fenster,
-    zutaten: m.zutaten.map((z) => ({
-      name: z.name,
-      menge: z.menge,
-      einheit: z.einheit,
-      alternative: z.alternative,
+  /* Ohne Ausgangsplan oder ohne gültiges Ziel gibt es kein Verhältnis, in dem
+     zu rechnen wäre. Dann steht der Plan da, wie er gespeichert ist — das ist
+     die ehrlichere Auskunft als eine Menge, die auf nichts beruht. */
+  const s =
+    basis && ziel ? skalierung(basis.kohlenhydrateG, ziel.kohlenhydrateG) : null;
+
+  return {
+    skalierung: s !== null && s.faktor !== 1 ? s : null,
+    mahlzeiten: zeilen.map((m) => ({
+      name: m.name,
+      fenster: m.fenster,
+      zutaten: m.zutaten.map((z) => ({
+        name: z.name,
+        menge: mengeSkalieren(
+          { mengeLautPlan: z.menge, menge: z.menge, einheit: z.einheit, anpassbar: z.anpassbar },
+          s
+        ),
+        mengeLautPlan: z.menge,
+        einheit: z.einheit,
+        alternative: z.alternative,
+      })),
     })),
-  }));
+  };
+}
+
+/**
+ * Das Ziel, zu dem die gespeicherten Mengen gehören — der Ausgangsplan.
+ *
+ * Die älteste Zeile mit quelle "plan", nicht die jüngste: kommt eines Tages
+ * ein zweiter Ausgangsplan dazu, wären die Mengen in der Datenbank so lange
+ * die des ersten, bis auch sie ersetzt sind.
+ */
+async function planZiel(): Promise<{ kohlenhydrateG: number } | null> {
+  return prisma.ernaehrungsziel.findFirst({
+    where: { quelle: "plan" },
+    orderBy: [{ gueltigAb: "asc" }, { gesetztAm: "asc" }],
+    select: { kohlenhydrateG: true },
+  });
 }
 
 /** Das derzeit gültige Ziel — die jüngste Zeile der Historie. */
@@ -195,6 +259,10 @@ export async function vorschlagLage(opts: {
     letzteAnpassung: await letzteAnpassungTag(),
     heute,
     koerpergewichtKg: opts.koerpergewichtKg,
+    /* Der Korridor kommt aus der Phase, in der heute liegt. Ohne das rechnete
+       der Coach auch mitten im Mini-Cut gegen 0,25 bis 0,50 kg Zunahme und
+       schlüge dort Erhöhungen vor — genau gegen den Plan. */
+    korridor: zielKorridor(heute),
   });
 
   if (neuester?.status === OFFEN) {

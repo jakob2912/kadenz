@@ -3,6 +3,7 @@ import {
   amrapSoll,
   bankPlan,
   bankPosition,
+  bankZusatzPlan,
   besterSatz,
   e1rm,
   e1rmReihe,
@@ -175,24 +176,68 @@ describe("bankPlan", () => {
   });
 });
 
+describe("bankZusatzPlan", () => {
+  it("gibt drei gleiche Sätze bei 72,5 % vom Trainingsmax", () => {
+    // 72,5 % von 90 sind 65,25 kg — auf 65 gerundet, wie überall sonst auch.
+    expect(bankZusatzPlan(90)).toEqual([
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
+    ]);
+  });
+
+  /* Der AMRAP-Satz ist das Messinstrument des Programms. An einem Tag, der den
+     Trainingsmax nicht bewegen darf, wäre er eine Zahl ohne Verwendung — und
+     spätestens beim nächsten Leser die Frage, warum sie nirgends eingeht. */
+  it("hat keinen AMRAP-Satz", () => {
+    expect(bankZusatzPlan(100).some((s) => s.amrap)).toBe(false);
+  });
+
+  /* Submaximal heißt: unter jedem Satz, an dem das Programm etwas misst. Sonst
+     wäre der Zwischentag der schwerere von beiden und die Welle säße auf dem
+     falschen Fuß. */
+  it("bleibt unter jedem AMRAP-Satz des Programms", () => {
+    const zusatz = Math.max(...bankZusatzPlan(100).map((s) => s.kg));
+    for (const woche of [1, 2, 3] as const) {
+      expect(zusatz).toBeLessThan(amrapSoll(woche)!.prozent);
+    }
+  });
+});
+
 describe("bankPosition", () => {
   it("zählt ab dem Programmstart, nicht ab dem Rotationsanker", () => {
     /* Sonst wäre die allererste Bankeinheit je nach Startdatum mitten im
        Zyklus gelandet — im schlechtesten Fall gleich Woche 3 mit 95 %. */
     const start = 7;
-    expect(bankPosition(7, start)).toEqual({ istBankTag: true, zyklus: 1, woche: 1 });
-    expect(bankPosition(9, start)).toEqual({ istBankTag: true, zyklus: 1, woche: 2 });
-    expect(bankPosition(13, start)).toEqual({ istBankTag: true, zyklus: 1, woche: 4 });
-    expect(bankPosition(15, start)).toEqual({ istBankTag: true, zyklus: 2, woche: 1 });
+    expect(bankPosition(7, start)).toEqual({ art: "tm", zyklus: 1, woche: 1 });
+    expect(bankPosition(9, start)).toEqual({ art: "tm", zyklus: 1, woche: 2 });
+    expect(bankPosition(13, start)).toEqual({ art: "tm", zyklus: 1, woche: 4 });
+    expect(bankPosition(15, start)).toEqual({ art: "tm", zyklus: 2, woche: 1 });
   });
 
-  it("macht jede zweite Push-Einheit zum Bank-Tag", () => {
-    expect(bankPosition(8, 7).istBankTag).toBe(false);
-    expect(bankPosition(10, 7).istBankTag).toBe(false);
+  it("macht jede zweite Push-Einheit zum TM-Tag", () => {
+    expect(bankPosition(8, 7).art).not.toBe("tm");
+    expect(bankPosition(10, 7).art).not.toBe("tm");
   });
 
-  it("meldet vor dem Programmstart keinen Bank-Tag", () => {
-    expect(bankPosition(3, 7)).toEqual({ istBankTag: false, zyklus: 1, woche: 1 });
+  /* Die Push-Einheit zwischen zwei Programmtagen trägt seit dem 27.08.2026
+     den submaximalen Zusatz-Slot. Sie behält Zyklus und Woche des TM-Tags
+     davor — sonst spränge die Woche mitten zwischen zwei Programmtagen um. */
+  it("macht die Einheit dazwischen zur Zusatz-Einheit", () => {
+    expect(bankPosition(8, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 1 });
+    expect(bankPosition(10, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 2 });
+    expect(bankPosition(12, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 3 });
+  });
+
+  /* 72,5 % lägen über jedem Satz der Deload-Woche (40/50/60 %). Die
+     Zusatz-Einheit wäre dort die schwerere von beiden. */
+  it("lässt die Zusatz-Einheit in der Deload-Woche ausfallen", () => {
+    expect(bankPosition(13, 7).art).toBe("tm");
+    expect(bankPosition(14, 7)).toEqual({ art: "keiner", zyklus: 1, woche: 4 });
+  });
+
+  it("meldet vor dem Programmstart keine Bankeinheit", () => {
+    expect(bankPosition(3, 7)).toEqual({ art: "keiner", zyklus: 1, woche: 1 });
   });
 });
 

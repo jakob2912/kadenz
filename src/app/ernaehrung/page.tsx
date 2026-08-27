@@ -2,19 +2,27 @@ import { loadDashboard } from "@/lib/health-service";
 import { datenbankKonfiguriert } from "@/lib/konfiguration";
 import {
   aktuellesZiel,
-  mahlzeitenLesen,
+  ernaehrungsplanLesen,
   vorschlagLage,
   zielHistorie,
+  type Ernaehrungsplan,
   type Mahlzeitplan,
   type VorschlagLage,
   type Ziel,
 } from "@/lib/ernaehrung";
+import { Suspense } from "react";
 import { KalorienVorschlag } from "@/components/kalorien-vorschlag";
-import { Card, Eyebrow, Metric, alterLabel, de, heuteWien, kurzDatum } from "@/components/ui";
+import {
+  Card,
+  Eyebrow,
+  Metric,
+  Skelett,
+  alterLabel,
+  de,
+  heuteWien,
+  kurzDatum,
+} from "@/components/ui";
 
-/* Ziel, Vorschlag und Gewichtsreihe ändern sich täglich und hängen am
-   Cookie — nie cachen. */
-export const dynamic = "force-dynamic";
 
 const KCAL_PRO_G = { kohlenhydrate: 4, eiweiss: 4, fett: 9 } as const;
 
@@ -27,7 +35,42 @@ const KCAL_PRO_G = { kohlenhydrate: 4, eiweiss: 4, fett: 9 } as const;
  */
 const KCAL_TOLERANZ = 25;
 
-export default async function Ernaehrung() {
+/**
+ * Die Seite zeigt sofort ihr Gerüst, der Inhalt strömt nach.
+ *
+ * Sie hängt an zwei langsamen Quellen zugleich: an der Datenbank für Plan,
+ * Ziel und Historie, und an Google Health für die Gewichtsreihe, aus der der
+ * Kalorienvorschlag entsteht. Vorher wartete Next auf beide, bevor überhaupt
+ * etwas erschien — und weil die Seite auf force-dynamic stand, bei jedem
+ * einzelnen Tab-Wechsel neu.
+ */
+export default function Ernaehrung() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <div className="pt-10 md:pt-14">
+            <Skelett hoehe={20} className="w-40" />
+            <Skelett hoehe={38} className="mt-3 w-52" />
+          </div>
+          <div className="mt-7 grid items-start gap-4 md:grid-cols-[0.95fr_1.05fr]">
+            <div className="flex flex-col gap-3.5">
+              <Skelett hoehe={190} />
+              <Skelett hoehe={120} />
+            </div>
+            <div className="flex flex-col gap-3.5">
+              <Skelett hoehe={320} />
+            </div>
+          </div>
+        </>
+      }
+    >
+      <Inhalt />
+    </Suspense>
+  );
+}
+
+async function Inhalt() {
   if (!datenbankKonfiguriert()) {
     return (
       <Meldung
@@ -37,12 +80,12 @@ export default async function Ernaehrung() {
     );
   }
 
-  let mahlzeiten: Mahlzeitplan[];
+  let plan: Ernaehrungsplan;
   let ziel: Ziel | null;
   let historie: Ziel[];
   try {
-    [mahlzeiten, ziel, historie] = await Promise.all([
-      mahlzeitenLesen(),
+    [plan, ziel, historie] = await Promise.all([
+      ernaehrungsplanLesen(),
       aktuellesZiel(),
       zielHistorie(),
     ]);
@@ -106,7 +149,9 @@ export default async function Ernaehrung() {
         </div>
 
         <div className="flex flex-col gap-3.5">
-          {mahlzeiten.length === 0 ? (
+          {plan.skalierung && <SkalierungKarte skalierung={plan.skalierung} />}
+
+          {plan.mahlzeiten.length === 0 ? (
             <Card>
               <Eyebrow>Mahlzeiten</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">
@@ -114,7 +159,7 @@ export default async function Ernaehrung() {
               </p>
             </Card>
           ) : (
-            mahlzeiten.map((m) => <MahlzeitKarte key={m.name + m.fenster} mahlzeit={m} />)
+            plan.mahlzeiten.map((m) => <MahlzeitKarte key={m.name + m.fenster} mahlzeit={m} />)
           )}
 
           <p className="px-1 text-[11px] leading-relaxed text-fg-faint">
@@ -186,12 +231,49 @@ function MahlzeitKarte({ mahlzeit }: { mahlzeit: Mahlzeitplan }) {
                 <em className="block not-italic text-[11px] text-fg-faint">{z.alternative}</em>
               )}
             </span>
-            <span className="whitespace-nowrap text-sm font-semibold">
+            <span className="whitespace-nowrap text-right text-sm font-semibold">
               {mengeText(z.menge)} {z.einheit}
+              {/* Die Planmenge bleibt sichtbar. Ohne sie sähe der angepasste
+                  Wert aus, als hätte im Plan schon immer so viel gestanden —
+                  und die Anpassung wäre nicht nachvollziehbar. */}
+              {z.menge !== z.mengeLautPlan && (
+                <em className="block not-italic text-[11px] font-normal text-fg-faint">
+                  laut Plan {mengeText(z.mengeLautPlan)} {z.einheit}
+                </em>
+              )}
             </span>
           </li>
         ))}
       </ul>
+    </Card>
+  );
+}
+
+/**
+ * Warum im Plan andere Mengen stehen als bei Fitnessbell.
+ *
+ * Steht über den Mahlzeiten und nicht in jeder Karte: die Erklärung gilt für
+ * den ganzen Plan, und sechsmal derselbe Satz wäre Lärm.
+ */
+function SkalierungKarte({ skalierung }: { skalierung: NonNullable<Ernaehrungsplan["skalierung"]> }) {
+  return (
+    <Card>
+      <Eyebrow>Mengen zum Ziel</Eyebrow>
+      <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
+        Dein Ziel steht bei {skalierung.zielKhG} g Kohlenhydraten, der Ausgangsplan von
+        Fitnessbell bei {skalierung.basisKhG} g. Die Kohlenhydratquellen — Reis,
+        Haferflocken, Reispudding, Maltodextrin — laufen deshalb auf{" "}
+        {Math.round(skalierung.faktor * 100)} % ihrer Planmenge. Eiweiß und Fett bleiben, wie
+        sie sind.
+      </p>
+      <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+        Proportional gerechnet, nicht je Zutat aus Nährwerten: Kadenz hat keine
+        Nährwerttabelle und denkt sich keine aus. Stückzahlen wie die Banane tragen nicht mit.
+        Auf 5 g gerundet.
+      </p>
+      {skalierung.hinweis && (
+        <p className="mt-2 text-[11px] leading-relaxed text-fg-dim">{skalierung.hinweis}</p>
+      )}
     </Card>
   );
 }

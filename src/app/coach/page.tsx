@@ -1,18 +1,17 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { loadDashboard } from "@/lib/health-service";
-import { Eyebrow, NichtVerbunden, de } from "@/components/ui";
+import { Eyebrow, NichtVerbunden, Skelett, de, heuteWien } from "@/components/ui";
+import { aktuellePhase } from "@/lib/gewichtsplan";
 import { SESSIONS, rotationFor } from "@/lib/plan";
 
-export const dynamic = "force-dynamic";
-
-export default async function Coach() {
-  const data = await loadDashboard(30);
-  const heuteTraining = rotationFor(new Date());
-
-  if (!data.verbunden) {
-    return <NichtVerbunden titel="Der Coach braucht deine Daten" grund={data.grund} />;
-  }
-
+/**
+ * Der Kopf steht sofort, die Auswertungen strömen nach.
+ *
+ * Vorher hing die ganze Seite an loadDashboard(): ein OAuth-Refresh und vier
+ * Google-Abrufe, bevor auch nur die Überschrift erschien. Wer auf "Coach"
+ * tippte, sah so lange den vorigen Tab.
+ */
+export default function Coach() {
   return (
     <div className="mx-auto max-w-[520px] md:max-w-none">
       <header className="pt-10 md:pt-14">
@@ -29,6 +28,31 @@ export default async function Coach() {
         </p>
       </header>
 
+      <Suspense
+        fallback={
+          <div className="mt-6 flex flex-col gap-3.5">
+            <Skelett hoehe={92} className="max-w-[min(88%,62ch)]" />
+            <Skelett hoehe={72} className="max-w-[min(88%,62ch)]" />
+            <Skelett hoehe={72} className="max-w-[min(88%,62ch)]" />
+          </div>
+        }
+      >
+        <Auswertungen />
+      </Suspense>
+    </div>
+  );
+}
+
+/** Alles, was auf Google Health wartet. */
+async function Auswertungen() {
+  const data = await loadDashboard(30);
+  const heuteTraining = rotationFor(new Date());
+
+  if (!data.verbunden) {
+    return <NichtVerbunden titel="Der Coach braucht deine Daten" grund={data.grund} />;
+  }
+
+  return (
       <div className="mt-6 flex flex-col gap-3.5">
         <Nachricht titel="Befund heute">
           {data.heute && data.baseline ? (
@@ -69,14 +93,15 @@ export default async function Coach() {
               <b className="font-semibold text-fg">
                 {de(data.gewicht.trend.kgPerWeek, 2)} kg pro Woche
               </b>
-              . Zielkorridor ist 0,25 bis 0,50.
+              . Zielkorridor im {aktuellePhase(heuteWien()).phase.label} ist{" "}
+              {de(aktuellePhase(heuteWien()).phase.korridor.unten, 2)} bis{" "}
+              {de(aktuellePhase(heuteWien()).phase.korridor.oben, 2)}.
             </>
           ) : (
             data.gewicht.trend.detail
           )}
         </Nachricht>
       </div>
-    </div>
   );
 }
 

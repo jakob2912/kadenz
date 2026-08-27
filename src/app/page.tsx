@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
+import { aktuellePhase } from "@/lib/gewichtsplan";
 import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
 import { rotationFor } from "@/lib/plan";
 import { wienerStunde } from "@/lib/datum";
@@ -9,6 +12,7 @@ import {
   Gauge,
   Metric,
   NichtVerbunden,
+  Skelett,
   Tag,
   alterLabel,
   de,
@@ -17,10 +21,47 @@ import {
   minToHm,
 } from "@/components/ui";
 
-// Gesundheitsdaten ändern sich täglich und hängen am Cookie — nie cachen.
-export const dynamic = "force-dynamic";
 
-export default async function Heute() {
+/**
+ * Die Startseite streamt vollständig.
+ *
+ * Sie hängt an Google Health (Schlaf, Ruhepuls, HRV, Gewicht) und zusätzlich
+ * an der Uhrzeit — der Gruß, der Kalendertag und die Frage, ob heute Training
+ * ansteht, folgen alle aus `new Date()`. Beides ist Request-Zeit, also gibt
+ * es hier nichts, was sich sinnvoll vorrendern ließe außer dem Gerüst. Genau
+ * das steht jetzt sofort, statt dass der vorige Tab stehen bleibt, bis Google
+ * geantwortet hat.
+ */
+export default function Heute() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <div className="pt-10 md:pt-14">
+            <Skelett hoehe={16} className="w-44" />
+            <Skelett hoehe={38} className="mt-3 w-60" />
+          </div>
+          <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
+            <Skelett hoehe={260} />
+            <div className="flex flex-col gap-3.5">
+              <Skelett hoehe={150} />
+              <Skelett hoehe={130} />
+            </div>
+          </div>
+        </>
+      }
+    >
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+async function Dashboard() {
+  /* Gruß, Datum und Rotation lesen alle die aktuelle Uhrzeit. Beim Bauen
+     steht die nicht fest, und ein vorgerendertes "Guten Morgen" wäre abends
+     falsch. */
+  await connection();
+
   const data = await loadDashboard(30);
 
   if (!data.verbunden) {
@@ -201,7 +242,7 @@ export default async function Heute() {
                     blieb dem Leser überlassen. Die Zahl allein sagt nicht, ob
                     sie gut ist. */}
                 <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-                  {korridorUrteil(gewicht.trend.kgPerWeek)}
+                  {korridorUrteil(gewicht.trend.kgPerWeek, heuteIso)}
                 </p>
               </>
             ) : (
@@ -258,18 +299,33 @@ function bandTon(band: "gut" | "mittel" | "schlecht"): "gut" | "warnung" | "schl
   return "schlecht";
 }
 
-/** Einordnung statt bloßer Zahl — der Korridor allein beantwortet nichts. */
-function korridorUrteil(kgProWoche: number): string {
-  if (kgProWoche <= 0) {
-    return "Du nimmst gerade nicht zu. Im Aufbau fehlt damit die Grundlage — Zielkorridor sind 0,25 bis 0,50 kg pro Woche.";
+/**
+ * Einordnung statt bloßer Zahl — der Korridor allein beantwortet nichts.
+ *
+ * Die Grenzen standen hier viermal als Text: 0,25 bis 0,50, also immer
+ * Zunahme. Seit dem Phasenplan gilt das nur im Aufbau — im Mini-Cut soll das
+ * Gewicht fallen, und dieselben Sätze hätten dort das Gegenteil dessen
+ * verlangt, was geplant ist. Die Grenzen kommen jetzt aus der laufenden
+ * Phase.
+ */
+function korridorUrteil(kgProWoche: number, heuteIso: string): string {
+  const phase = aktuellePhase(heuteIso);
+  const { unten, oben } = phase.phase.korridor;
+  const spanne = `${de(unten, 2)} bis ${de(oben, 2)} kg pro Woche`;
+
+  if (kgProWoche < unten) {
+    return oben > 0
+      ? `Unter dem Zielkorridor von ${spanne}. Etwas mehr essen.`
+      : `Du nimmst schneller ab als geplant — Zielkorridor im ${phase.phase.label} ist ${spanne}. Etwas mehr essen, sonst geht es an die Muskulatur.`;
   }
-  if (kgProWoche < 0.25) {
-    return "Unter dem Zielkorridor von 0,25 bis 0,50 kg pro Woche. Etwas mehr essen.";
+
+  if (kgProWoche > oben) {
+    return oben > 0
+      ? `Über dem Zielkorridor von ${spanne} — der Überschuss geht ab hier vor allem ins Fett.`
+      : `Über dem Zielkorridor von ${spanne}. Im ${phase.phase.label} soll das Gewicht fallen; etwas weniger essen.`;
   }
-  if (kgProWoche <= 0.5) {
-    return "Im Zielkorridor von 0,25 bis 0,50 kg pro Woche. So weiterlaufen lassen.";
-  }
-  return "Über dem Zielkorridor von 0,25 bis 0,50 kg pro Woche — der Überschuss geht ab hier vor allem ins Fett.";
+
+  return `Im Zielkorridor von ${spanne}. So weiterlaufen lassen.`;
 }
 
 function deltaLabel(diff: number, unit: string): string {

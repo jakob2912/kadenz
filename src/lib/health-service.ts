@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { cacheLife, cacheTag } from "next/cache";
 import { refreshTokenLesen } from "./auth-store";
 import {
   listDataPoints,
@@ -48,7 +49,29 @@ export type Dashboard =
       unvollstaendig: string[];
     };
 
+/**
+ * Gesundheitsdaten fürs Dashboard — gecacht.
+ *
+ * Diese Funktion war der teure Teil jedes Tab-Wechsels: ein OAuth-Refresh zu
+ * Google, dann vier Health-Abrufe. Heute, Essen und Verlauf riefen sie je für
+ * sich auf, und weil alle drei Seiten auf force-dynamic standen, geschah das
+ * bei jedem einzelnen Wechsel neu. Dieselben Zahlen, viermal geholt.
+ *
+ * "use cache: private" und nicht das gewöhnliche "use cache": diese Funktion
+ * liest cookies(). Das ist die Variante, die das darf. Sie hat außerdem die
+ * Eigenschaft, die man sich für Gesundheitsdaten ohnehin wünscht — das
+ * Ergebnis liegt ausschließlich im Speicher des Browsers, nie auf dem Server.
+ *
+ * Fünf Minuten, weil daran nichts schneller altert: Schlaf und Ruhepuls
+ * stehen nach der Nacht fest, und das Morgengewicht wird einmal am Tag
+ * eingetragen. Wer es einträgt, soll es trotzdem sofort sehen — dafür ruft
+ * gewichtEintragen() refresh() auf, statt auf den Ablauf zu warten.
+ */
 export async function loadDashboard(days = 30): Promise<Dashboard> {
+  "use cache: private";
+  cacheLife({ stale: 300, revalidate: 300, expire: 900 });
+  cacheTag("gesundheit");
+
   // Fehlende Variablen zuerst, und mit Namen: auf Vercel ist das der
   // wahrscheinlichste Grund, warum nichts kommt. "Nicht verbunden" würde Jakob
   // zum Login schicken, der dann aus demselben Grund auch scheitert.

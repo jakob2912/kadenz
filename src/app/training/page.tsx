@@ -1,19 +1,56 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import { connection } from "next/server";
 import { einheitFuerTag } from "@/lib/uebungen";
 import { laufendesTraining } from "@/lib/workouts";
 import { heutigeSaetze, type Einheitskopf } from "@/lib/plan";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { TrainingLogger, TrainingStart } from "@/components/training-logger";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
-import { Card, Eyebrow, de, kurzDatum, uebungsVorschau } from "@/components/ui";
+import { Card, Eyebrow, Skelett, anzahl, de, kurzDatum, uebungsVorschau } from "@/components/ui";
 import { wienerDatum } from "@/lib/datum";
 
 // Die Startgewichte hängen an der Trainingshistorie und ändern sich nach
 // jedem Satz — hier darf nichts zwischengespeichert werden. Seit dem
-// Übungskatalog kommt auch die Übungsliste selbst aus der Datenbank.
-export const dynamic = "force-dynamic";
 
-export default async function Training() {
+/**
+ * Gerüst sofort, Einheit danach.
+ *
+ * Welche Einheit ansteht, folgt aus dem heutigen Kalendertag — die Seite kann
+ * also gar nicht vorgerendert werden, `new Date()` steht beim Bauen noch
+ * nicht fest. Vorher hieß das: gar nichts erscheint, bis Katalog, Historie
+ * und Bankstand aus der Datenbank da sind. Jetzt steht die Hülle sofort und
+ * die Einheit strömt nach.
+ */
+export default function Training() {
+  return (
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+          <Skelett hoehe={16} className="w-32" />
+          <Skelett hoehe={36} className="mt-3 w-64" />
+          <Skelett hoehe={22} className="mt-4 w-48" />
+          <div className="mt-6 flex flex-col gap-3.5">
+            <Skelett hoehe={150} />
+            <Skelett hoehe={150} />
+            <Skelett hoehe={150} />
+          </div>
+        </div>
+      }
+    >
+      <Einheit />
+    </Suspense>
+  );
+}
+
+async function Einheit() {
+  /* Welche Einheit ansteht, hängt am heutigen Kalendertag. Beim Bauen steht
+     der noch nicht fest, und Next lehnt ein `new Date()` im Vorrendern
+     ausdrücklich ab — zu Recht: die Seite wäre auf den Build-Tag eingefroren
+     und zeigte morgen noch die Einheit von heute. connection() sagt "ab hier
+     erst bei einer echten Anfrage" und beendet damit das Vorrendern genau an
+     der richtigen Stelle: die Hülle darüber bleibt statisch. */
+  await connection();
+
   const heute = await einheitFuerTag(new Date());
 
   if (heute.art === "pause") {
@@ -51,8 +88,12 @@ export default async function Training() {
           <div className="flex items-baseline justify-between gap-3">
             <Eyebrow>{istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}</Eyebrow>
             <span className="text-[11px] text-fg-faint">
-              {naechste.uebungen.length} Übungen ·{" "}
-              {naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0)} Sätze
+              {anzahl(naechste.uebungen.length, "Übung", "Übungen")} ·{" "}
+              {anzahl(
+                naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0),
+                "Satz",
+                "Sätze"
+              )}
             </span>
           </div>
           <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.015em]">
@@ -114,11 +155,17 @@ export default async function Training() {
     );
   }
 
+  /* Abschluss und bereits geloggte Sätze kommen ausdrücklich mit. Ohne sie
+     begann der Logger nach jedem Aufruf wieder bei null Haken, und weil der
+     Abschluss allein an diesen Haken hing, lief die Laufzeit weiter, obwohl
+     die Einheit längst vorbei war. */
   return (
     <TrainingLogger
       uebungen={heute.uebungen}
       session={kopf}
       startedAtMs={laufend.startedAtMs}
+      finishedAtMs={laufend.finishedAtMs}
+      geloggt={laufend.geloggt}
     />
   );
 }
@@ -126,10 +173,11 @@ export default async function Training() {
 /**
  * Wo das Bankdrücken gerade steht.
  *
- * Drei Zustände, und alle drei sind eine Auskunft wert: kein Trainingsmax
- * (dann steht hier die Eingabe), heute kein Bank-Tag (dann wann der nächste
- * ist), oder Bank-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil
- * heute nichts ansteht, hieße jedes Mal neu nachzurechnen, wann wieder.
+ * Vier Zustände, und alle vier sind eine Auskunft wert: kein Trainingsmax
+ * (dann steht hier die Eingabe), Zusatz-Einheit (submaximal, ohne Wirkung auf
+ * den Trainingsmax), gar keine Bankeinheit (Deload-Zwischentag), oder der
+ * TM-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil heute nichts
+ * ansteht, hieße jedes Mal neu nachzurechnen, wann wieder.
  */
 function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string }): ReactNode {
 
@@ -137,15 +185,25 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
     return <BankTrainingsmax aktuellerTm={null} zyklus={bank.position.zyklus} />;
   }
 
-  if (!bank.position.istBankTag) {
+  if (bank.position.art !== "tm") {
+    const zusatz = bank.position.art === "zusatz";
     return (
       <Card className="mt-3.5">
-        <Eyebrow>Bankdrücken · 5/3/1</Eyebrow>
+        <Eyebrow>Bankdrücken · {zusatz ? "Zusatz-Einheit" : "5/3/1"}</Eyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          {wann} kein Bank-Tag. Schwer gebankt wird jede zweite Push-Einheit, also alle sechs
-          Tage — dazwischen wäre die Erholung für schwere Sätze zu knapp.
+          {zusatz ? (
+            <>
+              {wann} kein TM-Tag. Die Sätze laufen submaximal und zählen nicht für die
+              Trainingsmax-Progression — sie bringen Frequenz an der Hantel, nicht Auswertung.
+            </>
+          ) : (
+            <>
+              {wann} keine Bankeinheit. In der Deload-Woche fällt die Zusatz-Einheit aus, die
+              Woche ist zum Zurücknehmen da.
+            </>
+          )}
           {bank.naechsterBankTag && (
-            <> Der nächste ist am {kurzDatum(bank.naechsterBankTag)}.</>
+            <> Schwer gebankt wird wieder am {kurzDatum(bank.naechsterBankTag)}.</>
           )}
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">

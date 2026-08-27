@@ -57,6 +57,30 @@ export function NichtVerbunden({
   );
 }
 
+/**
+ * Platzhalter, solange eine Karte auf Daten wartet.
+ *
+ * Gebraucht seit Cache Components: die statische Hülle einer Seite steht
+ * sofort, die Teile mit Daten strömen nach — und was dazwischen dasteht,
+ * entscheidet, ob sich der Tab-Wechsel schnell anfühlt. Ein Umriss in der
+ * Größe der späteren Karte hält das Layout ruhig; ohne ihn springt die Seite,
+ * sobald die Zahlen ankommen.
+ *
+ * Bewusst kein Pulsieren und kein Schimmern: die App wird morgens um sechs
+ * gelesen, und eine Animation, die eine halbe Sekunde läuft, ist eher Unruhe
+ * als Information. `aria-hidden`, weil ein Screenreader nichts von leeren
+ * Kästen hat — die Suspense-Grenze meldet den Ladezustand ohnehin.
+ */
+export function Skelett({ hoehe = 96, className = "" }: { hoehe?: number; className?: string }) {
+  return (
+    <div
+      aria-hidden
+      className={`rounded-md border border-hair-soft bg-surface-2/40 ${className}`}
+      style={{ height: hoehe }}
+    />
+  );
+}
+
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
     <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
@@ -213,6 +237,18 @@ export function alterLabel(iso: string, heute = heuteWien()): string {
   if (tage === 1) return "gestern";
   if (tage < 7) return `vor ${tage} Tagen`;
   return kurzDatum(iso);
+}
+
+/**
+ * Zählwort mit passender Form.
+ *
+ * Die Vorschau schrieb "1 Sätze" und "1 Übungen" — überall dort, wo eine
+ * Einheit nur eine Übung hat oder eine Übung nur einen Satz. Seit der Hack
+ * Squat auf einem Satz steht und die Incline Chest Press an Bank-Tagen einen
+ * abgibt, ist das keine Randlage mehr, sondern der Normalfall.
+ */
+export function anzahl(n: number, singular: string, plural: string): string {
+  return `${n} ${n === 1 ? singular : plural}`;
 }
 
 export function de(n: number, digits = 1): string {

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TabBar } from "@/components/nav";
@@ -38,7 +39,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </main>
 
-        <TabBar />
+        {/* usePathname() liest die URL und ist damit Request-Daten. Ohne
+            diese Grenze könnte keine einzige Route mehr vorgerendert werden —
+            die Tab-Leiste steht in allen. Der Platzhalter hat die Höhe der
+            Leiste, damit der Inhalt darüber beim Nachladen nicht springt. */}
+        <Suspense
+          fallback={
+            <div
+              aria-hidden
+              className="fixed inset-x-0 bottom-0 z-50 h-[70px] border-t border-hair-soft bg-ground/85 backdrop-blur-xl md:bottom-auto md:top-0 md:h-[58px] md:border-t-0 md:border-b"
+            />
+          }
+        >
+          <TabBar />
+        </Suspense>
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
+import { updateTag } from "next/cache";
 import { refreshAccessToken, writeWeight } from "./google-health";
 
 /**
@@ -41,8 +41,8 @@ export async function gewichtEintragen(kg: number): Promise<EintragErgebnis> {
   }
 
   const jar = await cookies();
-  const refresh = jar.get("kadenz_google_refresh")?.value;
-  if (!refresh) {
+  const refreshToken = jar.get("kadenz_google_refresh")?.value;
+  if (!refreshToken) {
     return {
       ok: false,
       fehler: "Nicht mit Google Health verbunden. Bitte erst über /api/auth/google anmelden.",
@@ -51,7 +51,7 @@ export async function gewichtEintragen(kg: number): Promise<EintragErgebnis> {
 
   let accessToken: string;
   try {
-    accessToken = (await refreshAccessToken(refresh)).access_token;
+    accessToken = (await refreshAccessToken(refreshToken)).access_token;
   } catch (e) {
     return { ok: false, fehler: `Google-Zugang ließ sich nicht erneuern: ${kurz(e)}` };
   }
@@ -62,11 +62,16 @@ export async function gewichtEintragen(kg: number): Promise<EintragErgebnis> {
     return { ok: false, fehler: `Google Health hat den Wert nicht angenommen: ${kurz(e)}` };
   }
 
-  // Dashboard und Verlauf lesen Gewicht, 7-Tage-Schnitt und Trend serverseitig
-  // aus derselben Quelle. Ohne das stünde nach dem Eintragen noch der alte
-  // Wert auf der Seite.
-  revalidatePath("/");
-  revalidatePath("/verlauf");
+  /* Dashboard und Verlauf lesen Gewicht, 7-Tage-Schnitt und Trend aus
+     loadDashboard(). Ohne das hier stünde nach dem Eintragen noch der alte
+     Wert auf der Seite — und zwar bis zu fünf Minuten lang, so lange hält
+     der Cache.
+
+     updateTag und nicht revalidateTag: das eine lässt den Eintrag sofort
+     ablaufen, das andere markiert ihn nur als veraltet und liefert erst
+     einmal weiter den alten Wert nach. Wer gerade sein Morgengewicht
+     eingetippt hat, will es sehen und nicht den von gestern. */
+  updateTag("gesundheit");
 
   return { ok: true, kg: gerundet };
 }

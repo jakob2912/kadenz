@@ -4,8 +4,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
 import { useRouter } from "next/navigation";
-import { satzSpeichern, trainingStarten } from "@/lib/workouts";
-import { Card, Eyebrow, Tag, de, uebungsVorschau } from "@/components/ui";
+import {
+  satzSpeichern,
+  trainingBeenden,
+  trainingStarten,
+  type GeloggterSatz,
+} from "@/lib/workouts";
+import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
 
 const PAUSE_SEKUNDEN = 180;
 
@@ -13,6 +18,32 @@ const PAUSE_SEKUNDEN = 180;
 const VORBEI_SEKUNDEN = 12;
 
 type Logged = { kg: number; reps: number };
+
+/**
+ * Die geloggten Sätze auf die Schlüssel des Loggers abbilden.
+ *
+ * Der Logger adressiert einen Satz über die Position in der heutigen
+ * Übungsliste (`${uebungIndex}-${satzIndex}`), die Datenbank über den
+ * Übungsnamen. Übersetzt wird hier, und zwar in diese Richtung: Sätze, deren
+ * Übung heute gar nicht ansteht — getauschtes Gerät, nachträglich entfernte
+ * Übung —, fallen dabei still weg. Sie bleiben in der Datenbank und im
+ * Kraftverlauf, sie haben nur keine Zeile auf diesem Bildschirm.
+ */
+function ausDatenbank(
+  geloggt: GeloggterSatz[],
+  uebungen: PlannedExercise[]
+): Record<string, Logged> {
+  const platz = new Map(uebungen.map((ex, i) => [ex.name, i]));
+  const stand: Record<string, Logged> = {};
+
+  for (const satz of geloggt) {
+    const i = platz.get(satz.exercise);
+    if (i === undefined) continue;
+    stand[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps };
+  }
+
+  return stand;
+}
 
 /**
  * Der interaktive Teil des Trainings. Bekommt den fertigen Plan als Prop —
@@ -23,6 +54,8 @@ export function TrainingLogger({
   uebungen,
   session,
   startedAtMs,
+  finishedAtMs = null,
+  geloggt = [],
 }: {
   uebungen: PlannedExercise[];
   session: Einheitskopf;
@@ -32,8 +65,19 @@ export function TrainingLogger({
    * zählt die Zeit ab dem Moment, in dem der Logger auf dem Schirm steht.
    */
   startedAtMs: number | null;
+  /** Zeitpunkt des Abschlusses aus der Datenbank. Null, solange sie läuft. */
+  finishedAtMs?: number | null;
+  /** Was heute schon in der Datenbank steht. */
+  geloggt?: GeloggterSatz[];
 }) {
-  const [logged, setLogged] = useState<Record<string, Logged>>({});
+  /* Der Anfangszustand kommt aus der Datenbank, nicht aus dem Nichts. Vorher
+     stand hier {}, und damit fing eine Einheit nach jedem Neuladen wieder bei
+     null an — die Haken waren weg, der Zähler stand auf 0, und die Karte
+     "Einheit abgeschlossen" verschwand, obwohl alle Sätze gespeichert waren. */
+  const [logged, setLogged] = useState<Record<string, Logged>>(() =>
+    ausDatenbank(geloggt, uebungen)
+  );
+  const [fertigSeit, setFertigSeit] = useState<number | null>(finishedAtMs);
   const [zuletzt, setZuletzt] = useState<string | null>(null);
   const [speicherFehler, setSpeicherFehler] = useState<string | null>(null);
   const [pause, setPause] = useState<number | null>(null);
@@ -49,12 +93,20 @@ export function TrainingLogger({
        der Anfrage gewesen, nicht der, an dem der Logger vor dir liegt. */
     start.current ??= Date.now();
 
+    /* Steht das Ende schon fest, ist die Dauer eine feste Zahl und kein
+       laufender Zähler. Vorher lief das Intervall bedingungslos weiter: eine
+       um elf Uhr beendete Einheit zeigte am Abend sieben Stunden Laufzeit. */
+    if (fertigSeit !== null) {
+      setLaufzeit(Math.max(0, Math.floor((fertigSeit - (start.current ?? fertigSeit)) / 1000)));
+      return;
+    }
+
     const id = setInterval(
       () => setLaufzeit(Math.floor((Date.now() - (start.current ?? Date.now())) / 1000)),
       1000
     );
     return () => clearInterval(id);
-  }, []);
+  }, [fertigSeit]);
 
   useEffect(() => {
     if (pause === null) return;
@@ -93,6 +145,26 @@ export function TrainingLogger({
   const saetzeFertig = Object.keys(logged).length;
   const volumen = Object.values(logged).reduce((v, s) => v + s.kg * s.reps, 0);
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
+
+  /* Der Abschluss gehört in die Datenbank, nicht nur in diesen State. Sonst
+     ist die Einheit nach dem nächsten Seitenaufruf wieder offen, und die
+     Laufzeit zählt weiter — genau das war der Fall, in dem Trainings nie
+     aufhörten. Wirkt nur beim Übergang von "nicht fertig" auf "fertig":
+     trainingBeenden() verschiebt einen bereits gesetzten Zeitstempel nicht,
+     eine Korrektur am nächsten Tag verlängert die Einheit also nicht
+     rückwirkend. */
+  useEffect(() => {
+    if (!alleSaetzeFertig || fertigSeit !== null) return;
+
+    let abgebrochen = false;
+    void trainingBeenden(session.key).then((r) => {
+      if (!abgebrochen && r.ok) setFertigSeit(r.finishedAtMs);
+    });
+
+    return () => {
+      abgebrochen = true;
+    };
+  }, [alleSaetzeFertig, fertigSeit, session.key]);
 
   function abhaken(
     key: string,
@@ -311,10 +383,18 @@ export function TrainingLogger({
 
               {/* Ohne Trainingsmax steht der Bank-Slot ohne Zahlen da. Die
                   Karte bleibt trotzdem, statt die Übung zu verstecken: dass
-                  hier etwas fehlt, ist die Information. */}
-              {saetze.length === 0 && ex.programmHinweis && (
+                  hier etwas fehlt, ist die Information.
+
+                  Der Text steht auch dann, wenn kein Programm dahintersteckt.
+                  Vorher hing er allein an programmHinweis, und eine Übung mit
+                  null Sätzen aus anderem Grund — der Adductor kam so aus dem
+                  MCP-Server — zeigte eine Tabellenkopfzeile mit nichts
+                  darunter. Eine leere Tabelle sieht aus wie ein Ladefehler,
+                  nicht wie eine Auskunft. */}
+              {saetze.length === 0 && (
                 <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-                  {ex.programmHinweis}
+                  {ex.programmHinweis ??
+                    "Für diese Übung sind heute keine Sätze hinterlegt. Setz die Satzanzahl im Katalog, dann steht sie beim nächsten Training hier."}
                 </p>
               )}
             </Card>
@@ -324,11 +404,17 @@ export function TrainingLogger({
         {/* Vorher endete die Einheit damit, dass nichts mehr passierte. Ein
             Abschluss beantwortet die einzige Frage, die man am Ende hat: war
             das jetzt alles, und ist es angekommen. */}
-        {alleSaetzeFertig && (
+        {/* Die Datenbank hat das letzte Wort. Hängt die Karte allein an den
+            Haken, verschwindet sie, sobald sich der Plan nachträglich ändert —
+            eine abgeschlossene Einheit sähe dann wieder offen aus, obwohl sie
+            längst beendet wurde. */}
+        {(alleSaetzeFertig || fertigSeit !== null) && (
           <Card className="border-ready/30">
             <Eyebrow>Einheit abgeschlossen</Eyebrow>
             <p className="mt-2 text-[15px] font-semibold tracking-[-0.015em]">
-              Alle {saetzeGesamt} Sätze abgehakt
+              {alleSaetzeFertig
+                ? `Alle ${anzahl(saetzeGesamt, "Satz", "Sätze")} abgehakt`
+                : `${anzahl(saetzeFertig, "Satz", "Sätze")} von ${saetzeGesamt} abgehakt`}
             </p>
             <div className="mt-3.5 flex gap-6">
               <Kennzahl
@@ -341,6 +427,13 @@ export function TrainingLogger({
             <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
               Jeder Satz ist einzeln gespeichert, sobald du ihn abgehakt hast. Korrigieren
               geht weiterhin: Tipp auf den Haken oder ins Feld.
+              {fertigSeit !== null && (
+                <>
+                  {" "}
+                  Die Einheit ist um {uhrzeit(fertigSeit)} abgeschlossen worden — die Dauer
+                  steht ab jetzt fest und läuft nicht weiter.
+                </>
+              )}
             </p>
           </Card>
         )}
@@ -607,8 +700,31 @@ function Ring({ fortschritt, farbe }: { fortschritt: number; farbe: string }) {
   );
 }
 
+/** Uhrzeit in Wiener Zeit — der Server läuft auf Vercel in UTC. */
+function uhrzeit(ms: number): string {
+  return new Date(ms).toLocaleTimeString("de-AT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Vienna",
+  });
+}
+
+/**
+ * Dauer als m:ss, ab einer Stunde als h:mm:ss.
+ *
+ * Die Stundenstufe fehlte. Eine Einheit von knapp zwei Stunden stand damit als
+ * "116:00" da — richtig gerechnet und trotzdem nicht lesbar; man zählt im Kopf
+ * durch 60. Vorher fiel es kaum auf, weil eine Einheit ohne Abschluss ohnehin
+ * bis in absurde Zahlen weiterlief.
+ *
+ * Die Satzpause benutzt dieselbe Funktion und bleibt unverändert: drei Minuten
+ * erreichen die Stundenstufe nie.
+ */
 function mmss(s: number): string {
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+  const min = Math.floor(s / 60);
+  const sek = String(s % 60).padStart(2, "0");
+  if (min < 60) return `${min}:${sek}`;
+  return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}:${sek}`;
 }
 
 /**
@@ -666,7 +782,8 @@ export function TrainingStart({
         {session.title}
       </h1>
       <p className="mt-1.5 text-sm text-fg-dim">
-        {uebungen.length} Übungen · {saetze} Sätze · Satzpause 3 Minuten
+        {anzahl(uebungen.length, "Übung", "Übungen")} · {anzahl(saetze, "Satz", "Sätze")} ·
+        Satzpause 3 Minuten
       </p>
 
       <button

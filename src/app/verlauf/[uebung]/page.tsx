@@ -1,18 +1,44 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Card, Eyebrow, de, kurzDatum } from "@/components/ui";
+import { Card, Eyebrow, Skelett, de, kurzDatum } from "@/components/ui";
 import { ReihenChart } from "@/components/reihen-chart";
 import { saetzeFuer, FENSTER_TAGE } from "@/lib/kraftverlauf";
 import { besterSatz, e1rm, e1rmReihe, kraftTrend } from "@/lib/kraft";
 
-// Hängt an der Trainingshistorie und ändert sich nach jedem Satz.
-export const dynamic = "force-dynamic";
 
-export default async function UebungsVerlauf({
+/**
+ * Der Übungsname steht in der URL, die Historie in der Datenbank.
+ *
+ * Beides ist Request-Zeit: params kennt erst die Anfrage, und die Sätze
+ * kommen aus Postgres. Vorgerendert wird deshalb nur die Rückwärts-Verknüpfung
+ * und das Gerüst — die kostet nichts und ist der Teil, den man am ehesten
+ * braucht, wenn man versehentlich hier gelandet ist.
+ */
+export default function UebungsVerlauf({
   params,
 }: {
   params: Promise<{ uebung: string }>;
 }) {
+  return (
+    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+      <Zurueck />
+      <Suspense
+        fallback={
+          <>
+            <Skelett hoehe={36} className="mt-3 w-56" />
+            <Skelett hoehe={220} className="mt-5" />
+            <Skelett hoehe={160} className="mt-3.5" />
+          </>
+        }
+      >
+        <Inhalt params={params} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function Inhalt({ params }: { params: Promise<{ uebung: string }> }) {
   const { uebung: roh } = await params;
   const uebung = decodeURIComponent(roh);
 
@@ -22,15 +48,14 @@ export default async function UebungsVerlauf({
   } catch (e) {
     console.error(`Historie für "${uebung}" nicht lesbar:`, e);
     return (
-      <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
-        <Zurueck />
+      <>
         <h1 className="mt-3 text-[27px] font-bold tracking-[-0.025em]">{uebung}</h1>
         <Card className="mt-5">
           <p className="text-sm leading-relaxed text-fg-dim">
             Die Trainingshistorie ist gerade nicht lesbar. Versuch es gleich noch einmal.
           </p>
         </Card>
-      </div>
+      </>
     );
   }
 
@@ -45,8 +70,7 @@ export default async function UebungsVerlauf({
   const aktuell = reihe.length > 0 ? reihe[reihe.length - 1] : null;
 
   return (
-    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
-      <Zurueck />
+    <>
 
       <header className="mt-3">
         <Eyebrow>
@@ -128,7 +152,7 @@ export default async function UebungsVerlauf({
           )}
         </Card>
       </div>
-    </div>
+    </>
   );
 }
 

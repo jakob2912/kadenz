@@ -109,6 +109,19 @@ model Zutat {
   /// bleibt und die Alternative nicht wie ein Teil der Zutat aussieht.
   alternative String?
 
+  /// Trägt diese Zutat eine Änderung des Kalorienziels mit?
+  ///
+  /// Wahr bei den Kohlenhydratquellen — Reis, Haferflocken, Reispudding,
+  /// Maltodextrin. Der Coach bewegt ausschließlich die Kohlenhydrate (siehe
+  /// kalorienAnpassung() in coach.ts), also sind sie es auch, die im Teller
+  /// weniger werden. Eiweiß- und Fettquellen bleiben, sonst nähme eine
+  /// Kürzung genau das weg, was ausdrücklich stehen bleiben soll.
+  ///
+  /// Als Feld statt als Namensliste im Code: welche Zutat nachgibt, ist eine
+  /// Ernährungsentscheidung und ändert sich mit dem Plan — derselbe Grund,
+  /// aus dem saetzeBankTag in der Datenbank steht und nicht im Quelltext.
+  anpassbar Boolean @default(false)
+
   @@unique([mahlzeitId, position])
 }
 
@@ -230,6 +243,40 @@ model Uebung {
   /// Nicht-null heißt: die Sätze dieser Übung gibt ein Programm vor, nicht
   /// progression(). Bisher nur "531" für das Bankdrücken.
   programm String?
+
+  /// Wie viele Sätze diese Übung vorsieht.
+  ///
+  /// Stand bis hierher nirgends. heutigeSaetze() zählte stattdessen die Sätze
+  /// der zuletzt geloggten Einheit, ersatzweise die Länge von startWdh — und
+  /// eine über den MCP-Server ohne startWdh angelegte Übung bekam damit gar
+  /// keine. Genau das ist beim Adductor passiert: er stand im Plan, hatte aber
+  /// null Sätze und 0 kg als Zielgewicht.
+  ///
+  /// Der zweite Grund ist subtiler: hing die Anzahl an der letzten Einheit,
+  /// schrumpfte der Plan still mit. Wer von zwei geplanten Sätzen nur einen
+  /// abhakte, bekam beim nächsten Training nur noch einen vorgeschlagen.
+  ///
+  /// Default 2, weil das Jakobs Regel ist. Ausnahmen stehen als Wert in der
+  /// Zeile, nicht als Sonderfall im Code.
+  saetze Int @default(2)
+
+  /// Abweichende Satzanzahl an TM-Tagen. Null heißt: keine Reduktion.
+  ///
+  /// An einem TM-Tag kommen drei schwere Sätze Langhantel-Bankdrücken dazu.
+  /// Die Incline Chest Press trifft dieselbe Muskulatur; ihr voller Umfang
+  /// obendrauf ist Volumen, das die Erholung kostet, ohne mehr zu bringen.
+  ///
+  /// Als Feld statt als Übungsname im Code: welche Übung nachgibt, ist eine
+  /// Trainingsentscheidung und ändert sich, sobald der Split sich ändert. Ein
+  /// hart verdrahtetes "Incline Chest Press" hätte für jede solche Änderung
+  /// ein Deployment gebraucht — genau der Grund, aus dem der Katalog
+  /// überhaupt in der Datenbank steht.
+  ///
+  /// Greift ausschließlich, wenn bankstandFuer() den Tag als TM-Tag ausweist —
+  /// nicht an der submaximalen Zusatz-Einheit dazwischen, die kostet den
+  /// übrigen Übungen nichts. An Pull-Tagen gibt es keinen Bankstand, dort kann
+  /// die Reduktion strukturell nicht zuschlagen.
+  saetzeBankTag Int?
 
   /// Referenzwerte aus dem Kraftwerte-Log, solange die Übung noch nie
   /// geloggt wurde. Sobald ein Satz in SetLog liegt, zählt ausschließlich der.

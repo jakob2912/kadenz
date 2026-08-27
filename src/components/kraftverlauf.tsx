@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { connection } from "next/server";
 import { Card, Eyebrow, de } from "@/components/ui";
 import { saetzeProUebung, FENSTER_TAGE } from "@/lib/kraftverlauf";
 import { besterSatz, e1rm, rangliste, type Rang } from "@/lib/kraft";
@@ -17,6 +18,11 @@ import { besterSatz, e1rm, rangliste, type Rang } from "@/lib/kraft";
  * Balkenrichtung, im Vorzeichen und im Wort.
  */
 export async function Kraftverlauf() {
+  /* saetzeProUebung() rechnet das Zeitfenster ab heute — beim Bauen steht der
+     Tag noch nicht fest, und ein eingefrorenes Fenster zeigte in einer Woche
+     die falschen Übungen. */
+  await connection();
+
   let proUebung: Record<string, Awaited<ReturnType<typeof saetzeProUebung>>[string]>;
 
   try {

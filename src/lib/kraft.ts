@@ -275,12 +275,20 @@ export function rangliste(proUebung: Record<string, GeloggterSatz[]>): Rang[] {
  *
  * Das Programm ist als Wochenplan gedacht. Jakobs Push kommt aber alle drei
  * Tage, ohne Bezug zu Wochentagen. Übersetzt heißt eine "Woche" hier: ein
- * Bank-Tag, und Bank-Tag ist jede zweite Push-Einheit. Damit liegen sechs Tage
- * zwischen zwei schweren Bankeinheiten und ein Zyklus dauert 24 Tage.
+ * TM-Tag, und TM-Tag ist jede zweite Push-Einheit. Damit liegen sechs Tage
+ * zwischen zwei Einheiten, die den Trainingsmax bewegen, und ein Zyklus dauert
+ * 24 Tage.
  *
- * Warum nicht jede Push-Einheit: dann wäre der Zyklus in zwölf Tagen durch und
- * der Trainingsmax stiege rechnerisch um sieben Kilogramm im Monat. Das hält
- * niemand, und der AMRAP-Reset müsste ihn dauernd wieder einfangen.
+ * Warum das Programm nicht auf jede Push-Einheit gelegt wird: dann wäre der
+ * Zyklus in zwölf Tagen durch und der Trainingsmax stiege rechnerisch um sieben
+ * Kilogramm im Monat. Das hält niemand, und der AMRAP-Reset müsste ihn dauernd
+ * wieder einfangen.
+ *
+ * Seit dem 27.08.2026 steht Bankdrücken trotzdem an jeder Push-Einheit: die
+ * Tage dazwischen tragen einen submaximalen Zusatz-Slot (siehe
+ * bankZusatzPlan()). Das ist ausdrücklich kein zweiter Programmtag — er rechnet
+ * mit demselben Trainingsmax, verändert ihn aber nicht. Die Frequenz steigt von
+ * gut einer auf gut zwei Bankeinheiten je Woche, der Zyklus bleibt 24 Tage.
  */
 
 export type BankWoche = 1 | 2 | 3 | 4;
@@ -330,15 +338,61 @@ export function bankPlan(tmKg: number, woche: BankWoche): BankSatz[] {
   }));
 }
 
+/**
+ * Der submaximale Zusatz-Slot an den Push-Einheiten zwischen zwei TM-Tagen.
+ *
+ * Feste Prozente statt einer eigenen Wellenrechnung: der Tag soll Übung und
+ * Volumen bringen, nicht eine zweite Meinung darüber, wie schwer diese Woche
+ * ist. 72,5 % liegen unter jedem AMRAP-Satz des Programms (85, 90, 95 %) und
+ * damit im Bereich, in dem fünf Wiederholungen mit Reserve stehen — drei Tage
+ * nach einer schweren Einheit und drei Tage vor der nächsten ist das der Zweck.
+ * Der zweite Satz der Woche liegt je nach Welle bei 75 bis 85 %; die
+ * Zusatz-Einheit bleibt darunter.
+ *
+ * Bewusst ohne AMRAP-Zeile: der AMRAP-Satz ist das Messinstrument des
+ * Programms, und ein zweites Instrument an einem Tag, der den Trainingsmax
+ * nicht bewegen darf, wäre nur eine Zahl, die niemand verwendet.
+ */
+export const ZUSATZ_PROZENT = 72.5;
+export const ZUSATZ_SAETZE = 3;
+export const ZUSATZ_WDH = 5;
+
+export function bankZusatzPlan(tmKg: number): BankSatz[] {
+  const satz = {
+    prozent: ZUSATZ_PROZENT,
+    wdh: ZUSATZ_WDH,
+    amrap: false,
+    kg: aufZweiKommaFuenf((tmKg * ZUSATZ_PROZENT) / 100),
+  };
+  return Array.from({ length: ZUSATZ_SAETZE }, () => ({ ...satz }));
+}
+
 /** Der AMRAP-Satz der Woche, falls es einen gibt. */
 export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | null {
   const satz = WOCHEN[woche].find((s) => s.amrap);
   return satz ? { prozent: satz.prozent, wdh: satz.wdh } : null;
 }
 
+/**
+ * Was für ein Bank-Tag eine Push-Einheit ist.
+ *
+ * "tm"      — der Programmtag: drei Sätze nach der Welle, AMRAP obendrauf,
+ *             und der einzige Tag, aus dem der Trainingsmax fortgeschrieben
+ *             wird.
+ * "zusatz"  — die Push-Einheit dazwischen: submaximal, ohne Wirkung auf den
+ *             Trainingsmax.
+ * "keiner"  — vor dem Programmstart, und die Zusatz-Einheit der Deload-Woche.
+ *
+ * Ein Aufzählungstyp statt zweier Wahrheitswerte: mit istBankTag und
+ * istZusatzTag nebeneinander gäbe es den Zustand "beides zugleich", den es
+ * nicht gibt, und jede Stelle müsste selbst wissen, welcher der beiden
+ * Vorrang hat.
+ */
+export type BankTagArt = "tm" | "zusatz" | "keiner";
+
 export type BankPosition = {
-  istBankTag: boolean;
-  /** Fortlaufend ab 1. Nur bei istBankTag aussagekräftig. */
+  art: BankTagArt;
+  /** Fortlaufend ab 1. Bei art "keiner" vor dem Start nicht aussagekräftig. */
   zyklus: number;
   woche: BankWoche;
 };
@@ -346,11 +400,15 @@ export type BankPosition = {
 /**
  * Wo im Programm steht ein Push-Tag?
  *
- * Rechnet ausdrücklich aus dem Kalender, nicht aus geloggten Einheiten:
- * trainingBeenden() wird von keiner Oberfläche aufgerufen, Workout.finishedAt
- * ist auf jeder Zeile NULL. Ein Zyklus, der an abgeschlossenen Einheiten
- * hinge, käme nie voran. Nachteil dieser Wahl, bewusst in Kauf genommen: wer
- * eine Einheit ausfallen lässt, überspringt die Programmwoche mit.
+ * Rechnet ausdrücklich aus dem Kalender, nicht aus geloggten Einheiten.
+ *
+ * Ursprünglich, weil es gar nicht anders ging: trainingBeenden() wurde von
+ * keiner Oberfläche aufgerufen, Workout.finishedAt stand auf jeder Zeile auf
+ * NULL. Seit dem 25.08.2026 wird der Abschluss festgehalten, die Wahl bleibt
+ * aber dieselbe — ein Zyklus, der an abgeschlossenen Einheiten hinge, bliebe
+ * nach einer ausgefallenen Woche stehen, und das Programm liefe dem Kalender
+ * hinterher. Nachteil, bewusst in Kauf genommen: wer eine Einheit ausfallen
+ * lässt, überspringt die Programmwoche mit.
  *
  * Gezählt wird ab `startPushIndex` — dem ersten Push-Tag, an dem das Programm
  * lief. Nicht ab dem Rotationsanker: die Push-Pull-Rotation läuft seit dem
@@ -364,15 +422,26 @@ export function bankPosition(pushIndex: number, startPushIndex: number): BankPos
   // Vor dem Programmstart: kein Bank-Tag, und der Zyklus steht auf seinem
   // Anfang. So zeigt die Oberfläche "Zyklus 1, Woche 1" statt einer
   // negativen Woche.
-  if (versatz < 0) return { istBankTag: false, zyklus: 1, woche: 1 };
+  if (versatz < 0) return { art: "keiner", zyklus: 1, woche: 1 };
 
   const bankIndex = Math.floor(versatz / 2);
+  const woche = ((bankIndex % 4) + 1) as BankWoche;
 
-  return {
-    istBankTag: versatz % 2 === 0,
-    zyklus: Math.floor(bankIndex / 4) + 1,
-    woche: ((bankIndex % 4) + 1) as BankWoche,
-  };
+  /* Die Zusatz-Einheit teilt sich Zyklus und Woche mit dem TM-Tag davor —
+     Math.floor() rundet den ungeraden Versatz auf denselben Bank-Index ab.
+     Das ist die Absicht: solange die Welle läuft, soll nicht mitten zwischen
+     zwei Programmtagen die Woche umspringen. */
+  const art: BankTagArt =
+    versatz % 2 === 0
+      ? "tm"
+      : /* In der Deload-Woche fällt die Zusatz-Einheit aus. 72,5 % lägen über
+           jedem ihrer Sätze (40/50/60 %), und eine Woche, deren ganzer Sinn
+           das Zurücknehmen ist, wäre damit die schwerere von beiden. */
+        woche === 4
+        ? "keiner"
+        : "zusatz";
+
+  return { art, zyklus: Math.floor(bankIndex / 4) + 1, woche };
 }
 
 export type TmEntscheidung = {

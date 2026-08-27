@@ -392,16 +392,6 @@ export const ZIEL_RATE_UNTEN = 0.25;
 export const ZIEL_RATE_OBEN = 0.5;
 
 /**
- * Angepeilt wird die Mitte des Korridors, nicht die nächstgelegene Kante.
- *
- * Wer auf 0,25 zielt, landet bei der nächsten Messung mit gleicher
- * Wahrscheinlichkeit knapp darunter wie knapp darüber — und bekommt zehn Tage
- * später den nächsten Vorschlag in dieselbe Richtung. Die Mitte hat nach oben
- * wie nach unten Luft.
- */
-const ZIEL_RATE_MITTE = (ZIEL_RATE_UNTEN + ZIEL_RATE_OBEN) / 2;
-
-/**
  * Mindestabstand zwischen zwei Anpassungen in Tagen.
  *
  * Kürzer geht nicht: die Tagesschwankung des Gewichts liegt bei ±0,4 kg, und
@@ -482,8 +472,29 @@ export function kalorienAnpassung(opts: {
   heute: string;
   /** Für die Eiweiß-Meldeschwelle. null = kein aktueller Messwert. */
   koerpergewichtKg: number | null;
+  /**
+   * Der Zielkorridor der Gewichtsänderung in kg pro Woche.
+   *
+   * Stand bis zum 25.08.2026 fest auf 0,25 bis 0,50 — also immer auf Zunahme.
+   * Mit dem Phasenplan stimmt das die halbe Zeit nicht mehr: im Mini-Cut soll
+   * das Gewicht fallen, und ein fest positiver Korridor hätte dort Woche für
+   * Woche Erhöhungen vorgeschlagen. Wer den Korridor kennt, ist der Plan, und
+   * der steht in gewichtsplan.ts.
+   *
+   * Der Standard bleibt der Aufbau-Korridor, damit Aufrufer ohne Phasenwissen
+   * — und die bestehenden Tests — sich wie bisher verhalten.
+   */
+  korridor?: { unten: number; oben: number };
 }): AnpassungsUrteil {
   const { aktuell, letzteAnpassung, heute, koerpergewichtKg } = opts;
+  const korridor = opts.korridor ?? { unten: ZIEL_RATE_UNTEN, oben: ZIEL_RATE_OBEN };
+
+  /* Angepeilt wird die Mitte des Korridors, nicht die nächstgelegene Kante.
+     Wer auf die Kante zielt, landet bei der nächsten Messung mit gleicher
+     Wahrscheinlichkeit knapp darunter wie knapp darüber — und bekommt zehn
+     Tage später den nächsten Vorschlag in dieselbe Richtung. Die Mitte hat
+     nach oben wie nach unten Luft. */
+  const zielRate = (korridor.unten + korridor.oben) / 2;
 
   let reihe = opts.gewicht;
 
@@ -507,16 +518,21 @@ export function kalorienAnpassung(opts: {
 
   const rate = trend.kgPerWeek;
 
-  if (rate >= ZIEL_RATE_UNTEN && rate <= ZIEL_RATE_OBEN) {
+  /* "steigt" stimmt nur im Aufbau. Im Mini-Cut ist der Korridor negativ, und
+     ein Satz wie "steigt mit -0,60 kg pro Woche" wäre schlicht falsch. */
+  const bewegung = rate >= 0 ? "steigt" : "fällt";
+  const betrag = komma(Math.abs(rate), 2);
+
+  if (rate >= korridor.unten && rate <= korridor.oben) {
     return {
       art: "kein-vorschlag",
       grund:
-        `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — im Zielkorridor von ` +
-        `${komma(ZIEL_RATE_UNTEN, 2)} bis ${komma(ZIEL_RATE_OBEN, 2)}. Am Ziel ist nichts zu ändern.`,
+        `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — im Zielkorridor von ` +
+        `${komma(korridor.unten, 2)} bis ${komma(korridor.oben, 2)}. Am Ziel ist nichts zu ändern.`,
     };
   }
 
-  const deltaKcal = schritt(ZIEL_RATE_MITTE - rate);
+  const deltaKcal = schritt(zielRate - rate);
   const richtung: "hoch" | "runter" = deltaKcal > 0 ? "hoch" : "runter";
 
   /* Die neuen Kohlenhydrate aus dem TATSÄCHLICHEN Delta, nicht aus dem
@@ -529,10 +545,11 @@ export function kalorienAnpassung(opts: {
 
   const kopf =
     richtung === "hoch"
-      ? `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — unter dem Zielkorridor ` +
-        `von ${komma(ZIEL_RATE_UNTEN, 2)} bis ${komma(ZIEL_RATE_OBEN, 2)}.`
-      : `Dein Schnitt steigt mit ${komma(rate, 2)} kg pro Woche — über deiner Obergrenze ` +
-        `von ${komma(ZIEL_RATE_OBEN, 2)}. Ab hier geht der Überschuss vor allem ins Fett.`;
+      ? `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — unter dem Zielkorridor ` +
+        `von ${komma(korridor.unten, 2)} bis ${komma(korridor.oben, 2)}.`
+      : `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — über deiner Obergrenze ` +
+        `von ${komma(korridor.oben, 2)}.` +
+        (korridor.oben > 0 ? " Ab hier geht der Überschuss vor allem ins Fett." : "");
 
   const rechnung =
     `${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "mehr" : "weniger"} ` +
@@ -553,7 +570,7 @@ export function kalorienAnpassung(opts: {
         fettG: aktuell.fettG,
       },
       gemesseneRate: rate,
-      zielRate: ZIEL_RATE_MITTE,
+      zielRate,
       begruendung: `${kopf} ${rechnung}`,
       eiweissNotiz: eiweissNotiz(aktuell.eiweissG, koerpergewichtKg),
     },
