@@ -488,19 +488,35 @@ export type BankPosition = {
  * hinterher. Nachteil, bewusst in Kauf genommen: wer eine Einheit ausfallen
  * lässt, überspringt die Programmwoche mit.
  *
- * Gezählt wird ab `startPushIndex` — dem ersten Push-Tag, an dem das Programm
- * lief. Nicht ab dem Rotationsanker: die Push-Pull-Rotation läuft seit dem
- * 15.08.2026, das Bankprogramm fängt später an. Ohne diesen Versatz wäre die
- * allererste Bankeinheit je nach Startdatum mitten im Zyklus gelandet, und
- * der erste Satz Bankdrücken überhaupt liefe mit 90 oder 95 Prozent.
+ * Gezählt wird ab dem Anker des laufenden Zyklus, nicht ab dem Rotationsanker:
+ * die Push-Pull-Rotation läuft seit dem 15.08.2026, das Bankprogramm fängt
+ * später an. Ohne diesen Versatz wäre die allererste Bankeinheit je nach
+ * Startdatum mitten im Zyklus gelandet, und der erste Satz Bankdrücken
+ * überhaupt liefe mit 90 oder 95 Prozent.
  */
-export function bankPosition(pushIndex: number, startPushIndex: number): BankPosition {
-  const versatz = pushIndex - startPushIndex;
+/**
+ * Ab wo gezählt wird: der Push-Tag, an dem ein bekannter Zyklus mit Woche 1
+ * beginnt, und dessen Nummer.
+ *
+ * Vorher war das fest der allererste Push-Tag des Programms, und alles danach
+ * folgte stur im Vierwochentakt. Damit ließ sich ein Zyklus nicht vorziehen:
+ * wer eine Deload-Woche auslassen wollte, konnte das nur, indem er das
+ * Startdatum von Zyklus 1 fälschte — und damit rückwirkend jede zurückliegende
+ * Woche neu beschriftete.
+ *
+ * Jetzt trägt jede Zyklus-Zeile ihren eigenen Anfang: BankTrainingsmax.
+ * gueltigAb heißt "ab hier gilt dieser Trainingsmax", und das ist genau der
+ * Tag, an dem der Zyklus mit Woche 1 anfängt. Einen Zyklus vorzuziehen ist
+ * damit keine Umgehung mehr, sondern ein Datum.
+ */
+export type Zyklusanker = { pushIndex: number; zyklus: number };
 
-  // Vor dem Programmstart: kein Bank-Tag, und der Zyklus steht auf seinem
-  // Anfang. So zeigt die Oberfläche "Zyklus 1, Woche 1" statt einer
-  // negativen Woche.
-  if (versatz < 0) return { art: "keiner", zyklus: 1, woche: 1 };
+export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPosition {
+  const versatz = pushIndex - anker.pushIndex;
+
+  // Vor dem Anfang dieses Zyklus: kein Bank-Tag, und die Woche steht auf 1.
+  // So zeigt die Oberfläche einen Anfang statt einer negativen Woche.
+  if (versatz < 0) return { art: "keiner", zyklus: anker.zyklus, woche: 1 };
 
   const bankIndex = Math.floor(versatz / 2);
   const woche = ((bankIndex % 4) + 1) as BankWoche;
@@ -519,7 +535,15 @@ export function bankPosition(pushIndex: number, startPushIndex: number): BankPos
         ? "keiner"
         : "zusatz";
 
-  return { art, zyklus: Math.floor(bankIndex / 4) + 1, woche };
+  return { art, zyklus: anker.zyklus + Math.floor(bankIndex / 4), woche };
+}
+
+/** Wie viele Push-Tage ein voller Zyklus dauert: vier Wochen à zwei. */
+export const PUSH_TAGE_JE_ZYKLUS = 8;
+
+/** Der Push-Tag, an dem der AMRAP-Satz eines Zyklus liegt — Woche 3. */
+export function amrapPushIndex(ankerPushIndex: number): number {
+  return ankerPushIndex + 4;
 }
 
 /**

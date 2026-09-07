@@ -36,6 +36,7 @@ import {
   type GeloggterSatz,
   type Pressvariante,
   type Variante,
+  type Zyklusanker,
 } from "./kraft";
 import { zielProjektion, type Zielstand } from "./bankziel";
 
@@ -192,14 +193,14 @@ function zuEinheiten(saetze: GeloggterSatz[]): Bankeinheit[] {
  */
 function vorschauAb(
   pushIndex: number,
-  startIndex: number,
+  anker: Zyklusanker,
   tmKg: number
 ): Wochenvorschau[] {
   const out: Wochenvorschau[] = [];
 
   for (let n = 0; out.length < 2 && n < 6; n++) {
     const index = pushIndex + n;
-    const pos = bankPosition(index, startIndex);
+    const pos = bankPosition(index, anker);
     if (pos.art !== "tm") continue;
 
     out.push({
@@ -246,21 +247,20 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
   let ziel: Zielstand | null = null;
 
   if (tm !== null && naechster !== null) {
-    const ersterZyklus = historie.find((h) => h.zyklus === 1) ?? tm;
-    const startIndex = pushIndexAbDatum(ersterZyklus.gueltigAb);
+    /* Der Anker ist der Anfang des LAUFENDEN Zyklus, nicht der des Programms:
+       gueltigAb der jüngsten Trainingsmax-Zeile. Genau daran hängt seit dem
+       Deload-Skip die Wochenzählung — siehe zyklusanker() in bank.ts. */
+    const anker: Zyklusanker = {
+      pushIndex: pushIndexAbDatum(tm.gueltigAb),
+      zyklus: tm.zyklus,
+    };
 
-    vorschau = vorschauAb(naechster.pushIndex, startIndex, tm.tmKg);
+    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg);
 
-    /* Die Projektion beginnt am Anfang des LAUFENDEN Zyklus, nicht heute: der
+    /* Die Projektion beginnt am Anfang des laufenden Zyklus, nicht heute: der
        Trainingsmax gilt für diesen Zyklus bereits, und ihn ab heute
-       weiterzuzählen verschöbe die ganze Treppe um bis zu 24 Tage nach hinten.
-
-       Acht Push-Tage je Zyklus, siehe PUSH_TAGE_JE_ZYKLUS in bankziel.ts —
-       hier ausgeschrieben, weil datumFuerPushIndex() in Push-Tagen rechnet
-       und nicht in Kalendertagen. */
-    const zyklus = stand?.position.zyklus ?? tm.zyklus;
-    const zyklusStart = datumFuerPushIndex(startIndex + (zyklus - 1) * 8);
-    ziel = zielProjektion(tm.tmKg, zyklus, zyklusStart);
+       weiterzuzählen verschöbe die ganze Treppe um bis zu 24 Tage nach hinten. */
+    ziel = zielProjektion(tm.tmKg, anker.zyklus, datumFuerPushIndex(anker.pushIndex));
   }
 
   /* Was heute auf der Bank liegt. Ausdrücklich HEUTE und nicht am nächsten

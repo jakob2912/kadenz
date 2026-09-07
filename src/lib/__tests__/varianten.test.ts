@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  amrapPushIndex,
   bankPosition,
+  PUSH_TAGE_JE_ZYKLUS,
   besterSatz,
   e1rmReihe,
   istPressvariante,
@@ -16,9 +18,10 @@ import { TAGE_JE_ZYKLUS, ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankzie
  * relativ dazu — Versatz 0 ist der erste TM-Tag.
  */
 const START = 2;
+const ANKER = { pushIndex: START, zyklus: 1 };
 
 function positionBei(versatz: number) {
-  return bankPosition(START + versatz, START);
+  return bankPosition(START + versatz, ANKER);
 }
 
 describe("varianteFuer", () => {
@@ -62,7 +65,7 @@ describe("varianteFuer", () => {
   });
 
   it("gibt vor dem Programmstart keine Presse aus", () => {
-    const vorher = bankPosition(START - 1, START);
+    const vorher = bankPosition(START - 1, ANKER);
     expect(vorher.art).toBe("keiner");
     expect(varianteFuer("push", vorher)).toBe("ohne");
     expect(varianteFuer("pull", vorher)).toBe("rein");
@@ -101,8 +104,55 @@ describe("rotationFor trägt den Bezugs-Push-Index", () => {
       throw new Error("kein Trainingstag");
     }
 
-    expect(varianteFuer("push", bankPosition(freitag.bezugPushIndex, START))).toBe("schwer");
-    expect(varianteFuer("push", bankPosition(montag.bezugPushIndex, START))).toBe("leicht");
+    expect(varianteFuer("push", bankPosition(freitag.bezugPushIndex, ANKER))).toBe("schwer");
+    expect(varianteFuer("push", bankPosition(montag.bezugPushIndex, ANKER))).toBe("leicht");
+  });
+});
+
+describe("Zyklus vorziehen (Deload überspringen)", () => {
+  /* Jakob am 07.09.2026: "das fühlt sich zu leicht an, skip den Deload, ich
+     sage direkt Zyklus 2 mit 95 kg". Der 09.09. wäre nach der alten Zählung
+     Woche 4 von Zyklus 1 gewesen — Deload mit 40/50/60 %.
+
+     Mit dem Anker an der jüngsten Trainingsmax-Zeile braucht es dafür keinen
+     Eingriff in die Vergangenheit: der neue Trainingsmax gilt ab dem 07.09.,
+     der erste Push-Tag danach ist der 09.09. (Index 8), und dort fängt Zyklus
+     2 mit Woche 1 an. */
+  const ankerZyklus2 = { pushIndex: 8, zyklus: 2 };
+
+  it("beginnt den vorgezogenen Zyklus mit Woche 1", () => {
+    expect(bankPosition(8, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 1 });
+  });
+
+  it("führt die Welle von dort regulär weiter", () => {
+    expect(bankPosition(10, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 2 });
+    expect(bankPosition(12, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 3 });
+    expect(bankPosition(14, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 4 });
+    expect(bankPosition(16, ankerZyklus2)).toEqual({ art: "tm", zyklus: 3, woche: 1 });
+  });
+
+  it("behält die leichten Einheiten dazwischen", () => {
+    // Die Abwechslung schwer/leicht hängt an der Parität des Versatzes und
+    // bleibt vom Vorziehen unberührt.
+    expect(bankPosition(9, ankerZyklus2)).toEqual({ art: "zusatz", zyklus: 2, woche: 1 });
+    expect(bankPosition(11, ankerZyklus2)).toEqual({ art: "zusatz", zyklus: 2, woche: 2 });
+  });
+
+  it("lässt den nächsten Deload an seiner Stelle", () => {
+    // Übersprungen wird genau einer, nicht das Konzept.
+    expect(bankPosition(15, ankerZyklus2)).toEqual({ art: "keiner", zyklus: 2, woche: 4 });
+  });
+
+  it("legt den AMRAP-Satz vier Push-Tage nach den Anfang", () => {
+    // Woche 3 dieses Zyklus — daraus folgt der Trainingsmax für Zyklus 3.
+    expect(amrapPushIndex(ankerZyklus2.pushIndex)).toBe(12);
+    expect(bankPosition(12, ankerZyklus2).woche).toBe(3);
+  });
+
+  it("dauert weiterhin acht Push-Tage", () => {
+    expect(
+      bankPosition(ankerZyklus2.pushIndex + PUSH_TAGE_JE_ZYKLUS, ankerZyklus2)
+    ).toEqual({ art: "tm", zyklus: 3, woche: 1 });
   });
 });
 

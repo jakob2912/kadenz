@@ -205,10 +205,16 @@ describe("bankZusatzPlan", () => {
 });
 
 describe("bankPosition", () => {
-  it("zählt ab dem Programmstart, nicht ab dem Rotationsanker", () => {
+  /* Der Anker ist seit dem Deload-Skip kein nackter Index mehr, sondern
+     Push-Tag PLUS Zyklusnummer: gezählt wird ab dem Anfang des laufenden
+     Zyklus, nicht ab dem Programmstart. Für diese Fälle bleibt es dasselbe —
+     Zyklus 1 fängt beim Programmstart an. */
+  const ab = (pushIndex: number, zyklus = 1) => ({ pushIndex, zyklus });
+
+  it("zählt ab dem Anfang des Zyklus, nicht ab dem Rotationsanker", () => {
     /* Sonst wäre die allererste Bankeinheit je nach Startdatum mitten im
        Zyklus gelandet — im schlechtesten Fall gleich Woche 3 mit 95 %. */
-    const start = 7;
+    const start = ab(7);
     expect(bankPosition(7, start)).toEqual({ art: "tm", zyklus: 1, woche: 1 });
     expect(bankPosition(9, start)).toEqual({ art: "tm", zyklus: 1, woche: 2 });
     expect(bankPosition(13, start)).toEqual({ art: "tm", zyklus: 1, woche: 4 });
@@ -216,28 +222,28 @@ describe("bankPosition", () => {
   });
 
   it("macht jede zweite Push-Einheit zum TM-Tag", () => {
-    expect(bankPosition(8, 7).art).not.toBe("tm");
-    expect(bankPosition(10, 7).art).not.toBe("tm");
+    expect(bankPosition(8, ab(7)).art).not.toBe("tm");
+    expect(bankPosition(10, ab(7)).art).not.toBe("tm");
   });
 
   /* Die Push-Einheit zwischen zwei Programmtagen trägt seit dem 27.08.2026
      den submaximalen Zusatz-Slot. Sie behält Zyklus und Woche des TM-Tags
      davor — sonst spränge die Woche mitten zwischen zwei Programmtagen um. */
   it("macht die Einheit dazwischen zur Zusatz-Einheit", () => {
-    expect(bankPosition(8, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 1 });
-    expect(bankPosition(10, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 2 });
-    expect(bankPosition(12, 7)).toEqual({ art: "zusatz", zyklus: 1, woche: 3 });
+    expect(bankPosition(8, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 1 });
+    expect(bankPosition(10, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 2 });
+    expect(bankPosition(12, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 3 });
   });
 
   /* 72,5 % lägen über jedem Satz der Deload-Woche (40/50/60 %). Die
      Zusatz-Einheit wäre dort die schwerere von beiden. */
   it("lässt die Zusatz-Einheit in der Deload-Woche ausfallen", () => {
-    expect(bankPosition(13, 7).art).toBe("tm");
-    expect(bankPosition(14, 7)).toEqual({ art: "keiner", zyklus: 1, woche: 4 });
+    expect(bankPosition(13, ab(7)).art).toBe("tm");
+    expect(bankPosition(14, ab(7))).toEqual({ art: "keiner", zyklus: 1, woche: 4 });
   });
 
   it("meldet vor dem Programmstart keine Bankeinheit", () => {
-    expect(bankPosition(3, 7)).toEqual({ art: "keiner", zyklus: 1, woche: 1 });
+    expect(bankPosition(3, ab(7))).toEqual({ art: "keiner", zyklus: 1, woche: 1 });
   });
 });
 

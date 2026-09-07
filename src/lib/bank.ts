@@ -13,6 +13,7 @@ import { prisma } from "./db";
 import { heuteWien } from "./datum";
 import type { SetLog } from "./coach";
 import {
+  amrapPushIndex,
   amrapSoll,
   BANK_UEBUNG,
   bankPlan,
@@ -20,8 +21,10 @@ import {
   bankZusatzPlan,
   naechsterTm,
   TM_ANTEIL,
+  PUSH_TAGE_JE_ZYKLUS,
   ZUSATZ_PROZENT,
   type BankPosition,
+  type Zyklusanker,
 } from "./kraft";
 
 /* Weiterhin von hier lesbar: bank.ts war die Heimat dieser Namen, und der
@@ -76,10 +79,25 @@ function zuTrainingsmax(zeile: {
  * Meinungen darüber, wann das Programm begann. Aus einem Datum lässt sie sich
  * jederzeit neu ausrechnen, und der Stichtag steht ohnehin schon da.
  */
-async function startPushIndex(): Promise<number | null> {
-  const ersteZeile = await prisma.bankTrainingsmax.findUnique({ where: { zyklus: 1 } });
-  if (!ersteZeile) return null;
-  return pushIndexAbDatum(ersteZeile.gueltigAb.toISOString().slice(0, 10));
+async function zyklusanker(): Promise<Zyklusanker | null> {
+  /* Die JÜNGSTE Zeile, nicht mehr die von Zyklus 1.
+     
+     Jede Zeile trägt in gueltigAb den Tag, ab dem ihr Trainingsmax gilt — und
+     das ist derselbe Tag, an dem ihr Zyklus mit Woche 1 beginnt. Von dort aus
+     zu zählen macht "einen Zyklus vorziehen" zu einem Datum statt zu einem
+     Eingriff: wer die Deload-Woche auslassen will, setzt den nächsten
+     Trainingsmax, und die Welle fängt am nächsten Push-Tag von vorne an.
+     
+     Vorher hing alles am Startdatum von Zyklus 1. Ein übersprungener Deload
+     war damit nur zu haben, indem man dieses Datum verschob — was rückwirkend
+     jede zurückliegende Woche neu beschriftet hätte. */
+  const zeile = await prisma.bankTrainingsmax.findFirst({ orderBy: { zyklus: "desc" } });
+  if (!zeile) return null;
+
+  return {
+    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10)),
+    zyklus: zeile.zyklus,
+  };
 }
 
 /** Die jüngste Zeile — der aktuell geltende Trainingsmax. */
@@ -215,12 +233,18 @@ const MAX_NACHGEHOLTE_ZYKLEN = 6;
 async function aufZyklusBringen(
   zielZyklus: number,
   start: Trainingsmax,
-  startIndex: number
+  ankerIndex: number
 ): Promise<Trainingsmax> {
   let aktuell = start;
+  let anker = ankerIndex;
 
   if (zielZyklus - aktuell.zyklus > MAX_NACHGEHOLTE_ZYKLEN) {
     return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", {
+      /* Der Anker des Zielzyklus, auch wenn die Zyklen dazwischen leer
+         blieben: acht Push-Tage je Zyklus, vom bekannten Anker aus. Sonst
+         stünde als Anfang des neuen Zyklus der Tag, an dem jemand zufällig
+         die Seite aufgerufen hat. */
+      abPushIndex: anker + (zielZyklus - aktuell.zyklus) * PUSH_TAGE_JE_ZYKLUS,
       begruendung:
         `Zwischen Zyklus ${aktuell.zyklus} und ${zielZyklus} liegen ` +
         `${zielZyklus - aktuell.zyklus} Zyklen ohne Auswertung. Der Trainingsmax bleibt ` +
@@ -230,21 +254,27 @@ async function aufZyklusBringen(
   }
 
   while (aktuell.zyklus < zielZyklus) {
-    // Woche 3 des laufenden Zyklus trägt den AMRAP-Satz, der über den
-    // nächsten Trainingsmax entscheidet: Bank-Index (zyklus-1)*4 + 2.
-    const bankIndex = (aktuell.zyklus - 1) * 4 + 2;
+    // Woche 3 dieses Zyklus trägt den AMRAP-Satz, der über den nächsten
+    // Trainingsmax entscheidet — vier Push-Tage nach seinem Anfang.
     const soll = amrapSoll(3)!;
 
     let satz: SetLog | null = null;
     try {
-      satz = await amrapSatzVon(startIndex + bankIndex * 2);
+      satz = await amrapSatzVon(amrapPushIndex(anker));
     } catch (e) {
       console.error("AMRAP-Satz nicht lesbar:", e);
     }
 
     const entscheidung = naechsterTm(aktuell.tmKg, satz, soll.wdh);
 
+    /* Der nächste Zyklus beginnt acht Push-Tage nach diesem — ausgerechnet
+       und nicht "heute". Wird die Fortschreibung ein paar Tage zu früh oder
+       zu spät angestoßen, stünde sonst ein Anfangsdatum in der Zeile, das mit
+       der Welle nichts zu tun hat, und die Wochen liefen ab da schief. */
+    anker += PUSH_TAGE_JE_ZYKLUS;
+
     aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", {
+      abPushIndex: anker,
       begruendung: entscheidung.begruendung,
     });
   }
@@ -256,13 +286,13 @@ async function anlegenOderLesen(
   zyklus: number,
   tmKg: number,
   quelle: string,
-  opts: { begruendung: string }
+  opts: { begruendung: string; abPushIndex: number }
 ): Promise<Trainingsmax> {
   try {
     const zeile = await prisma.bankTrainingsmax.create({
       data: {
         zyklus,
-        gueltigAb: new Date(`${heuteWien()}T00:00:00Z`),
+        gueltigAb: new Date(`${datumFuerPushIndex(opts.abPushIndex)}T00:00:00Z`),
         tmKg,
         quelle,
         begruendung: opts.begruendung,
@@ -305,9 +335,9 @@ export type Bankstand = {
  * keine Presse am Pull-Tag.
  */
 export async function bankPositionFuer(bezugPushIndex: number): Promise<BankPosition> {
-  const start = await startPushIndex();
-  if (start === null) return { art: "keiner", zyklus: 1, woche: 1 };
-  return bankPosition(bezugPushIndex, start);
+  const anker = await zyklusanker();
+  if (anker === null) return { art: "keiner", zyklus: 1, woche: 1 };
+  return bankPosition(bezugPushIndex, anker);
 }
 
 /**
@@ -327,7 +357,7 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
        sobald die Zahl da ist. Ihn als "kein Bank-Tag" zu zeigen wäre irre-
        führend, denn worauf sollte man dann warten. */
     return {
-      position: bankPosition(pushIndex, pushIndex),
+      position: bankPosition(pushIndex, { pushIndex, zyklus: 1 }),
       tm: null,
       naechsterBankTag: null,
       vorgabe: {
@@ -340,8 +370,8 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
     };
   }
 
-  const start = (await startPushIndex()) ?? pushIndex;
-  const position = bankPosition(pushIndex, start);
+  const anker = (await zyklusanker()) ?? { pushIndex, zyklus: tm.zyklus };
+  const position = bankPosition(pushIndex, anker);
 
   /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
      sonst die nächste. Nach der Deload-Zusatzeinheit — art "keiner" bei
@@ -351,7 +381,7 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
     position.art === "tm" ? null : datumFuerPushIndex(pushIndex + 1);
 
   if (tm.zyklus < position.zyklus) {
-    tm = await aufZyklusBringen(position.zyklus, tm, start);
+    tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex);
   }
 
   return { position, tm, naechsterBankTag, vorgabe: vorgabeFuer(position, tm.tmKg) };
