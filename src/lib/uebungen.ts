@@ -12,7 +12,8 @@
 import { prisma } from "./db";
 import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
-import { bankstandFuer, type Bankstand } from "./bank";
+import { bankPositionFuer, bankstandFuer, type Bankstand } from "./bank";
+import { varianteFuer, type Variante } from "./kraft";
 import {
   SESSIONS,
   mitHistorie,
@@ -32,6 +33,11 @@ export type Katalogeintrag = {
   notiz: string | null;
   /** Nicht-null heißt: ein Programm gibt die Sätze vor. Bisher nur "531". */
   programm: string | null;
+  /**
+   * Nur in dieser Ausprägung der Einheit. Null heißt: in jeder.
+   * Die Werte liefert varianteFuer() in kraft.ts.
+   */
+  variante: string | null;
   /** Wie viele Sätze die Übung vorsieht. Grundsätzlich 2. */
   saetze: number;
   /** Abweichende Satzanzahl an Bank-Tagen. Null heißt: keine Reduktion. */
@@ -92,6 +98,9 @@ function ausSessions(einheit: Einheit): Katalogeintrag[] {
     name: ex.name,
     notiz: ex.note ?? null,
     programm: null,
+    // Ohne Datenbank gibt es weder Trainingsmax noch Varianten: SESSIONS
+    // beschreibt die Einheit in ihrer Grundform, und die gilt an jedem Tag.
+    variante: null,
     saetze: ex.saetze,
     // Die Rückfallebene kennt keine Bank-Tage: ohne Datenbank gibt es keinen
     // Trainingsmax, also auch keinen Bank-Slot, von dem etwas abzuziehen wäre.
@@ -129,6 +138,12 @@ export type Trainingsplan = {
   uebungen: PlannedExercise[];
   /** Nur an Push-Tagen gesetzt. Trägt auch die Auskunft "heute kein TM-Tag". */
   bank: Bankstand | null;
+  /**
+   * Welche Ausprägung der Einheit heute läuft — schwer, leicht, mit oder ohne
+   * Presse. Mitgeführt statt in der Oberfläche neu abgeleitet: die Ableitung
+   * braucht die Wellenposition aus der Datenbank, und die steht hier schon.
+   */
+  variante: Variante;
 };
 
 export type Tagesplan =
@@ -216,6 +231,28 @@ async function trainingsplanFuer(date: Date): Promise<Trainingsplan> {
     }
   }
 
+  /* Die Ausprägung des Tages.
+     
+     An Push-Tagen steckt die Wellenposition schon im Bankstand — die Abfrage
+     ein zweites Mal zu stellen wäre eine überflüssige Rundreise. An Pull-Tagen
+     gibt es keinen Bankstand, dort holt bankPositionFuer() nur die Position,
+     ohne den Trainingsmax anzufassen.
+
+     Fällt die Datenbank aus, bleibt es bei "ohne" bzw. "rein": beides sind die
+     Ausprägungen ohne variantengebundene Übung, und der Katalog aus SESSIONS
+     trägt ohnehin keine. So steht die Grundeinheit da, statt dass eine
+     geratene Variante eine Presse einblendet, für die es keine Zahlen gibt. */
+  let variante: Variante = einheit === "push" ? "ohne" : "rein";
+  if (bank !== null) {
+    variante = varianteFuer(einheit, bank.position);
+  } else if (einheit === "pull" && datenbankKonfiguriert()) {
+    try {
+      variante = varianteFuer(einheit, await bankPositionFuer(rotation.bezugPushIndex));
+    } catch (e) {
+      console.error("Wellenposition für den Pull-Tag nicht lesbar:", e);
+    }
+  }
+
   /* Zwei verschiedene Fragen, die vorher eine waren.
 
      Ob heute schwer gebankt wird ("tm"), entscheidet über die Satzanzahl der
@@ -230,6 +267,13 @@ async function trainingsplanFuer(date: Date): Promise<Trainingsplan> {
 
   const geplant: ZuPlanen[] = [];
   for (const eintrag of katalog) {
+    /* Der eigentliche Griff der Session-Varianten, und er ist bewusst genau
+       eine Zeile: eine Übung ohne Variante gehört in jede Ausprägung, eine mit
+       Variante nur in ihre. Alles Weitere — welcher Tag welche Ausprägung ist
+       — steckt in varianteFuer(), und das ist eine reine Funktion, die ein
+       Test ohne Datenbank greifen kann. */
+    if (eintrag.variante !== null && eintrag.variante !== variante) continue;
+
     if (eintrag.programm === PROGRAMM_BANK) {
       // Vor dem Programmstart und in der Deload-Zusatzeinheit gibt es nichts
       // vorzugeben — dann bleibt der Slot weg statt leer dazustehen.
@@ -246,6 +290,7 @@ async function trainingsplanFuer(date: Date): Promise<Trainingsplan> {
     fokus: texte.focus,
     uebungen: await mitHistorie(geplant),
     bank,
+    variante,
   };
 }
 

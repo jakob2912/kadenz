@@ -193,8 +193,11 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           {zusatz ? (
             <>
-              {wann} kein TM-Tag. Die Sätze laufen submaximal und zählen nicht für die
-              Trainingsmax-Progression — sie bringen Frequenz an der Hantel, nicht Auswertung.
+              {wann} kein TM-Tag. Statt des schweren Bankdrückens steht die{" "}
+              <b className="font-semibold text-fg">Paused Bench Press</b> im Plan:
+              submaximal, mit eigener Gewichtssteuerung aus ihrer Historie und ohne
+              Wirkung auf den Trainingsmax. Sie bringt Frequenz an der Hantel, keine
+              Auswertung.
             </>
           ) : (
             <>

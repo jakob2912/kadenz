@@ -24,6 +24,23 @@ const TABS = [
     label: "Essen",
     d: "M2.5 11.5h19a9.5 9.5 0 0 1-19 0M8.5 7.6c0-1.7 1.2-2 1.2-3.6M12.5 7.2c0-1.7 1.2-2 1.2-3.6M16.5 7.6c0-1.7 1.2-2 1.2-3.6",
   },
+  /* Bankdrücken bekommt einen eigenen Platz, obwohl es unter Verlauf schon
+     eine Seite je Übung gibt. Es ist die einzige Übung mit einem Programm,
+     einem Zyklus und einem Ziel mit Datum — und die einzige, nach der Jakob
+     zwischen zwei Einheiten sucht. Zwei Ebenen tief unter "Verlauf" wäre das
+     verfehlt.
+
+     Ein Hantel-Symbol wie bei Training wäre verwechselbar; hier steht die
+     Langhantel von der Seite, mit Scheiben an beiden Enden. */
+  {
+    href: "/bank",
+    // "Bench" und nicht "Bank": so nennt Jakob es selbst, und ein Tab namens
+    // "Bank" neben "Essen" und "Coach" liest sich beim ersten Blick nach
+    // Geldinstitut. Die Adresse bleibt /bank — der Quelltext ist deutsch, und
+    // Bankdrücken heißt dort überall Bank.
+    label: "Bench",
+    d: "M3 10v4M6 8v8M18 8v8M21 10v4M6 12h12",
+  },
   { href: "/verlauf", label: "Verlauf", d: "M3 3v18h18M7 15l4-4 3 3 5-6M19 8h-3M19 8v3" },
   {
     href: "/coach",
@@ -75,7 +92,12 @@ export function TabBar() {
               >
                 <path d={t.d} />
               </svg>
-              <span className="text-[10px] font-semibold md:text-[13px]">{t.label}</span>
+              {/* Sechs statt fünf Tabs seit dem Bank-Tab: auf 375 px bleiben
+                  je Eintrag rund 52 px. Ein Umbruch mitten in "Verlauf" würde
+                  die Leiste höher machen als die Sicherheitszone unten. */}
+              <span className="whitespace-nowrap text-[10px] font-semibold md:text-[13px]">
+                {t.label}
+              </span>
             </Link>
           );
         })}

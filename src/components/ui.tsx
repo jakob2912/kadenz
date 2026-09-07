@@ -222,6 +222,24 @@ export function kurzDatum(iso: string): string {
 }
 
 /**
+ * Dasselbe Datum, aber mit Jahr und ohne Wochentag.
+ *
+ * kurzDatum() lässt das Jahr bewusst weg — bei einem 30-Tage-Fenster ist es
+ * überflüssig, und der Wochentag sagt mehr. Über eine Zeitreihe von fünfzehn
+ * Monaten wird daraus eine Falle: "Di., 17. Aug." am rechten Rand einer Kurve,
+ * die im August 2026 beginnt, liest sich wie derselbe Monat, gemeint ist aber
+ * August 2027. Der Wochentag fällt dafür weg — über ein Jahr hinweg
+ * interessiert er niemanden.
+ */
+export function langDatum(iso: string): string {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("de-AT", {
+    month: "short",
+    year: "numeric",
+    timeZone: "Europe/Vienna",
+  });
+}
+
+/**
  * Wie alt ist ein Messwert.
  *
  * "heute" und "gestern" sind die Antworten, an denen hängt, ob man der Zahl

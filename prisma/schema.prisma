@@ -64,6 +64,25 @@ model SetLog {
   reps     Int
   loggedAt DateTime @default(now())
 
+  /// War der Satz technisch sauber?
+  ///
+  /// NULL heißt "nicht beurteilt" und ist der Normalfall — bei sechzehn Sätzen
+  /// je Einheit soll niemand sechzehnmal etwas bestätigen müssen. Ein
+  /// ausdrückliches false heißt: die Wiederholung stand, aber die Form nicht.
+  /// Bei Jakob ist das die Hüfte, die sich von der Bank hebt.
+  ///
+  /// Der Grund für die Spalte ist ausschließlich die Messung. Sein
+  /// All-Time-Bestwert von 100 kg war genau so einer, und ein Programm, das
+  /// aus einem solchen Satz den nächsten Trainingsmax fortschreibt, rechnet
+  /// mit Kilogramm, die technisch nie gestanden haben. Deshalb übergehen
+  /// amrapSatzVon(), e1rmReihe() und besterSatz() Zeilen mit false — nicht
+  /// aber die Historie: der Satz hat stattgefunden und bleibt sichtbar.
+  ///
+  /// Dreiwertig statt Boolean mit Default true: "nicht beurteilt" und
+  /// "geprüft und sauber" sind verschiedene Aussagen, und nur die zweite
+  /// rechtfertigt später ein Urteil über die Technik.
+  sauber Boolean?
+
   /// Deckt die häufigste Abfrage ab: "was habe ich bei X zuletzt gemacht?"
   @@unique([workoutId, exercise, setIndex])
   @@index([exercise, loggedAt])
@@ -243,6 +262,33 @@ model Uebung {
   /// Nicht-null heißt: die Sätze dieser Übung gibt ein Programm vor, nicht
   /// progression(). Bisher nur "531" für das Bankdrücken.
   programm String?
+
+  /// In welcher Ausprägung der Einheit diese Übung vorkommt.
+  ///
+  /// NULL heißt "in jeder" — das gilt für die große Mehrheit und ist der
+  /// Grund, warum die Spalte nullable ist statt einer Pflichtangabe: der
+  /// bestehende Katalog bleibt unverändert richtig.
+  ///
+  /// Der Anlass: Push sieht nicht an jedem Push-Tag gleich aus. Am TM-Tag
+  /// steht das schwere 5/3/1-Bankdrücken, an der Einheit dazwischen eine
+  /// submaximale Variante. Beide sind Push, beide gehören in den Katalog,
+  /// aber nie am selben Tag. Ohne diese Spalte ließe sich die zweite nur
+  /// hinzufügen, indem sie auch am schweren Tag erschiene.
+  ///
+  /// Die Werte kommen aus varianteFuer() in kraft.ts und lauten:
+  ///   "schwer" — Push am TM-Tag: Langhantel-Bankdrücken nach 5/3/1
+  ///   "leicht" — Push an der Einheit dazwischen: Paused Bench Press
+  ///   "presse" — Pull nach einem leichten Push-Tag: Spoto Press
+  /// Ein Tag ohne passende Variante ("ohne" in der Deload-Woche, "rein" beim
+  /// gewöhnlichen Pull) trägt schlicht keine variantengebundene Übung.
+  ///
+  /// Ausdrücklich KEIN Wochentag, obwohl der Wunsch so formuliert war.
+  /// Jakobs Rotation läuft alle drei Tage (siehe rotationFor() in plan.ts) —
+  /// ein Montag ist mal Push, mal Pull, mal Pause. Ein Wochentagsfeld hätte
+  /// die Übung in zwei von vier Wochen am falschen Tag gezeigt oder gar
+  /// nicht. Was tatsächlich abwechselt, ist die Position in der 5/3/1-Welle,
+  /// und daran hängt die Variante.
+  variante String?
 
   /// Wie viele Sätze diese Übung vorsieht.
   ///

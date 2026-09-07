@@ -56,6 +56,12 @@ export async function satzSpeichern(input: {
   setIndex: number;
   kg: number;
   reps: number;
+  /**
+   * War der Satz technisch sauber? Undefined heißt "nicht beurteilt" und ist
+   * der Normalfall — dann bleibt die Spalte NULL, und ein späteres Markieren
+   * kann sie immer noch setzen.
+   */
+  sauber?: boolean | null;
 }): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
     const workout = await workoutHeute(input.kind);
@@ -67,13 +73,23 @@ export async function satzSpeichern(input: {
           setIndex: input.setIndex,
         },
       },
-      update: { kg: input.kg, reps: input.reps, loggedAt: new Date() },
+      /* `sauber: input.sauber ?? null` und nicht weglassen: das Umschalten der
+         Markierung läuft über denselben Weg wie das Abhaken, und ein
+         ausgelassenes Feld hieße bei einem Upsert "nicht ändern". Wer eine
+         Markierung wieder zurücknimmt, käme dann nie auf NULL zurück. */
+      update: {
+        kg: input.kg,
+        reps: input.reps,
+        sauber: input.sauber ?? null,
+        loggedAt: new Date(),
+      },
       create: {
         workoutId: workout.id,
         exercise: input.exercise,
         setIndex: input.setIndex,
         kg: input.kg,
         reps: input.reps,
+        sauber: input.sauber ?? null,
       },
     });
     return { ok: true };
@@ -139,7 +155,14 @@ export async function letzteSaetzeFuer(
   const zeilen = await prisma.setLog.findMany({
     where: { exercise: { in: uebungen }, workout: { date: { lt: heute } } },
     orderBy: [{ loggedAt: "desc" }, { setIndex: "asc" }],
-    select: { exercise: true, workoutId: true, kg: true, reps: true, setIndex: true },
+    select: {
+      exercise: true,
+      workoutId: true,
+      kg: true,
+      reps: true,
+      setIndex: true,
+      sauber: true,
+    },
   });
 
   /* Je Übung zählt ausschließlich die jüngste Einheit. Welche das ist, sagt
@@ -156,7 +179,12 @@ export async function letzteSaetzeFuer(
       continue;
     }
 
-    const satz: Zeile = { kg: zeile.kg, reps: zeile.reps, setIndex: zeile.setIndex };
+    const satz: Zeile = {
+      kg: zeile.kg,
+      reps: zeile.reps,
+      setIndex: zeile.setIndex,
+      sauber: zeile.sauber,
+    };
     const liste = gesammelt.get(zeile.exercise);
     if (liste) liste.push(satz);
     else gesammelt.set(zeile.exercise, [satz]);
@@ -167,9 +195,13 @@ export async function letzteSaetzeFuer(
      Sätzen (satz_eintragen aus Claude Desktop) läuft das auseinander. */
   for (const [uebung, liste] of gesammelt) {
     liste.sort((a, b) => a.setIndex - b.setIndex);
+    /* Die Markierung kommt ausdrücklich mit. progression() rechnet zwar nur
+       mit Gewicht und Wiederholungen, aber dieselben Sätze stehen als ZULETZT
+       auf dem Schirm — und ein unsauberer Satz, gegen den man sich heute
+       vergleicht, soll als solcher erkennbar bleiben. */
     ergebnis.set(
       uebung,
-      liste.map(({ kg, reps }) => ({ kg, reps }))
+      liste.map(({ kg, reps, sauber }) => ({ kg, reps, sauber }))
     );
   }
 
@@ -198,6 +230,8 @@ export type GeloggterSatz = {
   setIndex: number;
   kg: number;
   reps: number;
+  /** Null heißt "nicht beurteilt". */
+  sauber: boolean | null;
 };
 
 /**
@@ -218,7 +252,7 @@ export async function laufendesTraining(
     include: {
       sets: {
         orderBy: [{ exercise: "asc" }, { setIndex: "asc" }],
-        select: { exercise: true, setIndex: true, kg: true, reps: true },
+        select: { exercise: true, setIndex: true, kg: true, reps: true, sauber: true },
       },
     },
   });

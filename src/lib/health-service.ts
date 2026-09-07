@@ -50,28 +50,39 @@ export type Dashboard =
     };
 
 /**
- * Gesundheitsdaten fürs Dashboard — gecacht.
+ * Warum diese Datei einen Cache braucht und welchen.
  *
- * Diese Funktion war der teure Teil jedes Tab-Wechsels: ein OAuth-Refresh zu
- * Google, dann vier Health-Abrufe. Heute, Essen und Verlauf riefen sie je für
- * sich auf, und weil alle drei Seiten auf force-dynamic standen, geschah das
- * bei jedem einzelnen Wechsel neu. Dieselben Zahlen, viermal geholt.
+ * Der Abruf bei Google ist der teure Teil jedes Tab-Wechsels: ein
+ * OAuth-Refresh, dann vier Datenabrufe. Heute, Essen, Verlauf und Coach
+ * brauchen ihn alle vier.
  *
- * "use cache: private" und nicht das gewöhnliche "use cache": diese Funktion
- * liest cookies(). Das ist die Variante, die das darf. Sie hat außerdem die
- * Eigenschaft, die man sich für Gesundheitsdaten ohnehin wünscht — das
- * Ergebnis liegt ausschließlich im Speicher des Browsers, nie auf dem Server.
+ * Vorher stand hier `"use cache: private"`. Das war der falsche Griff, und
+ * zwar aus einem Grund, der in der Doku steht: eine private Zwischenablage
+ * wird NIE auf dem Server abgelegt, sondern nur im Speicher des Browsers —
+ * und die Funktion "läuft bei jedem Server-Render". Genau das war zu messen:
+ * jeder Tab-Wechsel kostete unverändert vier bis fünf Sekunden, auch beim
+ * dritten Mal, weil jede RSC-Anfrage den vollen Abruf neu bezahlte. Der
+ * Kommentar an dieser Stelle hat einen Nutzen behauptet, den es nicht gab.
  *
- * Fünf Minuten, weil daran nichts schneller altert: Schlaf und Ruhepuls
- * stehen nach der Nacht fest, und das Morgengewicht wird einmal am Tag
- * eingetragen. Wer es einträgt, soll es trotzdem sofort sehen — dafür ruft
- * gewichtEintragen() refresh() auf, statt auf den Ablauf zu warten.
+ * Das gewöhnliche `"use cache"` legt das Ergebnis dagegen serverseitig ab und
+ * teilt es über alle Renderdurchläufe und alle vier Seiten hinweg. Es darf
+ * dafür kein cookies() sehen — deshalb liest gesundheitsdaten() den
+ * Refresh-Token aus der eigenen Datenbank statt aus dem Cookie. Beides steht
+ * ohnehin nebeneinander: der Login schreibt den Token in beide Ablagen (siehe
+ * api/auth/google/callback), und die Datenbank ist die dauerhafte von beiden
+ * — der MCP-Server liest sie schon immer.
+ *
+ * Der Preis, und er ist eine bewusste Entscheidung: die ausgewerteten
+ * Gesundheitsdaten liegen jetzt bis zu fünf Minuten in Vercels Datencache
+ * statt ausschließlich im Browser. Wer das nicht will, hat nur einen Weg
+ * unter zwei Sekunden — die Tagesreihe in der eigenen Supabase ablegen und
+ * von dort lesen. Siehe die Notiz am Ende dieser Datei.
  */
-export async function loadDashboard(days = 30): Promise<Dashboard> {
-  "use cache: private";
-  cacheLife({ stale: 300, revalidate: 300, expire: 900 });
-  cacheTag("gesundheit");
 
+/** Trägt den Grund, warum keine Daten kommen, aus dem Cache heraus. */
+class NichtVerbundenFehler extends Error {}
+
+export async function loadDashboard(days = 30): Promise<Dashboard> {
   // Fehlende Variablen zuerst, und mit Namen: auf Vercel ist das der
   // wahrscheinlichste Grund, warum nichts kommt. "Nicht verbunden" würde Jakob
   // zum Login schicken, der dann aus demselben Grund auch scheitert.
@@ -85,39 +96,76 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
     };
   }
 
-  // Cookie zuerst, Datenbank als Rückfall: so funktioniert das Dashboard auch
-  // in einem Browser, in dem noch nie eingeloggt wurde, solange der Login
-  // irgendwann einmal stattgefunden hat.
-  const jar = await cookies();
-  let refresh: string | null = jar.get("kadenz_google_refresh")?.value ?? null;
-
-  if (!refresh && datenbankKonfiguriert()) {
-    try {
-      refresh = await refreshTokenLesen();
-    } catch (e) {
-      // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
-      // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
-      return {
-        verbunden: false,
-        grund: `Die Datenbank ist gerade nicht erreichbar: ${
-          e instanceof Error ? e.message : String(e)
-        }`,
-      };
+  try {
+    /* Ohne Datenbank bleibt nur das Cookie, und dieser Weg lässt sich nicht
+       zwischenspeichern — cookies() ist in "use cache" nicht erlaubt. Das ist
+       der Ausnahmefall (DATABASE_URL nicht gesetzt), nicht der Normalbetrieb. */
+    if (!datenbankKonfiguriert()) {
+      const jar = await cookies();
+      const refresh = jar.get("kadenz_google_refresh")?.value;
+      if (!refresh) {
+        throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
+      }
+      return await auswerten(refresh, days);
     }
+
+    return await gesundheitsdaten(days);
+  } catch (e) {
+    if (e instanceof NichtVerbundenFehler) return { verbunden: false, grund: e.message };
+    throw e;
+  }
+}
+
+/**
+ * Der teure Teil, serverseitig zwischengespeichert.
+ *
+ * Fünf Minuten, weil daran nichts schneller altert: Schlaf und Ruhepuls
+ * stehen nach der Nacht fest, und das Morgengewicht wird einmal am Tag
+ * eingetragen. Wer es einträgt, soll es trotzdem sofort sehen — dafür ruft
+ * gewichtEintragen() updateTag("gesundheit") auf, statt auf den Ablauf zu
+ * warten.
+ *
+ * Fehlschläge werden ausdrücklich geworfen statt als { verbunden: false }
+ * zurückgegeben: Next legt geworfene Fehler nicht ab. Sonst hinge eine kurz
+ * nicht erreichbare Datenbank oder eine einmalige Absage von Google fünf
+ * Minuten lang als "nicht verbunden" auf allen vier Seiten fest.
+ */
+async function gesundheitsdaten(days: number): Promise<Dashboard> {
+  "use cache";
+  cacheLife({ stale: 300, revalidate: 300, expire: 900 });
+  cacheTag("gesundheit");
+
+  let refresh: string | null;
+  try {
+    refresh = await refreshTokenLesen();
+  } catch (e) {
+    // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
+    // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
+    throw new NichtVerbundenFehler(
+      `Die Datenbank ist gerade nicht erreichbar: ${
+        e instanceof Error ? e.message : String(e)
+      }`
+    );
   }
 
   if (!refresh) {
-    return { verbunden: false, grund: "Noch nicht mit Google Health verbunden." };
+    throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
   }
 
+  return auswerten(refresh, days);
+}
+
+/** OAuth-Refresh, die vier Abrufe, die Auswertung. */
+async function auswerten(refresh: string, days: number): Promise<Dashboard> {
   let accessToken: string;
   try {
     accessToken = (await refreshAccessToken(refresh)).access_token;
   } catch (e) {
-    return {
-      verbunden: false,
-      grund: e instanceof Error ? e.message : "Token konnte nicht erneuert werden.",
-    };
+    // Werfen statt zurückgeben: siehe gesundheitsdaten(). Ein abgelehnter
+    // Refresh ist oft vorübergehend und soll sich nicht fünf Minuten halten.
+    throw new NichtVerbundenFehler(
+      e instanceof Error ? e.message : "Token konnte nicht erneuert werden."
+    );
   }
 
   const to = new Date();
@@ -140,12 +188,11 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
       listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
     ]);
   } catch (e) {
-    return {
-      verbunden: false,
-      grund: `Google Health hat die Abfrage abgelehnt: ${
+    throw new NichtVerbundenFehler(
+      `Google Health hat die Abfrage abgelehnt: ${
         e instanceof Error ? e.message : String(e)
-      }`,
-    };
+      }`
+    );
   }
   const [sleepRes, hrRes, hrvRes, weightRes] = ergebnisse;
 
@@ -177,3 +224,18 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
     unvollstaendig,
   };
 }
+
+/*
+ * Offen, und der nächste sinnvolle Schritt: die Tagesreihe in der eigenen
+ * Datenbank ablegen.
+ *
+ * Der Cache oben löst den Tab-Wechsel, aber er läuft alle fünf Minuten ab, und
+ * eine kalt gestartete Funktion auf Vercel findet ihn gar nicht vor — dann
+ * kostet der erste Aufruf wieder den vollen Abruf bei Google. Schlaf,
+ * Ruhepuls und HRV eines vergangenen Tages ändern sich aber nie mehr. Sie
+ * gehören einmal geschrieben und danach gelesen: eine Tabelle neben Workout
+ * und SetLog, ein Abgleich, der nur das Fenster seit dem letzten Eintrag holt.
+ * Lesen wäre dann eine Abfrage in der Größenordnung von 50 Millisekunden
+ * statt eines Abrufs von anderthalb Sekunden, unabhängig vom Cache, und die
+ * Daten lägen in Jakobs eigener Supabase statt in Vercels Datencache.
+ */

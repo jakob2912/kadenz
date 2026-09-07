@@ -14,6 +14,7 @@ import { heuteWien } from "./datum";
 import type { SetLog } from "./coach";
 import {
   amrapSoll,
+  BANK_UEBUNG,
   bankPlan,
   bankPosition,
   bankZusatzPlan,
@@ -21,6 +22,19 @@ import {
   TM_ANTEIL,
   ZUSATZ_PROZENT,
   type BankPosition,
+} from "./kraft";
+
+/* Weiterhin von hier lesbar: bank.ts war die Heimat dieser Namen, und der
+   MCP-Server sowie mehrere Seiten importieren sie von hier. Definiert sind sie
+   jetzt in kraft.ts — das ist der reine Teil, und eine Client-Komponente
+   (der Trainings-Logger) braucht istPressvariante(), darf aber nichts laden,
+   was prisma mitzieht. */
+export {
+  BANK_UEBUNG,
+  PRESSVARIANTEN,
+  PRESS_NAMEN,
+  istPressvariante,
+  type Pressvariante,
 } from "./kraft";
 import { datumFuerPushIndex, pushIndexAbDatum, type Programmvorgabe } from "./plan";
 
@@ -30,8 +44,6 @@ import { datumFuerPushIndex, pushIndexAbDatum, type Programmvorgabe } from "./pl
  * (Vorgabe, AMRAP-Suche, MCP-Werkzeug) und ein Tippfehler in einer davon
  * lautlos zu "keine Historie" führen würde.
  */
-export const BANK_UEBUNG = "Bankdrücken";
-
 export type Trainingsmax = {
   zyklus: number;
   tmKg: number;
@@ -149,10 +161,31 @@ async function amrapSatzVon(pushIndex: number): Promise<SetLog | null> {
     where: { date_kind: { date: datum, kind: "push" } },
     select: {
       sets: {
-        where: { exercise: BANK_UEBUNG },
+        /* Ausgeschlossen wird nur, was ausdrücklich als unsauber markiert ist.
+           Die Markierung ist dreiwertig, und "nicht beurteilt" ist der
+           Normalfall — sämtliche Sätze vor dieser Spalte stehen auf NULL. Ein
+           Filter auf `sauber: true` hätte die gesamte bisherige Historie
+           verworfen.
+
+           Ausgeschrieben als OR und NICHT als `{ not: false }`: SQL vergleicht
+           dreiwertig, `sauber <> false` ist für eine NULL-Zeile selbst NULL,
+           und NULL ist nicht wahr — die Zeile fällt heraus. Gemessen genau
+           so: mit `{ not: false }` fand diese Abfrage den AMRAP-Satz vom
+           03.09. (85 kg × 4, sauber = NULL) nicht mehr, und
+           aufZyklusBringen() schrieb daraufhin "Kein AMRAP-Satz geloggt" und
+           ließ den Trainingsmax stehen. Der Fehler wäre nie aufgefallen,
+           sondern hätte die Progression stillschweigend eingefroren.
+
+           Fällt der schwerste Satz wegen einer Markierung weg, greift der
+           nächstschwerere — die konservative Richtung, und genau die will man,
+           wenn aus dieser Zahl das Gewicht des nächsten Zyklus folgt. */
+        where: {
+          exercise: BANK_UEBUNG,
+          OR: [{ sauber: null }, { sauber: true }],
+        },
         orderBy: [{ kg: "desc" }, { reps: "desc" }],
         take: 1,
-        select: { kg: true, reps: true },
+        select: { kg: true, reps: true, sauber: true },
       },
     },
   });
@@ -257,6 +290,25 @@ export type Bankstand = {
    */
   naechsterBankTag: string | null;
 };
+
+/**
+ * Nur die Wellenposition, ohne Trainingsmax und ohne Fortschreibung.
+ *
+ * Für Pull-Tage. Die brauchen die Position, um zu wissen, ob heute die Spoto
+ * Press dazugehört (varianteFuer()) — aber ausdrücklich nicht den Rest:
+ * bankstandFuer() liest den Trainingsmax, schreibt ihn nötigenfalls fort und
+ * baut eine Satzvorgabe. Nichts davon hat an einem Pull-Tag etwas zu suchen,
+ * und die Fortschreibung von einem Tag aus anzustoßen, an dem gar nicht
+ * gebankt wird, wäre schlicht die falsche Stelle.
+ *
+ * Läuft das Programm noch nicht, ist die Antwort "keiner" — dann gibt es auch
+ * keine Presse am Pull-Tag.
+ */
+export async function bankPositionFuer(bezugPushIndex: number): Promise<BankPosition> {
+  const start = await startPushIndex();
+  if (start === null) return { art: "keiner", zyklus: 1, woche: 1 };
+  return bankPosition(bezugPushIndex, start);
+}
 
 /**
  * Alles, was der Bank-Slot für einen Push-Tag braucht.

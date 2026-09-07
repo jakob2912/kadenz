@@ -278,6 +278,23 @@ export type Rotation =
        * ist und in welcher Programmwoche der Zyklus steht.
        */
       pushIndex: number | null;
+      /**
+       * Der Push-Tag, zu dem dieser Trainingstag gehört: an einem Push-Tag er
+       * selbst, an einem Pull-Tag der Push-Tag davor.
+       *
+       * Neu für die Session-Varianten. Auch ein Pull-Tag muss wissen, wo die
+       * 5/3/1-Welle gerade steht — die Spoto Press steht nur am Pull nach
+       * einer leichten Push-Einheit, und in der Deload-Woche gar nicht. Ohne
+       * diesen Bezug müsste jede Stelle selbst einen Tag zurückrechnen, und
+       * das über den Wiener Kalendertag samt eingeschobener Pausen.
+       *
+       * Getrennt von pushIndex und nicht an dessen Stelle: pushIndex heißt
+       * weiterhin "heute ist ein Push-Tag, und zwar dieser". Beides in ein
+       * Feld zu legen hieße, dass bankstandFuer() an Pull-Tagen einen
+       * scheinbar gültigen Index bekäme und den Trainingsmax von einem Tag aus
+       * fortschriebe, an dem gar nicht gebankt wird.
+       */
+      bezugPushIndex: number;
     }
   | { art: "pause"; naechste: "push" };
 
@@ -307,10 +324,17 @@ export function rotationFor(date: Date): Rotation {
   const diff = Math.round((day - ANKER_PUSH) / 864e5) - pausenBis(day);
   const slot = ((diff % 3) + 3) % 3;
 
+  /* Bei slot 0 ist diff = 3k, bei slot 1 ist diff = 3k + 1 — Math.floor(diff/3)
+     ergibt beide Male k. An einem Push-Tag ist das er selbst, an dem Pull-Tag
+     danach der Push-Tag davor. Genau das ist der Bezug. */
+  const bezugPushIndex = Math.floor(diff / 3);
+
   if (slot === 0) {
-    return { art: "training", einheit: "push", pushIndex: Math.floor(diff / 3) };
+    return { art: "training", einheit: "push", pushIndex: bezugPushIndex, bezugPushIndex };
   }
-  if (slot === 1) return { art: "training", einheit: "pull", pushIndex: null };
+  if (slot === 1) {
+    return { art: "training", einheit: "pull", pushIndex: null, bezugPushIndex };
+  }
   return { art: "pause", naechste: "push" };
 }
 

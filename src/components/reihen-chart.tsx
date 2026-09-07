@@ -1,4 +1,4 @@
-import { de, kurzDatum } from "@/components/ui";
+import { de, kurzDatum, langDatum } from "@/components/ui";
 
 export type Reihenpunkt = { datum: string; wert: number };
 
@@ -159,10 +159,10 @@ export function ReihenChart({
           als die letzte Messung, und dort stünde sonst ein Datum, das gar
           nicht am rechten Rand liegt. */}
       <text x={P} y={VH - 4} className="fill-fg-faint text-[10px] font-semibold">
-        {kurzDatum(new Date(t0).toISOString().slice(0, 10))}
+        {achsenDatum(t0, t1 - t0)}
       </text>
       <text x={VW - 14} y={VH - 4} textAnchor="end" className="fill-fg-faint text-[10px] font-semibold">
-        {kurzDatum(new Date(t1).toISOString().slice(0, 10))}
+        {achsenDatum(t1, t1 - t0)}
       </text>
     </svg>
   );
@@ -200,4 +200,24 @@ export function ReihenChart({
       </div>
     </>
   );
+}
+
+/**
+ * Achsenbeschriftung, die sich nach der Spanne richtet.
+ *
+ * Unter einem halben Jahr sagt der Wochentag mehr als die Jahreszahl — das
+ * ist der Fall bei Gewicht und Kraftverlauf, und dafür war die Achse gebaut.
+ * Die Trainingsmax-Projektion auf dem Bank-Tab läuft dagegen über fünfzehn
+ * Monate; dort stand links "Sa., 22. Aug." und rechts "Di., 17. Aug.", und
+ * beides sah nach demselben Monat aus.
+ *
+ * Als Regel im Diagramm und nicht als Aufrufer-Vorgabe: welche Spanne das
+ * Bild zeigt, weiß es selbst am besten, und ein zusätzliches Format-Argument
+ * wäre eine Entscheidung, die jeder Aufrufer neu treffen müsste.
+ */
+const HALBES_JAHR_MS = 182 * 864e5;
+
+function achsenDatum(ms: number, spanneMs: number): string {
+  const iso = new Date(ms).toISOString().slice(0, 10);
+  return spanneMs > HALBES_JAHR_MS ? langDatum(iso) : kurzDatum(iso);
 }

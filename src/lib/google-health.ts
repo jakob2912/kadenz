@@ -120,7 +120,20 @@ export type DataTypeSpec = {
   filterFields: string[];
   /** Daily-Typen vergleichen gegen ein Datum, alles andere gegen RFC-3339 */
   literal: "timestamp" | "date";
-  /** sleep und exercise deckelt die API bei 25 */
+  /**
+   * Angeforderte Seitengröße.
+   *
+   * Google deckelt selbst, wo es nötig ist — sleep liefert 12 Punkte pro
+   * Seite, egal was hier steht. Wo nicht gedeckelt wird, entscheidet diese
+   * Zahl über die Anzahl der Rundreisen, und die war der ganze Ärger: HRV
+   * stand auf 100 und brauchte damit 29 Abrufe hintereinander für ein
+   * 30-Tage-Fenster — 16 Sekunden, bei jedem Tab-Wechsel. Mit 5000 kommen
+   * dieselben 2734 Punkte in einem Abruf, in unter einer Sekunde.
+   *
+   * Seitenweise geht nur nacheinander (jede Seite braucht den pageToken der
+   * vorigen), parallelisieren lässt sich hier also nichts. Die einzige
+   * Stellschraube ist, weniger Seiten anzufordern.
+   */
   maxPageSize: number;
 };
 
@@ -131,32 +144,38 @@ export const DATA_TYPES = {
     literal: "timestamp",
     maxPageSize: 25,
   },
+  /* snake_case zuerst, camelCase als Rückfall — vorher stand es umgekehrt.
+     Google nimmt bei diesen beiden Typen ausschließlich snake_case an; der
+     camelCase-Versuch lief also bei jedem Laden in einen Fehler und kostete
+     eine vergebliche Rundreise, bevor der zweite Kandidat drankam. Die Liste
+     bleibt trotzdem eine Liste: Googles Doku widerspricht sich hier, und ein
+     Rückfall ist billiger als ein Ausfall, wenn sich das wieder dreht. */
   restingHeartRate: {
     path: "daily-resting-heart-rate",
-    filterFields: ["dailyRestingHeartRate.date", "daily_resting_heart_rate.date"],
+    filterFields: ["daily_resting_heart_rate.date", "dailyRestingHeartRate.date"],
     literal: "date",
-    maxPageSize: 100,
+    maxPageSize: 5000,
   },
   hrv: {
     path: "heart-rate-variability",
     filterFields: [
-      "heartRateVariability.sample_time.physical_time",
       "heart_rate_variability.sample_time.physical_time",
+      "heartRateVariability.sample_time.physical_time",
     ],
     literal: "timestamp",
-    maxPageSize: 100,
+    maxPageSize: 5000,
   },
   weight: {
     path: "weight",
     filterFields: ["weight.sample_time.physical_time"],
     literal: "timestamp",
-    maxPageSize: 100,
+    maxPageSize: 5000,
   },
   steps: {
     path: "steps",
     filterFields: ["steps.interval.start_time"],
     literal: "timestamp",
-    maxPageSize: 100,
+    maxPageSize: 5000,
   },
 } as const satisfies Record<string, DataTypeSpec>;
 

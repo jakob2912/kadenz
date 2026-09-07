@@ -15,6 +15,16 @@ export type WeightEntry = {
 export type SetLog = {
   reps: number;
   kg: number;
+  /**
+   * War der Satz technisch sauber?
+   *
+   * Undefined/null heißt "nicht beurteilt" und ist der Normalfall — nur ein
+   * ausdrückliches false schließt den Satz aus einer Messung aus. Optional,
+   * damit jede Stelle, die bloß mit Gewicht und Wiederholungen rechnet
+   * (progression(), die Referenzwerte im Katalog, die Tests), unverändert
+   * bleibt.
+   */
+  sauber?: boolean | null;
 };
 
 export type ReadinessInput = {

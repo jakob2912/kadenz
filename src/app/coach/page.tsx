@@ -1,4 +1,5 @@
 import { Suspense, type ReactNode } from "react";
+import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
 import { Eyebrow, NichtVerbunden, Skelett, de, heuteWien } from "@/components/ui";
 import { aktuellePhase } from "@/lib/gewichtsplan";
@@ -45,6 +46,16 @@ export default function Coach() {
 
 /** Alles, was auf Google Health wartet. */
 async function Auswertungen() {
+  /* rotationFor(new Date()) und aktuellePhase() rechnen beide gegen heute.
+     Beim Bauen steht der Tag nicht fest, und Next lehnt ein `new Date()` im
+     Vorrendern zu Recht ab — die Seite wäre auf den Build-Tag eingefroren.
+
+     Nötig geworden, seit loadDashboard() serverseitig zwischenspeicherbar ist:
+     vorher zwang das darin steckende `"use cache: private"` die Seite ohnehin
+     an die Anfragezeit, und dieser Aufruf war deshalb nur zufällig entbehrlich.
+     Die anderen Seiten sagen es an derselben Stelle ausdrücklich. */
+  await connection();
+
   const data = await loadDashboard(30);
   const heuteTraining = rotationFor(new Date());
 

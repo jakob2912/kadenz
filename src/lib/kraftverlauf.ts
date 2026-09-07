@@ -32,7 +32,8 @@ async function saetzeLaden(tage: number, uebung?: string): Promise<GeloggterSatz
       date: true,
       sets: {
         where: uebung ? { exercise: uebung } : undefined,
-        select: { exercise: true, kg: true, reps: true },
+        orderBy: { setIndex: "asc" },
+        select: { exercise: true, kg: true, reps: true, sauber: true },
       },
     },
   });
@@ -43,6 +44,10 @@ async function saetzeLaden(tage: number, uebung?: string): Promise<GeloggterSatz
       uebung: s.exercise,
       kg: s.kg,
       reps: s.reps,
+      /* Ohne dieses Feld übergingen e1rmReihe() und besterSatz() nichts:
+         beide prüfen auf `sauber === false`, und was nie gelesen wird, ist
+         immer undefined. Der Filter säße im Code und wirkte nirgends. */
+      sauber: s.sauber,
     }))
   );
 }
@@ -73,4 +78,42 @@ export async function saetzeProUebung(
     (proUebung[satz.uebung] ??= []).push(satz);
   }
   return proUebung;
+}
+
+/**
+ * Alle Sätze mehrerer Übungen, aufsteigend nach Tag.
+ *
+ * Für den Bank-Tab, der die drei Pressvarianten in einer Zeitleiste zeigt.
+ * Eine Abfrage statt drei: der Pool in db.ts steht auf max 1, drei Aufrufe
+ * von saetzeFuer() liefen nacheinander über die Leitung — derselbe Grund,
+ * aus dem letzteSaetzeFuer() in workouts.ts existiert.
+ */
+export async function saetzeFuerMehrere(
+  uebungen: string[],
+  tage = FENSTER_TAGE
+): Promise<GeloggterSatz[]> {
+  if (uebungen.length === 0) return [];
+
+  const workouts = await prisma.workout.findMany({
+    where: { date: { gte: abDatum(tage) } },
+    orderBy: { date: "asc" },
+    select: {
+      date: true,
+      sets: {
+        where: { exercise: { in: uebungen } },
+        orderBy: { setIndex: "asc" },
+        select: { exercise: true, kg: true, reps: true, sauber: true },
+      },
+    },
+  });
+
+  return workouts.flatMap((w) =>
+    w.sets.map((s) => ({
+      datum: w.date.toISOString().slice(0, 10),
+      uebung: s.exercise,
+      kg: s.kg,
+      reps: s.reps,
+      sauber: s.sauber,
+    }))
+  );
 }

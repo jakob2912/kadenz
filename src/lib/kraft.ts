@@ -71,6 +71,13 @@ export function besterSatz(saetze: SetLog[]): SetLog | null {
   let best: SetLog | null = null;
   for (const s of saetze) {
     if (s.kg <= 0 || s.reps < 1) continue;
+    /* Ein ausdrücklich als unsauber markierter Satz ist kein Bestwert. Genau
+       dafür gibt es die Markierung: Jakobs 100 kg standen mit abgehobener
+       Hüfte, und ein Bestwert, den die Technik nicht getragen hat, ist als
+       Bezugsgröße schlechter als gar keiner. Nicht beurteilte Sätze (null oder
+       undefined) zählen weiter mit — sonst wäre die gesamte Historie vor
+       dieser Spalte auf einen Schlag wertlos. */
+    if (s.sauber === false) continue;
     if (best === null || s.kg > best.kg || (s.kg === best.kg && s.reps > best.reps)) {
       best = s;
     }
@@ -98,6 +105,9 @@ export function e1rmReihe(saetze: GeloggterSatz[]): E1rmPunkt[] {
   const proTag = new Map<string, number>();
 
   for (const s of saetze) {
+    // Siehe besterSatz(): eine Schätzung des Maximums aus einem Satz, dessen
+    // Form nicht gestanden hat, schätzt das Maximum von etwas anderem.
+    if (s.sauber === false) continue;
     const wert = e1rm(s);
     if (wert === null) continue;
     const bisher = proTag.get(s.datum);
@@ -291,6 +301,74 @@ export function rangliste(proUebung: Record<string, GeloggterSatz[]>): Rang[] {
  * gut einer auf gut zwei Bankeinheiten je Woche, der Zyklus bleibt 24 Tage.
  */
 
+export const BANK_UEBUNG = "Bankdrücken";
+
+/**
+ * Die drei Bankdrück-Varianten, unter denen geloggt wird.
+ *
+ * Im Code und nicht im Katalog, aus demselben Grund wie BANK_UEBUNG darüber:
+ * das 5/3/1 und der Bank-Tab rechnen mit genau diesen dreien, und ein
+ * Tippfehler in einem Namen führt lautlos zu "keine Historie" statt zu einem
+ * Fehler. Der Katalog bleibt trotzdem die Stelle, die entscheidet, ob und wann
+ * eine davon im Plan steht — hier steht nur, wie sie zu lesen sind.
+ *
+ * "schwer" trennt die eine Variante, die den Trainingsmax bewegt, von den
+ * beiden, die es ausdrücklich nicht tun. Der Bank-Tab beschriftet danach, und
+ * naechsterTm() bekommt seinen AMRAP-Satz ohnehin nur aus BANK_UEBUNG.
+ */
+export const PRESSVARIANTEN = {
+  [BANK_UEBUNG]: {
+    kurz: "5/3/1",
+    lang: "Schweres Bankdrücken",
+    schwer: true,
+    wann: "Push am TM-Tag, alle sechs Tage",
+    ausfuehrung:
+      "Wettkampfnah: Schulterblätter zusammen und unten, Füße fest am Boden, " +
+      "Gesäß bleibt auf der Bank. Die Hantel berührt die Brust und geht ohne " +
+      "Abfedern wieder hoch.",
+    steuerung:
+      "Gewicht aus dem Trainingsmax — 3 Sätze nach der Welle, der letzte auf " +
+      "Maximalwiederholungen. Nur dieser Satz bewegt den Trainingsmax.",
+  },
+  "Paused Bench Press": {
+    kurz: "Paused",
+    lang: "Paused Bench Press",
+    schwer: false,
+    wann: "Push an der Einheit dazwischen",
+    ausfuehrung:
+      "Wie das schwere Bankdrücken, aber mit einer Sekunde Pause auf der " +
+      "Brust — Hantel liegt still, Spannung bleibt, kein Abfedern. Danach " +
+      "aus dem Stand heraus drücken.",
+    steuerung:
+      "Submaximal, mit Reserve. Das Gewicht kommt aus der eigenen Historie, " +
+      "nicht aus dem Trainingsmax: acht Wiederholungen im ersten Satz heben " +
+      "es um 2,5 kg, ein Satz unter fünf senkt es.",
+  },
+  "Spoto Press": {
+    kurz: "Spoto",
+    lang: "Spoto Press",
+    schwer: false,
+    wann: "Pull nach der leichten Push-Einheit",
+    ausfuehrung:
+      "Zwei bis drei Zentimeter über der Brust anhalten, kurz halten, ohne " +
+      "abzusetzen wieder hochdrücken. Die Hantel berührt nie die Brust — " +
+      "genau das ist der Zweck: kein Abfedern, keine Entlastung im " +
+      "schwersten Punkt.",
+    steuerung:
+      "Zwei Sätze, submaximal, aus der eigenen Historie gesteuert. Kein " +
+      "Auswertungssatz — der Tag soll Frequenz an der Hantel bringen, keine " +
+      "Messung.",
+  },
+} as const;
+
+export type Pressvariante = keyof typeof PRESSVARIANTEN;
+
+export const PRESS_NAMEN = Object.keys(PRESSVARIANTEN) as Pressvariante[];
+
+export function istPressvariante(name: string): name is Pressvariante {
+  return name in PRESSVARIANTEN;
+}
+
 export type BankWoche = 1 | 2 | 3 | 4;
 
 export type BankSatz = {
@@ -442,6 +520,53 @@ export function bankPosition(pushIndex: number, startPushIndex: number): BankPos
         : "zusatz";
 
   return { art, zyklus: Math.floor(bankIndex / 4) + 1, woche };
+}
+
+/**
+ * Welche Ausprägung eine Einheit an einem Tag hat.
+ *
+ * Der Wunsch war "Push und Pull sollen an verschiedenen Wochentagen
+ * unterschiedlich aussehen" — mit Montag, Mittwoch, Freitag, Samstag als
+ * Beispiel. Der Wochentag taugt dafür nicht: Jakobs Rotation läuft alle drei
+ * Tage (rotationFor()), also wandert jede Einheit durch die Woche. Über vier
+ * Wochen bekommt jeder Wochentag jede Einheit einmal; ein Montagsfeld hätte
+ * die Übung mal am richtigen, mal am falschen Tag gezeigt.
+ *
+ * Was tatsächlich abwechselt — und was Jakob mit "Montag" und "Freitag"
+ * gemeint hat —, ist die Position in der 5/3/1-Welle. Seine eigenen Logs
+ * zeigen es: Fr, 28.08. war Woche 2 mit 62,5/72,5/80 kg, Mo, 31.08. lief bei
+ * dreimal 65 kg, Do, 03.09. war Woche 3. Schwer und leicht wechseln sich seit
+ * dem 27.08.2026 ab, nur hießen beide bisher "Bankdrücken".
+ *
+ * Die fünf Werte:
+ *   "schwer" — Push am TM-Tag. Langhantel-Bankdrücken nach der Welle.
+ *   "leicht" — Push dazwischen. Paused Bench Press, submaximal.
+ *   "ohne"   — Push ohne Presse: die Zusatz-Einheit der Deload-Woche. Die
+ *              Woche ist zum Zurücknehmen da, siehe bankPosition().
+ *   "presse" — Pull nach einem leichten Push-Tag. Spoto Press, zwei Sätze.
+ *   "rein"   — Pull ohne Presse.
+ *
+ * Warum die Spoto Press ausgerechnet auf das Pull nach dem LEICHTEN Push-Tag
+ * fällt: so hat Jakob es beschrieben (Mittwoch mit, Samstag ohne), und in
+ * seinem Kalender lag der Mittwoch, 26.08. hinter einer leichten Einheit, der
+ * Samstag, 29.08. hinter dem schweren TM-Tag. Es ist außerdem die Anordnung,
+ * die trainingsseitig aufgeht — am Tag nach der schwersten Bankeinheit kommt
+ * nichts Zusätzliches auf die Brust.
+ *
+ * Dass die Deload-Woche dabei von selbst leer ausgeht, ist kein Zufall,
+ * sondern folgt aus bankPosition(): dort ist die Zusatz-Einheit der vierten
+ * Woche "keiner", und ein Pull ohne vorangegangenen Zusatz-Tag ist "rein".
+ */
+export type Variante = "schwer" | "leicht" | "ohne" | "presse" | "rein";
+
+export function varianteFuer(einheit: "push" | "pull", position: BankPosition): Variante {
+  if (einheit === "push") {
+    if (position.art === "tm") return "schwer";
+    if (position.art === "zusatz") return "leicht";
+    return "ohne";
+  }
+
+  return position.art === "zusatz" ? "presse" : "rein";
 }
 
 export type TmEntscheidung = {

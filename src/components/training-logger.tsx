@@ -11,13 +11,15 @@ import {
   type GeloggterSatz,
 } from "@/lib/workouts";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
+import { istPressvariante } from "@/lib/kraft";
 
 const PAUSE_SEKUNDEN = 180;
 
 /** Wie lange "Pause vorbei" in der Kopfleiste stehen bleibt. */
 const VORBEI_SEKUNDEN = 12;
 
-type Logged = { kg: number; reps: number };
+/** Der Zustand eines abgehakten Satzes im Logger. */
+type Logged = { kg: number; reps: number; sauber: boolean | null };
 
 /**
  * Die geloggten Sätze auf die Schlüssel des Loggers abbilden.
@@ -39,7 +41,11 @@ function ausDatenbank(
   for (const satz of geloggt) {
     const i = platz.get(satz.exercise);
     if (i === undefined) continue;
-    stand[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps };
+    stand[`${i}-${satz.setIndex}`] = {
+      kg: satz.kg,
+      reps: satz.reps,
+      sauber: satz.sauber,
+    };
   }
 
   return stand;
@@ -176,7 +182,9 @@ export function TrainingLogger({
     // Zuerst die Oberfläche aktualisieren, dann speichern: im Gym soll der
     // Timer sofort laufen und nicht auf das Netz warten. Schlägt das
     // Speichern fehl, bleibt der Satz sichtbar und der Fehler wird angezeigt.
-    setLogged((prev) => (prev[key] ? prev : { ...prev, [key]: { kg, reps } }));
+    setLogged((prev) =>
+      prev[key] ? prev : { ...prev, [key]: { kg, reps, sauber: null } }
+    );
     setZuletzt(key);
     setPauseVorbei(false);
     setPause(PAUSE_SEKUNDEN);
@@ -186,6 +194,40 @@ export function TrainingLogger({
     setAnsage(`${exercise}, Satz ${setIndex + 1} gespeichert. Satzpause drei Minuten.`);
 
     void satzSpeichern({ kind: session.key, exercise, setIndex, kg, reps }).then((r) => {
+      setSpeicherFehler(r.ok ? null : r.fehler);
+    });
+  }
+
+  /**
+   * Einen abgehakten Satz als sauber oder unsauber markieren.
+   *
+   * Nur bei den Bankdrück-Varianten angeboten (siehe formPruefen in
+   * SatzZeile). Sechzehn Sätze je Einheit einzeln zu beurteilen würde niemand
+   * durchhalten, und gebraucht wird es genau dort, wo aus der Zahl später
+   * etwas folgt: der AMRAP-Satz schreibt den Trainingsmax fort, und Jakobs
+   * All-Time-Bestwert von 100 kg stand mit abgehobener Hüfte.
+   *
+   * Dreiwertig, weil ein zweiter Tipp auf denselben Knopf die Markierung
+   * wieder zurücknimmt — man soll sich nicht vertippen und damit festsitzen.
+   *
+   * Die Satzpause startet ausdrücklich nicht neu: markiert wird oft erst nach
+   * dem Satz, und ein neu anlaufender Timer wäre schlicht falsch.
+   */
+  function markieren(key: string, exercise: string, setIndex: number, wert: boolean) {
+    const satz = logged[key];
+    if (!satz) return;
+
+    const sauber = satz.sauber === wert ? null : wert;
+    setLogged((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], sauber } } : prev));
+
+    void satzSpeichern({
+      kind: session.key,
+      exercise,
+      setIndex,
+      kg: satz.kg,
+      reps: satz.reps,
+      sauber,
+    }).then((r) => {
       setSpeicherFehler(r.ok ? null : r.fehler);
     });
   }
@@ -378,6 +420,8 @@ export function TrainingLogger({
                   hervorgehoben={zuletzt === `${i}-${si}`}
                   onLog={(kg, reps) => abhaken(`${i}-${si}`, ex.name, si, kg, reps)}
                   onKorrigieren={() => korrigieren(`${i}-${si}`)}
+                  formPruefen={istPressvariante(ex.name)}
+                  onMarkieren={(wert) => markieren(`${i}-${si}`, ex.name, si, wert)}
                 />
               ))}
 
@@ -453,6 +497,8 @@ function SatzZeile({
   hervorgehoben,
   onLog,
   onKorrigieren,
+  formPruefen = false,
+  onMarkieren,
 }: {
   nummer: number;
   prev?: string;
@@ -470,6 +516,16 @@ function SatzZeile({
   hervorgehoben: boolean;
   onLog: (kg: number, reps: number) => void;
   onKorrigieren: () => void;
+  /**
+   * Bietet die Form-Beurteilung an. Nur bei den Bankdrück-Varianten wahr.
+   *
+   * Nicht bei allen Übungen, und das ist Absicht: aus dem Bankdrücken folgt
+   * über den AMRAP-Satz der nächste Trainingsmax, aus einem Satz Waden-Heben
+   * folgt nichts. Sechzehn Beurteilungen je Einheit einzufordern hieße, dass
+   * nach einer Woche keine einzige mehr gesetzt wird.
+   */
+  formPruefen?: boolean;
+  onMarkieren?: (wert: boolean) => void;
 }) {
   /* Bei einer vorgegebenen Übung stehen Gewicht und Wiederholungen schon im
      Feld: beim Bankdrücken hat jeder der drei Sätze ein eigenes Gewicht
@@ -572,6 +628,38 @@ function SatzZeile({
         </svg>
       </button>
 
+      {formPruefen && fertig && onMarkieren && (
+        /* Erst nach dem Abhaken, und nur hier: vor dem Satz gibt es nichts zu
+           beurteilen, und eine leere Schaltfläche in jeder Zeile wäre bei
+           sechzehn Sätzen bloß Grundrauschen.
+
+           Unter der Zeile statt als sechste Spalte: das Raster steht auf
+           26/58/1fr/1fr/44 px, und auf einem 375-px-Schirm blieben den beiden
+           Eingabefeldern damit je 75 statt 95 Pixel. Die Felder sind das, was
+           man im Gym trifft — die Beurteilung tippt man einmal in Ruhe. */
+        <div className="col-span-5 flex items-center justify-end gap-1.5 pb-1.5">
+          <span className="mr-auto pl-[30px] text-[10px] uppercase tracking-[0.11em] text-fg-faint">
+            Ausführung
+          </span>
+          <FormKnopf
+            aktiv={logged!.sauber === true}
+            ton="ready"
+            label={`Satz ${nummer} als sauber markieren`}
+            onClick={() => onMarkieren(true)}
+          >
+            sauber
+          </FormKnopf>
+          <FormKnopf
+            aktiv={logged!.sauber === false}
+            ton="strain"
+            label={`Satz ${nummer} als nicht sauber markieren`}
+            onClick={() => onMarkieren(false)}
+          >
+            nicht sauber
+          </FormKnopf>
+        </div>
+      )}
+
       {repsUngueltig && (
         // Direkt unter der Zeile statt als Sammelmeldung oben: im Gym sieht
         // man sonst nicht, welcher der 16 Sätze gemeint ist.
@@ -580,6 +668,43 @@ function SatzZeile({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Ein Umschalter für die Form-Beurteilung.
+ *
+ * aria-pressed statt eines eigenen "ausgewählt"-Zustands: es sind zwei
+ * unabhängige Umschalter, kein Radio-Paar. Ein zweiter Tipp auf denselben
+ * Knopf nimmt die Beurteilung zurück — nicht beurteilt ist ein eigener,
+ * gültiger Zustand und nicht dasselbe wie "geprüft und sauber".
+ */
+function FormKnopf({
+  aktiv,
+  ton,
+  label,
+  onClick,
+  children,
+}: {
+  aktiv: boolean;
+  ton: "ready" | "strain";
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const an = ton === "ready" ? "bg-ready/15 text-ready" : "bg-strain/15 text-strain";
+
+  return (
+    <button
+      type="button"
+      aria-pressed={aktiv}
+      aria-label={label}
+      onClick={onClick}
+      className={`min-h-[30px] rounded-sm px-2.5 text-[11px] font-semibold transition-colors
+                  ${aktiv ? an : "bg-surface-2 text-fg-faint active:bg-surface-3 md:hover:text-fg-dim"}`}
+    >
+      {children}
+    </button>
   );
 }
 
