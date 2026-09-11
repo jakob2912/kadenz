@@ -551,10 +551,11 @@ export function amrapPushIndex(ankerPushIndex: number): number {
  *
  * Der Wunsch war "Push und Pull sollen an verschiedenen Wochentagen
  * unterschiedlich aussehen" — mit Montag, Mittwoch, Freitag, Samstag als
- * Beispiel. Der Wochentag taugt dafür nicht: Jakobs Rotation läuft alle drei
- * Tage (rotationFor()), also wandert jede Einheit durch die Woche. Über vier
- * Wochen bekommt jeder Wochentag jede Einheit einmal; ein Montagsfeld hätte
- * die Übung mal am richtigen, mal am falschen Tag gezeigt.
+ * Beispiel. Der Wochentag taugt dafür nicht: in der Ferienroutine lief die
+ * Rotation alle drei Tage, und jede Einheit wanderte durch die Woche. Seit dem
+ * Wochenplan (07.09.2026, rotationFor()) liegen die Einheiten zwar auf festen
+ * Tagen, aber ein eingeschobener Rest Day verschiebt sie um einen — ein
+ * Montagsfeld zeigte die Übung danach am falschen Tag.
  *
  * Was tatsächlich abwechselt — und was Jakob mit "Montag" und "Freitag"
  * gemeint hat —, ist die Position in der 5/3/1-Welle. Seine eigenen Logs

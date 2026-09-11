@@ -167,19 +167,30 @@ export async function trainingsmaxSetzen(
 /**
  * Der AMRAP-Satz eines bestimmten Bank-Tags.
  *
- * Gesucht wird über das Datum, das sich aus dem Push-Index ergibt, und über
- * das Gewicht: der AMRAP-Satz ist der schwerste des Tages. Über setIndex zu
- * gehen wäre falsch — wer einen Aufwärmsatz mitloggt, verschiebt die
- * Nummerierung, und dann zählt Kadenz die falsche Zeile.
+ * Gesucht wird über den Zeitraum, der zu diesem Push-Tag gehört, und über
+ * das Gewicht: der AMRAP-Satz ist der schwerste. Über setIndex zu gehen wäre
+ * falsch — wer einen Aufwärmsatz mitloggt, verschiebt die Nummerierung, und
+ * dann zählt Kadenz die falsche Zeile.
+ *
+ * Zeitraum statt Datum, seit sich Push an jedem Tag wählen lässt: wer
+ * vorzieht, trainiert den nächsten anstehenden Push-Tag (trainingAls() in
+ * plan.ts), also irgendwann nach dem vorigen Push-Tag und spätestens am
+ * geplanten. Über das genaue Datum fände Kadenz einen vorgezogenen
+ * AMRAP-Satz nicht, und der Trainingsmax bliebe stillschweigend stehen.
  */
 async function amrapSatzVon(pushIndex: number): Promise<SetLog | null> {
-  const datum = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
+  const nach = new Date(`${datumFuerPushIndex(pushIndex - 1)}T00:00:00Z`);
+  const bis = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
 
-  const workout = await prisma.workout.findUnique({
-    where: { date_kind: { date: datum, kind: "push" } },
-    select: {
-      sets: {
-        /* Ausgeschlossen wird nur, was ausdrücklich als unsauber markiert ist.
+  return prisma.setLog.findFirst({
+    where: {
+      exercise: BANK_UEBUNG,
+      workout: { kind: "push", date: { gt: nach, lte: bis } },
+      /* Markieren lässt sich seit dem 11.09.2026 nicht mehr — eine unsaubere
+         letzte Wiederholung zählt Jakob einfach nicht mit. Die alten
+         Markierungen gelten aber weiter, deshalb bleibt der Filter.
+
+         Ausgeschlossen wird nur, was ausdrücklich als unsauber markiert ist.
            Die Markierung ist dreiwertig, und "nicht beurteilt" ist der
            Normalfall — sämtliche Sätze vor dieser Spalte stehen auf NULL. Ein
            Filter auf `sauber: true` hätte die gesamte bisherige Historie
@@ -197,18 +208,11 @@ async function amrapSatzVon(pushIndex: number): Promise<SetLog | null> {
            Fällt der schwerste Satz wegen einer Markierung weg, greift der
            nächstschwerere — die konservative Richtung, und genau die will man,
            wenn aus dieser Zahl das Gewicht des nächsten Zyklus folgt. */
-        where: {
-          exercise: BANK_UEBUNG,
-          OR: [{ sauber: null }, { sauber: true }],
-        },
-        orderBy: [{ kg: "desc" }, { reps: "desc" }],
-        take: 1,
-        select: { kg: true, reps: true, sauber: true },
-      },
+      OR: [{ sauber: null }, { sauber: true }],
     },
+    orderBy: [{ kg: "desc" }, { reps: "desc" }],
+    select: { kg: true, reps: true, sauber: true },
   });
-
-  return workout?.sets[0] ?? null;
 }
 
 /**

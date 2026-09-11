@@ -50,7 +50,7 @@ import {
   uebungenUmsortieren,
   type Einheit,
 } from "../src/lib/uebungen";
-import { satzSpeichern } from "../src/lib/workouts";
+import { heutigeEinheit, satzSpeichern } from "../src/lib/workouts";
 import {
   aktuellesZiel,
   ernaehrungsplanLesen,
@@ -242,7 +242,7 @@ server.registerTool(
   {
     title: "Training heute",
     description:
-      "Welche Einheit laut Rotation (Push – Pull – Pause) ansteht, mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
+      "Welche Einheit heute ansteht (trainiert wird Mo, Mi, Fr und Sa, Push und Pull im Wechsel), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
   },
   async () => {
     try {
@@ -331,19 +331,26 @@ server.registerTool(
   {
     title: "Satz eintragen",
     description:
-      "Trägt einen Satz für das heutige Training nach. Nützlich, wenn im Gym etwas vergessen wurde.",
+      "Trägt einen Satz für das heutige Training nach. Nützlich, wenn im Gym etwas vergessen wurde. Ohne `einheit` landet er in der Einheit, die heute schon läuft, sonst in der laut Kalender, am Rest Day in Pull.",
     inputSchema: {
       uebung: z.string().min(1),
       satz: z.number().int().min(1).max(10).describe("Satznummer, 1-basiert"),
       kg: z.number().min(0).max(500),
       wdh: z.number().int().min(1).max(100),
+      einheit: z
+        .enum(["push", "pull"])
+        .optional()
+        .describe("Nur nötig, wenn heute außer Plan trainiert wurde und noch nichts geloggt ist"),
     },
   },
-  async ({ uebung, satz, kg, wdh }) => {
+  async ({ uebung, satz, kg, wdh, einheit }) => {
     try {
       datenbankPruefen();
       const heute = rotationFor(new Date());
-      const kind = heute.art === "training" ? heute.einheit : SESSIONS.pull.key;
+      const kind =
+        einheit ??
+        (await heutigeEinheit()) ??
+        (heute.art === "training" ? heute.einheit : SESSIONS.pull.key);
       const r = await satzSpeichern({
         kind,
         exercise: uebung,

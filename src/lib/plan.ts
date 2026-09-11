@@ -4,7 +4,8 @@ import { datenbankKonfiguriert } from "./konfiguration";
 
 /**
  * Jakobs Split. "Push/Pull" meint bei ihm Anterior/Posterior — Beine sind an
- * beiden Tagen dabei, nicht als eigener Tag. Rotation: Push – Pull – Pause.
+ * beiden Tagen dabei, nicht als eigener Tag. Trainiert wird Mo, Mi, Fr und Sa,
+ * Push und Pull im Wechsel — siehe rotationFor().
  *
  * Die Gewichte stammen aus dem Kraftwerte-Log (29.07.2026) und den
  * Lift-Off-Screenshots (16.08.2026).
@@ -200,18 +201,40 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
 };
 
 /**
- * Rotation Push – Pull – Pause, verankert an einem bekannten Push-Tag.
- * Der Gym-Kalender führt "Push FB" ab 15.08.2026 alle drei Tage.
+ * Der Trainingskalender, in zwei Abschnitten.
+ *
+ * Bis zum 06.09.2026 lief die Ferienroutine: Push – Pull – Pause, stur alle
+ * drei Tage ab einem bekannten Push-Tag (der Gym-Kalender führt "Push FB" ab
+ * 15.08.2026). Seit dem 07.09.2026 trainiert Jakob an festen Wochentagen —
+ * Mo, Mi, Fr, Sa. Die Dreierrotation konnte das nicht abbilden: auf Pull
+ * folgte dort immer ein Rest Day, Fr und Sa sind aber zwei Trainingstage am
+ * Stück. Am Fr, 11.09. zeigte die App deshalb Rest Day, obwohl Pull anstand.
+ *
+ * Gleich bleibt in beiden Abschnitten: Push und Pull wechseln sich mit jedem
+ * Trainingstag ab, fortlaufend über die Umstellung hinweg gezählt. Aus dieser
+ * Zählung folgen Einheit und Push-Index — und über den Push-Index das 5/3/1,
+ * das damit ohne Bruch weiterläuft.
+ *
+ * Die Vergangenheit behält ihre Beschriftung: bis zum 06.09. rechnet weiter
+ * die Dreierrotation. Der 07.09. (Pull) und der 09.09. (Push) liegen in beiden
+ * Kalendern gleich, deshalb fällt die Umstellung genau dorthin.
  */
 const ANKER_PUSH = Date.UTC(2026, 7, 15);
+const WOCHENPLAN_AB = Date.UTC(2026, 8, 7);
+
+/** Trainingstage im Wochenplan als getUTCDay(), 0 ist Sonntag: Mo, Mi, Fr, Sa. */
+const TRAININGSWOCHENTAGE: readonly number[] = [1, 3, 5, 6];
+
+const TAG_MS = 864e5;
 
 /**
  * Einzeln eingeschobene Rest Days.
  *
- * Die Rotation läuft stur alle drei Tage. Wer einen Tag zusätzlich pausiert,
- * schiebt damit alles Folgende um einen Tag nach hinten — die Vergangenheit
- * aber nicht: der 15.08. war ein Push-Tag und bleibt einer, egal welche Pause
- * danach kam. Deshalb steht hier ein Datum je Einschub, statt den Anker zu
+ * Ein Einschub nimmt einen Tag aus der Zählung: in der Ferienroutine rückte
+ * damit alles Folgende um einen Kalendertag nach hinten, im Wochenplan rückt
+ * die Einheit auf den nächsten Trainingstag. Die Vergangenheit bleibt, wo sie
+ * war: der 15.08. war ein Push-Tag und bleibt einer, egal welche Pause danach
+ * kam. Deshalb steht hier ein Datum je Einschub, statt den Anker zu
  * verschieben. Ein verschobener Anker hätte rückwirkend jeden zurückliegenden
  * Tag neu beschriftet, und die Push-Indizes wären mitgewandert — der
  * 5/3/1-Zyklus hinge dann plötzlich an anderen Kalendertagen.
@@ -220,9 +243,42 @@ const ANKER_PUSH = Date.UTC(2026, 7, 15);
  */
 export const EINGESCHOBENE_PAUSEN: readonly string[] = ["2026-08-21"];
 
-/** Wie viele Einschübe bis einschließlich dieses Tages liegen. */
-function pausenBis(tagMs: number): number {
-  return EINGESCHOBENE_PAUSEN.filter((iso) => Date.parse(`${iso}T00:00:00Z`) <= tagMs).length;
+/** Wie viele Einschübe vor diesem Tag liegen. */
+function pausenVor(tagMs: number): number {
+  return EINGESCHOBENE_PAUSEN.filter((iso) => Date.parse(`${iso}T00:00:00Z`) < tagMs).length;
+}
+
+function isoTag(tagMs: number): string {
+  return new Date(tagMs).toISOString().slice(0, 10);
+}
+
+/** Ist dieser Kalendertag (UTC-Mitternacht) ein Trainingstag? */
+function istTrainingstag(tagMs: number): boolean {
+  if (EINGESCHOBENE_PAUSEN.includes(isoTag(tagMs))) return false;
+  if (tagMs >= WOCHENPLAN_AB) return TRAININGSWOCHENTAGE.includes(new Date(tagMs).getUTCDay());
+
+  const diff = Math.round((tagMs - ANKER_PUSH) / TAG_MS) - pausenVor(tagMs);
+  return ((diff % 3) + 3) % 3 !== 2;
+}
+
+/**
+ * Wie viele Trainingstage vor diesem Kalendertag liegen, ab dem Anker gezählt.
+ * Gerade heißt: der nächste Trainingstag ist Push.
+ *
+ * Die Ferienroutine rechnet geschlossen — je drei Tage zwei Trainingstage —
+ * und gilt damit auch vor dem Anker. Ab dem Wochenplan wird Tag für Tag
+ * gezählt: ein paar hundert Schritte im Jahr, und Einschübe laufen ohne
+ * Sonderfall mit.
+ */
+function trainingstageVor(tagMs: number): number {
+  const bis = Math.min(tagMs, WOCHENPLAN_AB);
+  const diff = Math.round((bis - ANKER_PUSH) / TAG_MS) - pausenVor(bis);
+  let n = 2 * Math.floor(diff / 3) + Math.min(((diff % 3) + 3) % 3, 2);
+
+  for (let t = WOCHENPLAN_AB; t < tagMs; t += TAG_MS) {
+    if (istTrainingstag(t)) n++;
+  }
+  return n;
 }
 
 /**
@@ -231,24 +287,22 @@ function pausenBis(tagMs: number): number {
  * Gegenstück zu rotationFor(). Gebraucht vom 5/3/1: um den Trainingsmax
  * fortzuschreiben, muss der AMRAP-Satz aus Woche 3 des vorigen Zyklus
  * gefunden werden — und dessen Datum steht nirgends geschrieben, es folgt
- * aus der Rotation. Ohne diese Umkehrung müsste die Zyklusposition mitgeführt
+ * aus dem Kalender. Ohne diese Umkehrung müsste die Zyklusposition mitgeführt
  * und gepflegt werden; so ist sie jederzeit neu ausrechenbar.
  */
 export function datumFuerPushIndex(pushIndex: number): string {
-  /* Die Einschübe verschieben das Datum nach hinten, und ein weiter hinten
-     liegendes Datum kann wieder über einen Einschub hinwegkommen. Deshalb
-     nicht einmal addieren, sondern bis zum Festpunkt rechnen. Die Schleife
-     läuft höchstens so oft, wie es Einschübe gibt; die Schranke fängt nur den
-     Fall ab, dass die Liste einmal unsortiert oder doppelt befüllt wird. */
-  let ms = ANKER_PUSH + pushIndex * 3 * 864e5;
+  // Vor dem Anker gibt es keine Einschübe, dort reicht die Dreierrotation.
+  if (pushIndex < 0) return isoTag(ANKER_PUSH + pushIndex * 3 * TAG_MS);
 
-  for (let n = 0; n <= EINGESCHOBENE_PAUSEN.length; n++) {
-    const soll = ANKER_PUSH + (pushIndex * 3 + pausenBis(ms)) * 864e5;
-    if (soll === ms) break;
-    ms = soll;
+  /* Der Push-Tag mit Index k ist der Trainingstag Nummer 2k. Jeder Woche hat
+     Trainingstage, die Schleife kommt also immer an. */
+  const ziel = pushIndex * 2;
+  let n = 0;
+  for (let t = ANKER_PUSH; ; t += TAG_MS) {
+    if (!istTrainingstag(t)) continue;
+    if (n === ziel) return isoTag(t);
+    n++;
   }
-
-  return new Date(ms).toISOString().slice(0, 10);
 }
 
 /**
@@ -263,9 +317,7 @@ export function datumFuerPushIndex(pushIndex: number): string {
  * Woche 3 mit 95 %.
  */
 export function pushIndexAbDatum(iso: string): number {
-  const day = Date.parse(`${iso}T00:00:00Z`);
-  const tage = (day - ANKER_PUSH) / 864e5 - pausenBis(day);
-  return Math.ceil(tage / 3);
+  return Math.ceil(trainingstageVor(Date.parse(`${iso}T00:00:00Z`)) / 2);
 }
 
 export type Rotation =
@@ -296,7 +348,7 @@ export type Rotation =
        */
       bezugPushIndex: number;
     }
-  | { art: "pause"; naechste: "push" };
+  | { art: "pause"; naechste: "push" | "pull" };
 
 /**
  * Welche Einheit an einem Zeitpunkt ansteht.
@@ -315,27 +367,44 @@ export type Rotation =
  * war, und der Teil, den ein Test greifen kann.
  */
 export function rotationFor(date: Date): Rotation {
-  const iso = wienerDatum(date);
-  const day = Date.parse(`${iso}T00:00:00Z`);
+  const tagMs = Date.parse(`${wienerDatum(date)}T00:00:00Z`);
+  const vorher = trainingstageVor(tagMs);
+  const einheit = vorher % 2 === 0 ? "push" : "pull";
 
-  // Ein eingeschobener Rest Day ist einer, egal was die Rotation sagen würde.
-  if (EINGESCHOBENE_PAUSEN.includes(iso)) return { art: "pause", naechste: "push" };
+  // An einem Rest Day ist `vorher` zugleich die Nummer des nächsten Trainingstags.
+  if (!istTrainingstag(tagMs)) return { art: "pause", naechste: einheit };
 
-  const diff = Math.round((day - ANKER_PUSH) / 864e5) - pausenBis(day);
-  const slot = ((diff % 3) + 3) % 3;
+  return trainingNach(vorher, einheit);
+}
 
-  /* Bei slot 0 ist diff = 3k, bei slot 1 ist diff = 3k + 1 — Math.floor(diff/3)
-     ergibt beide Male k. An einem Push-Tag ist das er selbst, an dem Pull-Tag
-     danach der Push-Tag davor. Genau das ist der Bezug. */
-  const bezugPushIndex = Math.floor(diff / 3);
+export type Trainingstag = Extract<Rotation, { art: "training" }>;
 
-  if (slot === 0) {
-    return { art: "training", einheit: "push", pushIndex: bezugPushIndex, bezugPushIndex };
+/**
+ * Eine Einheit an einem Tag, an dem der Kalender sie nicht vorsieht —
+ * "trotzdem Pull" am Push-Tag, Training am Rest Day.
+ *
+ * Push gilt als der nächste anstehende Push-Tag, am Push-Tag also er selbst:
+ * wer vorzieht, trainiert dessen 5/3/1-Vorgabe. Pull bezieht sich wie jedes
+ * Pull auf den letzten Push-Tag davor — daran hängt, ob die Spoto Press
+ * mitkommt. An einem Tag, an dem die Einheit ohnehin dran ist, kommt genau
+ * dasselbe heraus wie aus rotationFor().
+ */
+export function trainingAls(date: Date, einheit: "push" | "pull"): Trainingstag {
+  return trainingNach(trainingstageVor(Date.parse(`${wienerDatum(date)}T00:00:00Z`)), einheit);
+}
+
+/**
+ * Hinter heute liegen `vorher` Trainingstage. Der nächste Push-Tag ist damit
+ * Nummer ⌈vorher / 2⌉, der letzte davor Nummer ⌊(vorher − 1) / 2⌋. Am
+ * planmäßigen Tag fällt beides mit dem Kalender zusammen: Trainingstag 2k ist
+ * Push k, Trainingstag 2k + 1 das Pull danach mit Bezug k.
+ */
+function trainingNach(vorher: number, einheit: "push" | "pull"): Trainingstag {
+  if (einheit === "push") {
+    const pushIndex = Math.ceil(vorher / 2);
+    return { art: "training", einheit, pushIndex, bezugPushIndex: pushIndex };
   }
-  if (slot === 1) {
-    return { art: "training", einheit: "pull", pushIndex: null, bezugPushIndex };
-  }
-  return { art: "pause", naechste: "push" };
+  return { art: "training", einheit, pushIndex: null, bezugPushIndex: Math.floor((vorher - 1) / 2) };
 }
 
 /** Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest. */

@@ -1,8 +1,9 @@
 import { Suspense, type ReactNode } from "react";
+import Link from "next/link";
 import { connection } from "next/server";
-import { einheitFuerTag } from "@/lib/uebungen";
-import { laufendesTraining } from "@/lib/workouts";
-import { heutigeSaetze, type Einheitskopf } from "@/lib/plan";
+import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
+import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
+import { heutigeSaetze, rotationFor, type Einheitskopf } from "@/lib/plan";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { TrainingLogger, TrainingStart } from "@/components/training-logger";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
@@ -11,6 +12,12 @@ import { wienerDatum } from "@/lib/datum";
 
 // Die Startgewichte hängen an der Trainingshistorie und ändern sich nach
 // jedem Satz — hier darf nichts zwischengespeichert werden. Seit dem
+
+type Art = "push" | "pull";
+
+const NAME: Record<Art, string> = { push: "Push", pull: "Pull" };
+
+type Suchparameter = Promise<{ [key: string]: string | string[] | undefined }>;
 
 /**
  * Gerüst sofort, Einheit danach.
@@ -21,7 +28,7 @@ import { wienerDatum } from "@/lib/datum";
  * und Bankstand aus der Datenbank da sind. Jetzt steht die Hülle sofort und
  * die Einheit strömt nach.
  */
-export default function Training() {
+export default function Training({ searchParams }: { searchParams: Suchparameter }) {
   return (
     <Suspense
       fallback={
@@ -37,12 +44,12 @@ export default function Training() {
         </div>
       }
     >
-      <Einheit />
+      <Einheit searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function Einheit() {
+async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   /* Welche Einheit ansteht, hängt am heutigen Kalendertag. Beim Bauen steht
      der noch nicht fest, und Next lehnt ein `new Date()` im Vorrendern
      ausdrücklich ab — zu Recht: die Seite wäre auf den Build-Tag eingefroren
@@ -51,106 +58,62 @@ async function Einheit() {
      der richtigen Stelle: die Hülle darüber bleibt statisch. */
   await connection();
 
-  const heute = await einheitFuerTag(new Date());
+  const { einheit: gewuenscht } = await searchParams;
+  const rotation = rotationFor(new Date());
+  const lautPlan: Art | null = rotation.art === "training" ? rotation.einheit : null;
 
-  if (heute.art === "pause") {
-    const naechste = heute.naechste;
-
-    /* Seit es eingeschobene Rest Days gibt, ist die nächste Einheit nicht
-       zwingend die von morgen — zwei Pausentage hintereinander sind möglich.
-       Der Text muss das sagen, sonst sucht man morgen früh eine Einheit, die
-       erst übermorgen ansteht. */
-    const istMorgen = heute.naechsterTag === naechsterKalendertag();
-
-    return (
-      <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
-        <Eyebrow>Heute</Eyebrow>
-        <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
-        <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-          Deine Rotation ist Push – Pull – Rest Day.{" "}
-          {istMorgen ? (
-            <>
-              Als nächstes steht morgen{" "}
-              <b className="font-semibold text-fg">{naechste.fokus}</b> an.
-            </>
-          ) : (
-            <>
-              Heute und morgen ist Pause; als nächstes steht am{" "}
-              <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>{" "}
-              <b className="font-semibold text-fg">{naechste.fokus}</b> an.
-            </>
-          )}
-        </p>
-
-        {/* Vorher endete die Seite hier. Wer am Rest Day auf "Training" tippt,
-            will wissen, was ansteht — nicht nur, dass heute nichts ansteht. */}
-        <Card className="mt-5">
-          <div className="flex items-baseline justify-between gap-3">
-            <Eyebrow>{istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}</Eyebrow>
-            <span className="text-[11px] text-fg-faint">
-              {anzahl(naechste.uebungen.length, "Übung", "Übungen")} ·{" "}
-              {anzahl(
-                naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0),
-                "Satz",
-                "Sätze"
-              )}
-            </span>
-          </div>
-          <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.015em]">
-            {naechste.titel}
-          </p>
-          <ol className="mt-3.5 flex flex-col gap-2">
-            {naechste.uebungen.map((ex, i) => (
-              <li key={ex.name} className="flex items-center gap-3">
-                <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-sm bg-surface-3 text-[11px] font-bold text-fg-dim">
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-fg-dim">
-                  {ex.name}
-                </span>
-                <span className="shrink-0 text-[11px] tabular-nums text-fg-faint">
-                  {uebungsVorschau(ex)}
-                </span>
-              </li>
-            ))}
-          </ol>
-          <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-            Gewichte aus der letzten Ausführung. Das tatsächliche Zielgewicht rechnet
-            Kadenz am Trainingstag aus deinen Wiederholungen.
-          </p>
-        </Card>
-
-        {naechste.bank && (
-          <BankHinweis
-            bank={naechste.bank}
-            wann={istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}
-          />
-        )}
-      </div>
-    );
+  /* Der Kalender schlägt vor, er schreibt nicht vor. Welche Einheit auf dem
+     Schirm steht, in dieser Reihenfolge: die ausdrücklich gewählte, sonst die,
+     die heute schon läuft oder gelaufen ist — wer "trotzdem Pull" gestartet
+     hat und die Seite später über die Navigation öffnet, soll seinen Logger
+     sehen —, sonst die laut Kalender. Bleibt nichts übrig, ist Rest Day. */
+  let art: Art | null = gewuenscht === "push" || gewuenscht === "pull" ? gewuenscht : null;
+  if (art === null) {
+    try {
+      art = await heutigeEinheit();
+    } catch (e) {
+      console.error("Trainingsstatus nicht lesbar:", e);
+    }
   }
+  art ??= lautPlan;
 
-  const kopf: Einheitskopf = { key: heute.einheit, title: heute.titel, focus: heute.fokus };
+  if (art === null) return <RestDay />;
+
+  const plan = await trainingsplanAls(new Date(), art);
+  const kopf: Einheitskopf = { key: plan.einheit, title: plan.titel, focus: plan.fokus };
+  const wechsel = <EinheitWechsel art={art} lautPlan={lautPlan} />;
+
+  /* Der Schlüssel an Start und Logger ist nötig: beim Wechsel über den Link
+     bleibt die Seite dieselbe, und ohne ihn behielte React den Zustand der
+     vorigen Einheit — die Haken vom Push stünden plötzlich im Pull. */
 
   // Ist die Datenbank kurz nicht erreichbar, soll man trotzdem loggen können:
   // dann setzt der Logger den Beginn selbst, statt die Seite mit einem Fehler
   // abzuräumen.
   let laufend = null;
   try {
-    laufend = await laufendesTraining(heute.einheit);
+    laufend = await laufendesTraining(art);
   } catch (e) {
     console.error("Trainingsstatus nicht lesbar:", e);
     return (
-      <TrainingLogger uebungen={heute.uebungen} session={kopf} startedAtMs={null} />
+      <TrainingLogger
+        key={art}
+        uebungen={plan.uebungen}
+        session={kopf}
+        startedAtMs={null}
+        wechsel={wechsel}
+      />
     );
   }
 
   if (laufend === null) {
     return (
       <TrainingStart
+        key={art}
         session={kopf}
-        uebungen={heute.uebungen}
-        bankKarte={heute.bank ? <BankHinweis bank={heute.bank} /> : null}
+        uebungen={plan.uebungen}
+        bankKarte={plan.bank ? <BankHinweis bank={plan.bank} /> : null}
+        wechsel={wechsel}
       />
     );
   }
@@ -161,12 +124,132 @@ async function Einheit() {
      die Einheit längst vorbei war. */
   return (
     <TrainingLogger
-      uebungen={heute.uebungen}
+      key={art}
+      uebungen={plan.uebungen}
       session={kopf}
       startedAtMs={laufend.startedAtMs}
       finishedAtMs={laufend.finishedAtMs}
       geloggt={laufend.geloggt}
+      wechsel={wechsel}
     />
+  );
+}
+
+/**
+ * Die andere Einheit, jederzeit einen Tipp entfernt.
+ *
+ * Wer am Push-Tag lieber Pull macht — Bank belegt, Brust zieht noch —, soll
+ * nicht erst einen Rest Day abwarten müssen. Übungen und Gewichte folgen
+ * dabei denselben Regeln wie am planmäßigen Tag, siehe trainingAls().
+ */
+function EinheitWechsel({ art, lautPlan }: { art: Art; lautPlan: Art | null }) {
+  const andere: Art = art === "push" ? "pull" : "push";
+
+  return (
+    <p className="mt-6 text-center text-[13px] leading-relaxed text-fg-faint">
+      {art !== lautPlan && <>Laut Plan heute {lautPlan ? NAME[lautPlan] : "Rest Day"}. </>}
+      <Link
+        href={`/training?einheit=${andere}`}
+        className="font-semibold text-accent underline underline-offset-2"
+      >
+        Stattdessen {NAME[andere]} trainieren
+      </Link>
+    </p>
+  );
+}
+
+async function RestDay() {
+  const heute = await einheitFuerTag(new Date());
+  if (heute.art !== "pause") return null;
+
+  const naechste = heute.naechste;
+
+  /* Seit es eingeschobene Rest Days gibt, ist die nächste Einheit nicht
+     zwingend die von morgen — zwei Pausentage hintereinander sind möglich.
+     Der Text muss das sagen, sonst sucht man morgen früh eine Einheit, die
+     erst übermorgen ansteht. */
+  const istMorgen = heute.naechsterTag === naechsterKalendertag();
+
+  return (
+    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+      <Eyebrow>Heute</Eyebrow>
+      <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
+      <p className="mt-3 text-sm leading-relaxed text-fg-dim">
+        Du trainierst Mo, Mi, Fr und Sa, Push und Pull im Wechsel.{" "}
+        {istMorgen ? (
+          <>
+            Als nächstes steht morgen{" "}
+            <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+          </>
+        ) : (
+          <>
+            Heute und morgen ist Pause; als nächstes steht am{" "}
+            <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>{" "}
+            <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+          </>
+        )}
+      </p>
+
+      {/* Der Rest Day ist ein Vorschlag. Wer heute trotzdem ins Gym geht,
+          wählt hier die Einheit statt einen Tag zu warten. */}
+      <div className="mt-5 grid grid-cols-2 gap-2.5">
+        {(["push", "pull"] as const).map((e) => (
+          <Link
+            key={e}
+            href={`/training?einheit=${e}`}
+            className="flex min-h-[48px] items-center justify-center rounded-md bg-surface-2
+                       text-sm font-semibold text-fg transition active:scale-[0.98] md:hover:bg-surface-3"
+          >
+            Trotzdem {NAME[e]}
+          </Link>
+        ))}
+      </div>
+
+      {/* Vorher endete die Seite hier. Wer am Rest Day auf "Training" tippt,
+          will wissen, was ansteht — nicht nur, dass heute nichts ansteht. */}
+      <Card className="mt-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <Eyebrow>{istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}</Eyebrow>
+          <span className="text-[11px] text-fg-faint">
+            {anzahl(naechste.uebungen.length, "Übung", "Übungen")} ·{" "}
+            {anzahl(
+              naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0),
+              "Satz",
+              "Sätze"
+            )}
+          </span>
+        </div>
+        <p className="mt-1.5 text-[15px] font-semibold tracking-[-0.015em]">
+          {naechste.titel}
+        </p>
+        <ol className="mt-3.5 flex flex-col gap-2">
+          {naechste.uebungen.map((ex, i) => (
+            <li key={ex.name} className="flex items-center gap-3">
+              <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-sm bg-surface-3 text-[11px] font-bold text-fg-dim">
+                {i + 1}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px] text-fg-dim">
+                {ex.name}
+              </span>
+              <span className="shrink-0 text-[11px] tabular-nums text-fg-faint">
+                {uebungsVorschau(ex)}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
+          Gewichte aus der letzten Ausführung. Das tatsächliche Zielgewicht rechnet
+          Kadenz am Trainingstag aus deinen Wiederholungen.
+        </p>
+      </Card>
+
+      {naechste.bank && (
+        <BankHinweis
+          bank={naechste.bank}
+          wann={istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}
+        />
+      )}
+    </div>
   );
 }
 

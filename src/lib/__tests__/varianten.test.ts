@@ -83,7 +83,8 @@ describe("rotationFor trägt den Bezugs-Push-Index", () => {
   });
 
   it("nennt an einem Pull-Tag den Push-Tag davor", () => {
-    const r = rotationFor(new Date("2026-09-10T12:00:00Z"));
+    // Fr, 11.09. — der Donnerstag davor ist im Wochenplan Rest Day.
+    const r = rotationFor(new Date("2026-09-11T12:00:00Z"));
     if (r.art !== "training") throw new Error("kein Trainingstag");
     expect(r.einheit).toBe("pull");
     // pushIndex bleibt null: an einem Pull-Tag wird nicht gebankt, und
@@ -95,9 +96,8 @@ describe("rotationFor trägt den Bezugs-Push-Index", () => {
   it("bildet Jakobs eigene Beispieltage ab", () => {
     /* Fr, 28.08. lief schwer (62,5/72,5/80 kg — Woche 2), Mo, 31.08. leicht
        (dreimal 65 kg). Genau diese Abwechslung meinte der Wunsch mit
-       "Freitag schwer, Montag leicht"; der Wochentag selbst trägt sie nicht —
-       am 21.09. fällt Push wieder auf einen Montag, und dann ist es ein
-       schwerer Tag. */
+       "Freitag schwer, Montag leicht"; der Wochentag selbst trug sie nicht,
+       die Ferienroutine wanderte alle drei Tage durch die Woche. */
     const freitag = rotationFor(new Date("2026-08-28T12:00:00Z"));
     const montag = rotationFor(new Date("2026-08-31T12:00:00Z"));
     if (freitag.art !== "training" || montag.art !== "training") {
@@ -235,7 +235,7 @@ describe("zielProjektion", () => {
 
     // Punkt 0 und 1 tragen denselben Trainingsmax — das ist die Waagrechte.
     expect(stand.kurve[1].tmKg).toBe(90);
-    expect(stand.kurve[1].datum).toBe("2026-09-12");
+    expect(stand.kurve[1].datum).toBe("2026-09-16");
     // Erst danach der Sprung.
     expect(stand.kurve[2].tmKg).toBe(92.5);
 
@@ -248,7 +248,7 @@ describe("zielProjektion", () => {
     }
     expect([...spruenge].sort()).toEqual([0, 2.5]);
 
-    // Ein Zyklus dauert 24 Tage; die Waagrechte deckt 23 davon ab.
+    // Ein Zyklus dauert 28 Tage; die Waagrechte deckt 27 davon ab.
     const abstand =
       (Date.parse(`${stand.kurve[2].datum}T00:00:00Z`) -
         Date.parse(`${stand.kurve[0].datum}T00:00:00Z`)) /

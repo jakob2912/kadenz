@@ -56,12 +56,6 @@ export async function satzSpeichern(input: {
   setIndex: number;
   kg: number;
   reps: number;
-  /**
-   * War der Satz technisch sauber? Undefined heißt "nicht beurteilt" und ist
-   * der Normalfall — dann bleibt die Spalte NULL, und ein späteres Markieren
-   * kann sie immer noch setzen.
-   */
-  sauber?: boolean | null;
 }): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
     const workout = await workoutHeute(input.kind);
@@ -73,14 +67,12 @@ export async function satzSpeichern(input: {
           setIndex: input.setIndex,
         },
       },
-      /* `sauber: input.sauber ?? null` und nicht weglassen: das Umschalten der
-         Markierung läuft über denselben Weg wie das Abhaken, und ein
-         ausgelassenes Feld hieße bei einem Upsert "nicht ändern". Wer eine
-         Markierung wieder zurücknimmt, käme dann nie auf NULL zurück. */
+      /* Die Spalte `sauber` wird nicht mehr geschrieben: eine unsaubere
+         letzte Wiederholung zählt Jakob seit dem 11.09.2026 einfach nicht
+         mit. Ältere Markierungen bleiben stehen und wirken weiter. */
       update: {
         kg: input.kg,
         reps: input.reps,
-        sauber: input.sauber ?? null,
         loggedAt: new Date(),
       },
       create: {
@@ -89,7 +81,6 @@ export async function satzSpeichern(input: {
         setIndex: input.setIndex,
         kg: input.kg,
         reps: input.reps,
-        sauber: input.sauber ?? null,
       },
     });
     return { ok: true };
@@ -230,8 +221,6 @@ export type GeloggterSatz = {
   setIndex: number;
   kg: number;
   reps: number;
-  /** Null heißt "nicht beurteilt". */
-  sauber: boolean | null;
 };
 
 /**
@@ -252,7 +241,7 @@ export async function laufendesTraining(
     include: {
       sets: {
         orderBy: [{ exercise: "asc" }, { setIndex: "asc" }],
-        select: { exercise: true, setIndex: true, kg: true, reps: true, sauber: true },
+        select: { exercise: true, setIndex: true, kg: true, reps: true },
       },
     },
   });
@@ -264,6 +253,24 @@ export async function laufendesTraining(
     beendet: workout.finishedAt !== null,
     geloggt: workout.sets,
   };
+}
+
+/**
+ * Welche Einheit heute schon läuft oder gelaufen ist — bei zweien die zuletzt
+ * begonnene.
+ *
+ * Seit sich jede Einheit an jedem Tag wählen lässt, sagt der Kalender nicht
+ * mehr sicher, was heute trainiert wird. Wer "trotzdem Pull" gestartet hat
+ * und die Seite später über die Navigation öffnet, soll seinen Logger sehen
+ * und nicht den Push-Plan.
+ */
+export async function heutigeEinheit(): Promise<"push" | "pull" | null> {
+  const workout = await prisma.workout.findFirst({
+    where: { date: new Date(`${heuteIso()}T00:00:00Z`) },
+    orderBy: { startedAt: "desc" },
+    select: { kind: true },
+  });
+  return workout?.kind === "push" || workout?.kind === "pull" ? workout.kind : null;
 }
 
 /** Einheit beginnen. Idempotent — ein zweiter Aufruf setzt die Uhr nicht zurück. */

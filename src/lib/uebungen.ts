@@ -18,6 +18,7 @@ import {
   SESSIONS,
   mitHistorie,
   rotationFor,
+  trainingAls,
   saetzeFuerTag,
   type PlannedExercise,
   type ZuPlanen,
@@ -207,8 +208,17 @@ function morgen(date: Date): Date {
   return new Date(new Date(heute + 864e5).toISOString().slice(0, 10) + "T12:00:00Z");
 }
 
-async function trainingsplanFuer(date: Date): Promise<Trainingsplan> {
-  const rotation = rotationFor(date);
+/**
+ * Der Plan einer frei gewählten Einheit — "trotzdem Pull", Training am Rest
+ * Day. Übungen, Gewichte und Varianten folgen denselben Regeln wie am
+ * planmäßigen Tag; welcher Push- und Bezugstag gilt, sagt trainingAls().
+ */
+export function trainingsplanAls(date: Date, einheit: Einheit): Promise<Trainingsplan> {
+  return trainingsplanFuer(date, einheit);
+}
+
+async function trainingsplanFuer(date: Date, gewaehlt?: Einheit): Promise<Trainingsplan> {
+  const rotation = gewaehlt ? trainingAls(date, gewaehlt) : rotationFor(date);
 
   /* Kann nur eintreten, wenn jemand diese Funktion für einen Pausentag
      aufruft. Dann ist der Fehler im Aufrufer, nicht in den Daten — lieber
