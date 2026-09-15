@@ -96,20 +96,41 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
     };
   }
 
-  try {
-    /* Ohne Datenbank bleibt nur das Cookie, und dieser Weg lässt sich nicht
-       zwischenspeichern — cookies() ist in "use cache" nicht erlaubt. Das ist
-       der Ausnahmefall (DATABASE_URL nicht gesetzt), nicht der Normalbetrieb. */
-    if (!datenbankKonfiguriert()) {
-      const jar = await cookies();
-      const refresh = jar.get("kadenz_google_refresh")?.value;
-      if (!refresh) {
-        throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
-      }
-      return await auswerten(refresh, days);
-    }
+  /* Ohne Datenbank bleibt nur das Cookie, und dieser Weg lässt sich nicht
+     zwischenspeichern — cookies() ist in "use cache" nicht erlaubt. Das ist
+     der Ausnahmefall (DATABASE_URL nicht gesetzt), nicht der Normalbetrieb. */
+  if (!datenbankKonfiguriert()) {
+    const jar = await cookies();
+    const refresh = jar.get("kadenz_google_refresh")?.value;
+    return alsLage(async () => {
+      if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
+      return auswerten(refresh, days);
+    });
+  }
 
-    return await gesundheitsdaten(days);
+  return gesundheitsdaten(days);
+}
+
+/**
+ * Fehlschläge in ein { verbunden: false } übersetzen — INNERHALB des Scopes,
+ * in dem sie geworfen werden.
+ *
+ * Vorher wurde NichtVerbundenFehler aus der gecachten Funktion hinausgeworfen
+ * und in loadDashboard() per instanceof aufgefangen. Das hat nie funktioniert:
+ * über die "use cache"-Grenze kommt ein Fehler serialisiert an, als schlichtes
+ * Error mit einem digest, und instanceof ist dort immer falsch. Aufgefallen
+ * ist es am 15.09.2026, als Googles Refresh-Token ablief — statt "nicht
+ * verbunden" zeigten Heute, Essen, Verlauf und Coach "This page couldn't
+ * load". Genau der Fall, für den die Unterscheidung gebaut war, war der
+ * einzige, in dem sie gebraucht wurde, und dort griff sie nicht.
+ *
+ * Unerwartete Fehler — ein Programmierfehler in der Auswertung — laufen
+ * weiter durch. Die sollen sichtbar sein, nicht als "nicht verbunden"
+ * verkleidet.
+ */
+async function alsLage(ermitteln: () => Promise<Dashboard>): Promise<Dashboard> {
+  try {
+    return await ermitteln();
   } catch (e) {
     if (e instanceof NichtVerbundenFehler) return { verbunden: false, grund: e.message };
     throw e;
@@ -119,40 +140,47 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
 /**
  * Der teure Teil, serverseitig zwischengespeichert.
  *
- * Fünf Minuten, weil daran nichts schneller altert: Schlaf und Ruhepuls
- * stehen nach der Nacht fest, und das Morgengewicht wird einmal am Tag
- * eingetragen. Wer es einträgt, soll es trotzdem sofort sehen — dafür ruft
- * gewichtEintragen() updateTag("gesundheit") auf, statt auf den Ablauf zu
- * warten.
+ * Fünf Minuten, wenn es geklappt hat: Schlaf und Ruhepuls stehen nach der
+ * Nacht fest, und das Morgengewicht wird einmal am Tag eingetragen. Wer es
+ * einträgt, soll es trotzdem sofort sehen — dafür ruft gewichtEintragen()
+ * updateTag("gesundheit") auf.
  *
- * Fehlschläge werden ausdrücklich geworfen statt als { verbunden: false }
- * zurückgegeben: Next legt geworfene Fehler nicht ab. Sonst hinge eine kurz
- * nicht erreichbare Datenbank oder eine einmalige Absage von Google fünf
- * Minuten lang als "nicht verbunden" auf allen vier Seiten fest.
+ * Dreißig Sekunden, wenn nicht. Ein Fehlschlag wird ebenfalls abgelegt,
+ * aber nur kurz (bedingte cacheLife, siehe Next-Doku "Conditional cache
+ * lifetimes"). Das ist absichtlich: ohne Ablage liefe bei abgelaufenem Token
+ * jeder Tab-Wechsel erneut gegen Google in dieselbe Absage. Und nach dem
+ * erneuten Login verwirft der OAuth-Callback den Eintrag ohnehin sofort.
  */
 async function gesundheitsdaten(days: number): Promise<Dashboard> {
   "use cache";
-  cacheLife({ stale: 300, revalidate: 300, expire: 900 });
   cacheTag("gesundheit");
 
-  let refresh: string | null;
-  try {
-    refresh = await refreshTokenLesen();
-  } catch (e) {
-    // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
-    // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
-    throw new NichtVerbundenFehler(
-      `Die Datenbank ist gerade nicht erreichbar: ${
-        e instanceof Error ? e.message : String(e)
-      }`
-    );
+  const lage = await alsLage(async () => {
+    let refresh: string | null;
+    try {
+      refresh = await refreshTokenLesen();
+    } catch (e) {
+      // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
+      // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
+      throw new NichtVerbundenFehler(
+        `Die Datenbank ist gerade nicht erreichbar: ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
+    }
+
+    if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
+    return auswerten(refresh, days);
+  });
+
+  // Genau ein cacheLife je Aufruf, je nach Ausgang.
+  if (lage.verbunden) {
+    cacheLife({ stale: 300, revalidate: 300, expire: 900 });
+  } else {
+    cacheLife({ stale: 30, revalidate: 30, expire: 60 });
   }
 
-  if (!refresh) {
-    throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
-  }
-
-  return auswerten(refresh, days);
+  return lage;
 }
 
 /** OAuth-Refresh, die vier Abrufe, die Auswertung. */
@@ -161,11 +189,24 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
   try {
     accessToken = (await refreshAccessToken(refresh)).access_token;
   } catch (e) {
-    // Werfen statt zurückgeben: siehe gesundheitsdaten(). Ein abgelehnter
-    // Refresh ist oft vorübergehend und soll sich nicht fünf Minuten halten.
-    throw new NichtVerbundenFehler(
-      e instanceof Error ? e.message : "Token konnte nicht erneuert werden."
-    );
+    const text = e instanceof Error ? e.message : "Token konnte nicht erneuert werden.";
+
+    /* invalid_grant heißt: Google nimmt diesen Refresh-Token nicht mehr an.
+       Bei Kadenz ist das kein Ausnahmefall, sondern der Wochenrhythmus — das
+       OAuth-Projekt steht auf "Testing", und Google lässt Refresh-Tokens von
+       Apps im Testmodus nach sieben Tagen verfallen. Der Rohtext ("Token-
+       Anfrage fehlgeschlagen (400): invalid_grant — Token has been expired or
+       revoked") stand bis zum 15.09.2026 so auf der Seite. Er ist richtig,
+       aber er sagt nicht, was zu tun ist. */
+    if (text.includes("invalid_grant")) {
+      throw new NichtVerbundenFehler(
+        "Die Verbindung zu Google Health ist abgelaufen. Einmal neu verbinden, dann " +
+          "laufen Schlaf, Ruhepuls, HRV und Gewicht wieder. Das passiert etwa jede " +
+          "Woche, solange das Google-Projekt im Testmodus steht."
+      );
+    }
+
+    throw new NichtVerbundenFehler(text);
   }
 
   const to = new Date();

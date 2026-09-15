@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { exchangeCode } from "@/lib/google-health";
 import { datenbankKonfiguriert, istKonfigurationsFehler } from "@/lib/konfiguration";
@@ -78,6 +79,17 @@ export async function GET(request: Request) {
     path: "/",
     maxAge: 60 * 60 * 24 * 180,
   });
+
+  /* Den zwischengespeicherten Stand verwerfen. Ist der alte Token abgelaufen,
+     liegt dort ein "nicht verbunden" — und die Weiterleitung unten führt
+     direkt auf die Startseite, die genau diesen Eintrag liest.
+
+     { expire: 0 } und nicht "max": "max" markiert nur als veraltet und liefert
+     beim nächsten Aufruf erst noch einmal den alten Stand aus. Wer sich gerade
+     neu verbunden hat, sähe dann ausgerechnet "nicht verbunden". updateTag
+     wäre die direkte Wahl, ist aber nur in Server Actions erlaubt, nicht in
+     Route Handlern. */
+  revalidateTag("gesundheit", { expire: 0 });
 
   return NextResponse.redirect(new URL("/?verbunden=1", url.origin));
 }
