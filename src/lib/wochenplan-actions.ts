@@ -1,18 +1,21 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { istWochenplan, wochenplanSetzen } from "./wochenplan";
+import { istFrueh, istSpaet, wochenwahlSetzen, type Wochenstand } from "./wochenplan";
 
 /**
- * Den Wochenplan umschalten. Eigene Datei wie bank-actions.ts: wochenplan.ts
- * wird auch vom MCP-Server geladen.
+ * Einen Wochenschalter umlegen. Eigene Datei wie bank-actions.ts:
+ * wochenplan.ts wird auch vom MCP-Server geladen.
  */
-export async function wochenplanWechseln(
-  plan: string
-): Promise<{ ok: true; ab: string | null } | { ok: false; fehler: string }> {
-  if (!istWochenplan(plan)) return { ok: false, fehler: "Unbekannter Wochenplan." };
+export async function wochenschalterUmlegen(
+  schalter: "frueh" | "spaet",
+  wert: string
+): Promise<{ ok: true; stand: Wochenstand } | { ok: false; fehler: string }> {
+  let r;
+  if (schalter === "frueh" && istFrueh(wert)) r = await wochenwahlSetzen({ frueh: wert });
+  else if (schalter === "spaet" && istSpaet(wert)) r = await wochenwahlSetzen({ spaet: wert });
+  else return { ok: false, fehler: "Unbekannter Schalter." };
 
-  const r = await wochenplanSetzen(plan);
   if (r.ok) revalidatePath("/", "layout");
   return r;
 }

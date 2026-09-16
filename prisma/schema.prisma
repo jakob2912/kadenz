@@ -27,12 +27,16 @@ model Einstellung {
   aktualisiert DateTime @updatedAt
 }
 
-/// Ab welchem Tag welcher Wochenplan gilt ("werktage" oder "wochenende").
-/// Ohne Zeile gilt "werktage". Die Rechnung dazu steht in plan.ts.
-model Planwechsel {
-  ab       DateTime @id @db.Date
-  plan     String
-  angelegt DateTime @default(now())
+/// Die zwei Schalter einer Woche. `woche` ist ihr Montag. Null heißt
+/// Standard (Mo bzw. Fr + Sa); eine Woche ohne Zeile ist ganz Standard.
+/// Die Regeln dazu stehen in wocheAm() in plan.ts.
+model Wochenwahl {
+  woche        DateTime @id @db.Date
+  /// "mo" oder "di": der erste Push der Woche.
+  frueh        String?
+  /// "frsa" oder "saso": Fr Push + Sa Pull, oder Sa Push + So Pull.
+  spaet        String?
+  aktualisiert DateTime @updatedAt
 }
 
 model Workout {

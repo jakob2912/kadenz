@@ -2,81 +2,117 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { wochenplanWechseln } from "@/lib/wochenplan-actions";
-import { WOCHENPLAN_NAMEN, type Wochenplan } from "@/lib/plan";
+import { wochenschalterUmlegen } from "@/lib/wochenplan-actions";
+import type { Wochenstand } from "@/lib/wochenplan";
+import { wochenText } from "@/lib/plan";
 import { kurzDatum } from "@/components/ui";
 
 /**
- * Umschalten zwischen den beiden Wochenplänen.
- *
- * Gedacht für den Tag, an dem ein Push-Tag ausfällt: Mo oder Fr geht nicht,
- * also Wochenende — Di bzw. Sa wird Push. Ab wann der Wechsel gilt, rechnet
- * wochenplanSetzen() aus dem, was schon geloggt ist; hier steht nur die
- * Antwort.
+ * Die zwei Schalter der Woche: erster Push am Mo oder Di, Wochenende als
+ * Fr + Sa oder Sa + So. Jede Woche beginnt beim Standard. Was sich nicht mehr
+ * umlegen lässt, ist ausgegraut, mit dem Grund darunter — die Prüfung selbst
+ * macht der Server (wochenwahlSetzen()).
  */
-export function WochenplanSchalter({
-  aktuell,
-  kommtAb,
-}: {
-  aktuell: Wochenplan;
-  /** Gesetzt, wenn der eingestellte Plan erst an einem späteren Tag greift. */
-  kommtAb: string | null;
-}) {
+export function WochenplanSchalter({ stand }: { stand: Wochenstand }) {
   const router = useRouter();
-  const [meldung, setMeldung] = useState<string | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, starte] = useTransition();
 
-  function wechseln(plan: Wochenplan) {
-    if (plan === aktuell || laeuft) return;
-    setMeldung(null);
+  function umlegen(schalter: "frueh" | "spaet", wert: string) {
+    if (laeuft) return;
+    setFehler(null);
     starte(async () => {
-      const r = await wochenplanWechseln(plan);
-      if (!r.ok) {
-        setMeldung(r.fehler);
-        return;
-      }
-      setMeldung(r.ab ? `Gilt ab ${kurzDatum(r.ab)}.` : null);
-      router.refresh();
+      const r = await wochenschalterUmlegen(schalter, wert);
+      if (!r.ok) setFehler(r.fehler);
+      else router.refresh();
     });
   }
 
   return (
     <div className="mt-6">
       <p className="text-center text-[11px] uppercase tracking-[0.11em] text-fg-faint">
-        Wochenplan
+        Woche ab {kurzDatum(stand.montag)}
       </p>
+      <p className="mt-1 text-center text-[13px] text-fg-dim">{wochenText(stand)}</p>
+
+      <Schalter
+        titel="Erster Push"
+        optionen={[
+          ["mo", "Montag"],
+          ["di", "Dienstag"],
+        ]}
+        wert={stand.frueh}
+        gesperrt={stand.fruehGesperrt}
+        laeuft={laeuft}
+        onWahl={(w) => umlegen("frueh", w)}
+      />
+      <Schalter
+        titel="Wochenende"
+        optionen={[
+          ["frsa", "Fr + Sa"],
+          ["saso", "Sa + So"],
+        ]}
+        wert={stand.spaet}
+        gesperrt={stand.spaetGesperrt}
+        laeuft={laeuft}
+        onWahl={(w) => umlegen("spaet", w)}
+      />
+
+      {fehler && (
+        <p className="mt-2 text-center text-[11px] leading-relaxed text-strain" aria-live="polite">
+          {fehler}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Schalter({
+  titel,
+  optionen,
+  wert,
+  gesperrt,
+  laeuft,
+  onWahl,
+}: {
+  titel: string;
+  optionen: [string, string][];
+  wert: string;
+  gesperrt: string | null;
+  laeuft: boolean;
+  onWahl: (wert: string) => void;
+}) {
+  return (
+    <div className="mt-3">
       <div
         role="radiogroup"
-        aria-label="Wochenplan"
-        className="mt-2 grid grid-cols-2 gap-1 rounded-md bg-surface-2 p-1"
+        aria-label={titel}
+        className="grid grid-cols-[88px_1fr_1fr] items-center gap-1 rounded-md bg-surface-2 p-1"
       >
-        {(Object.keys(WOCHENPLAN_NAMEN) as Wochenplan[]).map((plan) => {
-          const [titel, tage] = WOCHENPLAN_NAMEN[plan].split(" · ");
-          const aktiv = plan === aktuell;
+        <span className="pl-2 text-[11px] text-fg-faint">{titel}</span>
+        {optionen.map(([schluessel, name]) => {
+          const aktiv = schluessel === wert;
+          const aus = laeuft || (gesperrt !== null && !aktiv);
           return (
             <button
-              key={plan}
+              key={schluessel}
               type="button"
               role="radio"
               aria-checked={aktiv}
-              disabled={laeuft}
-              onClick={() => wechseln(plan)}
-              className={`flex min-h-[48px] flex-col items-center justify-center rounded-sm px-2 text-center transition
+              disabled={aus}
+              onClick={() => !aktiv && onWahl(schluessel)}
+              className={`min-h-[44px] rounded-sm px-2 text-[13px] font-semibold transition
                 ${aktiv ? "bg-surface-3 text-fg" : "text-fg-dim md:hover:text-fg"}
-                ${laeuft ? "opacity-60" : ""}`}
+                ${aus && !aktiv ? "opacity-40" : ""}`}
             >
-              <span className="text-[13px] font-semibold">{titel}</span>
-              <span className="text-[11px] text-fg-faint">{tage}</span>
+              {name}
             </button>
           );
         })}
       </div>
-      <p className="mt-2 text-center text-[11px] leading-relaxed text-fg-faint" aria-live="polite">
-        {meldung ??
-          (kommtAb
-            ? `Gilt ab ${kurzDatum(kommtAb)}.`
-            : "Fällt Mo oder Fr aus, auf Wochenende schalten — dann ist Di bzw. Sa Push.")}
-      </p>
+      {gesperrt && (
+        <p className="mt-1 text-center text-[11px] leading-relaxed text-fg-faint">{gesperrt}</p>
+      )}
     </div>
   );
 }

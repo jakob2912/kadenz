@@ -13,14 +13,14 @@ import { prisma } from "./db";
 import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
-import { wochenplaeneLesen } from "./wochenplan";
+import { wochenwahlenLesen } from "./wochenplan";
 import {
   SESSIONS,
   mitHistorie,
   rotationFor,
   trainingAls,
   saetzeFuerTag,
-  type Planwechsel,
+  type Wochenwahl,
   type PlannedExercise,
   type ZuPlanen,
 } from "./plan";
@@ -144,26 +144,26 @@ export type Tagesplan =
     };
 
 /**
- * `plaene` reicht mit, wer die Planwechsel schon geladen hat; sonst liest die
+ * `wahlen` reicht mit, wer die Wochenwahl schon geladen hat; sonst liest die
  * Funktion sie selbst.
  */
 export async function einheitFuerTag(
   date: Date,
-  plaene?: readonly Planwechsel[]
+  wahlen?: readonly Wochenwahl[]
 ): Promise<Tagesplan> {
-  plaene ??= await wochenplaeneLesen();
-  const rotation = rotationFor(date, plaene);
+  wahlen ??= await wochenwahlenLesen();
+  const rotation = rotationFor(date, wahlen);
 
   if (rotation.art === "pause") {
-    const naechsterTag = naechsterTrainingstag(date, plaene);
+    const naechsterTag = naechsterTrainingstag(date, wahlen);
     return {
       art: "pause",
-      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), plaene),
+      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), wahlen),
       naechsterTag,
     };
   }
 
-  return { art: "training", ...(await trainingsplanFuer(date, plaene)) };
+  return { art: "training", ...(await trainingsplanFuer(date, wahlen)) };
 }
 
 /**
@@ -174,12 +174,12 @@ export async function einheitFuerTag(
  * also; wird die Schranke erreicht, ist ein Plan kaputt, und ein Fehler ist
  * besser als eine Endlosschleife.
  */
-function naechsterTrainingstag(date: Date, plaene: readonly Planwechsel[]): string {
+function naechsterTrainingstag(date: Date, wahlen: readonly Wochenwahl[]): string {
   let tag = date;
 
   for (let n = 0; n < 7; n++) {
     tag = morgen(tag);
-    if (rotationFor(tag, plaene).art === "training") return wienerDatum(tag);
+    if (rotationFor(tag, wahlen).art === "training") return wienerDatum(tag);
   }
 
   throw new Error(`Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an.`);
@@ -206,17 +206,17 @@ function morgen(date: Date): Date {
 export async function trainingsplanAls(
   date: Date,
   einheit: Einheit,
-  plaene?: readonly Planwechsel[]
+  wahlen?: readonly Wochenwahl[]
 ): Promise<Trainingsplan> {
-  return trainingsplanFuer(date, plaene ?? (await wochenplaeneLesen()), einheit);
+  return trainingsplanFuer(date, wahlen ?? (await wochenwahlenLesen()), einheit);
 }
 
 async function trainingsplanFuer(
   date: Date,
-  plaene: readonly Planwechsel[],
+  wahlen: readonly Wochenwahl[],
   gewaehlt?: Einheit
 ): Promise<Trainingsplan> {
-  const rotation = gewaehlt ? trainingAls(date, gewaehlt, plaene) : rotationFor(date, plaene);
+  const rotation = gewaehlt ? trainingAls(date, gewaehlt, wahlen) : rotationFor(date, wahlen);
 
   /* Kann nur eintreten, wenn jemand diese Funktion für einen Pausentag
      aufruft. Dann ist der Fehler im Aufrufer, nicht in den Daten — lieber
@@ -232,7 +232,7 @@ async function trainingsplanFuer(
   let bank: Bankstand | null = null;
   if (einheit === "push" && rotation.pushIndex !== null) {
     try {
-      bank = await bankstandFuer(rotation.pushIndex, plaene);
+      bank = await bankstandFuer(rotation.pushIndex, wahlen);
     } catch (e) {
       // Ohne Trainingsmax fällt der Bank-Slot weg, der Rest der Einheit steht.
       console.error("Bankstand nicht lesbar:", e);

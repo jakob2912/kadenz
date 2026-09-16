@@ -23,11 +23,9 @@ import {
   datumFuerPushIndex,
   pushIndexAbDatum,
   rotationFor,
-  wochenplanAm,
-  type Planwechsel,
-  type Wochenplan,
+  type Wochenwahl,
 } from "./plan";
-import { wochenplaeneLesen } from "./wochenplan";
+import { wochenwahlenLesen } from "./wochenplan";
 import {
   BANK_UEBUNG,
   bankPlan,
@@ -98,8 +96,6 @@ export type Bankuebersicht = {
   naechsterTest: string | null;
   /** Geschätztes Maximum der letzten Wochen — Grundlage des ersten Testversuchs. */
   schaetzung: number | null;
-  /** Der heute geltende Wochenplan. */
-  wochenplan: Wochenplan;
 };
 
 /** Wie weit der nächste Testtag gesucht wird: gut drei Zyklen. */
@@ -118,13 +114,13 @@ const TEST_SUCHE_PUSH_TAGE = 26;
  */
 function naechsterPushTag(
   heute: string,
-  plaene: readonly Planwechsel[]
+  wahlen: readonly Wochenwahl[]
 ): { iso: string; pushIndex: number } | null {
   for (let n = 0; n < 8; n++) {
     const iso = new Date(Date.parse(`${heute}T00:00:00Z`) + n * 864e5)
       .toISOString()
       .slice(0, 10);
-    const r = rotationFor(new Date(`${iso}T12:00:00Z`), plaene);
+    const r = rotationFor(new Date(`${iso}T12:00:00Z`), wahlen);
     if (r.art === "training" && r.einheit === "push" && r.pushIndex !== null) {
       return { iso, pushIndex: r.pushIndex };
     }
@@ -179,7 +175,7 @@ function vorschauAb(
   anker: Zyklusanker,
   tmKg: number,
   schaetzung: number | null,
-  plaene: readonly Planwechsel[]
+  wahlen: readonly Wochenwahl[]
 ): Wochenvorschau[] {
   const out: Wochenvorschau[] = [];
 
@@ -192,7 +188,7 @@ function vorschauAb(
     out.push({
       zyklus: pos.zyklus,
       woche: pos.woche,
-      datum: datumFuerPushIndex(index, plaene),
+      datum: datumFuerPushIndex(index, wahlen),
       saetze: test ? testPlan(tmKg, schaetzung) : bankPlan(tmKg, pos.woche),
       deload: !test && pos.woche === 4,
       test,
@@ -204,8 +200,8 @@ function vorschauAb(
 
 export async function bankuebersicht(): Promise<Bankuebersicht> {
   const heute = heuteWien();
-  const plaene = await wochenplaeneLesen();
-  const naechster = naechsterPushTag(heute, plaene);
+  const wahlen = await wochenwahlenLesen();
+  const naechster = naechsterPushTag(heute, wahlen);
 
   const [historie, saetze] = await Promise.all([
     trainingsmaxHistorie(24),
@@ -215,7 +211,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
   let stand: Bankstand | null = null;
   if (naechster) {
     try {
-      stand = await bankstandFuer(naechster.pushIndex, plaene);
+      stand = await bankstandFuer(naechster.pushIndex, wahlen);
     } catch (e) {
       // Der Verlauf und die Historie stehen auch ohne den Stand. Diesen Tab
       // wegen einer nicht lesbaren Fortschreibung ganz zu leeren wäre falsch.
@@ -251,15 +247,15 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
        gueltigAb der jüngsten Trainingsmax-Zeile. Genau daran hängt seit dem
        Deload-Skip die Wochenzählung — siehe zyklusanker() in bank.ts. */
     const anker: Zyklusanker = {
-      pushIndex: pushIndexAbDatum(tm.gueltigAb, plaene),
+      pushIndex: pushIndexAbDatum(tm.gueltigAb, wahlen),
       zyklus: tm.zyklus,
     };
 
-    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, plaene);
+    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, wahlen);
 
     for (let n = 0; n < TEST_SUCHE_PUSH_TAGE; n++) {
       if (bankPosition(naechster.pushIndex + n, anker).art === "test") {
-        naechsterTest = datumFuerPushIndex(naechster.pushIndex + n, plaene);
+        naechsterTest = datumFuerPushIndex(naechster.pushIndex + n, wahlen);
         break;
       }
     }
@@ -267,7 +263,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     /* Die Projektion beginnt am Anfang des laufenden Zyklus, nicht heute: der
        Trainingsmax gilt für diesen Zyklus bereits, und ihn ab heute
        weiterzuzählen verschöbe die ganze Treppe um bis zu 24 Tage nach hinten. */
-    ziel = zielProjektion(tm.tmKg, anker.zyklus, datumFuerPushIndex(anker.pushIndex, plaene));
+    ziel = zielProjektion(tm.tmKg, anker.zyklus, datumFuerPushIndex(anker.pushIndex, wahlen));
   }
 
   return {
@@ -281,6 +277,5 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     pr,
     naechsterTest,
     schaetzung,
-    wochenplan: wochenplanAm(heute, plaene),
   };
 }

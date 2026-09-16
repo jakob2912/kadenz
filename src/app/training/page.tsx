@@ -4,15 +4,15 @@ import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
 import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
 import {
-  eingestellterWochenplan,
   heutigeSaetze,
+  montagVon,
   rotationFor,
-  wochenplanAm,
-  WOCHENPLAN_NAMEN,
+  wocheAm,
+  wochenText,
   type Einheitskopf,
-  type Planwechsel,
+  type Wochenwahl,
 } from "@/lib/plan";
-import { wochenplaeneLesen } from "@/lib/wochenplan";
+import { wochenstand, wochenwahlenLesen } from "@/lib/wochenplan";
 import { WochenplanSchalter } from "@/components/wochenplan-schalter";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { vorTest } from "@/lib/kraft";
@@ -70,8 +70,8 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   await connection();
 
   const { einheit: gewuenscht } = await searchParams;
-  const plaene = await wochenplaeneLesen();
-  const rotation = rotationFor(new Date(), plaene);
+  const wahlen = await wochenwahlenLesen();
+  const rotation = rotationFor(new Date(), wahlen);
   const lautPlan: Art | null = rotation.art === "training" ? rotation.einheit : null;
 
   /* Der Kalender schlägt vor, er schreibt nicht vor. Welche Einheit auf dem
@@ -89,17 +89,14 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   }
   art ??= lautPlan;
 
-  if (art === null) return <RestDay plaene={plaene} />;
+  if (art === null) return <RestDay wahlen={wahlen} />;
 
-  const plan = await trainingsplanAls(new Date(), art, plaene);
+  const plan = await trainingsplanAls(new Date(), art, wahlen);
   const kopf: Einheitskopf = { key: plan.einheit, title: plan.titel, focus: plan.fokus };
   const wechsel = (
     <>
       <EinheitWechsel art={art} lautPlan={lautPlan} />
-      <WochenplanSchalter
-        aktuell={eingestellterWochenplan(plaene)}
-        kommtAb={kommtAb(plaene)}
-      />
+      <WochenplanSchalter stand={await wochenstand()} />
     </>
   );
 
@@ -178,15 +175,15 @@ function EinheitWechsel({ art, lautPlan }: { art: Art; lautPlan: Art | null }) {
   );
 }
 
-async function RestDay({ plaene }: { plaene: readonly Planwechsel[] }) {
-  const heute = await einheitFuerTag(new Date(), plaene);
-  const wochenplan = wochenplanAm(heuteIso(), plaene);
+async function RestDay({ wahlen }: { wahlen: readonly Wochenwahl[] }) {
+  const heute = await einheitFuerTag(new Date(), wahlen);
+  const woche = wocheAm(montagVon(heuteIso()), wahlen);
   if (heute.art !== "pause") return null;
 
   const naechste = heute.naechste;
 
-  /* Die nächste Einheit ist nicht zwingend morgen — im Wochenendplan liegen
-     Do und Fr zwischen zwei Trainingstagen. Der Text muss das sagen, sonst
+  /* Die nächste Einheit ist nicht zwingend morgen — zwischen Mi und Fr oder
+     Sa liegen Pausentage. Der Text muss das sagen, sonst
      sucht man morgen früh eine Einheit, die erst übermorgen ansteht. */
   const istMorgen = heute.naechsterTag === naechsterKalendertag();
 
@@ -195,7 +192,7 @@ async function RestDay({ plaene }: { plaene: readonly Planwechsel[] }) {
       <Eyebrow>Heute</Eyebrow>
       <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-        Wochenplan {WOCHENPLAN_NAMEN[wochenplan]}.{" "}
+        Diese Woche: {wochenText(woche)}.{" "}
         {istMorgen ? (
           <>
             Als nächstes steht morgen{" "}
@@ -270,10 +267,7 @@ async function RestDay({ plaene }: { plaene: readonly Planwechsel[] }) {
         />
       )}
 
-      <WochenplanSchalter
-        aktuell={eingestellterWochenplan(plaene)}
-        kommtAb={kommtAb(plaene)}
-      />
+      <WochenplanSchalter stand={await wochenstand()} />
     </div>
   );
 }
@@ -369,11 +363,6 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
       </p>
     </Card>
   );
-}
-
-function kommtAb(plaene: readonly Planwechsel[]): string | null {
-  const ab = plaene.at(-1)?.ab ?? null;
-  return ab !== null && ab > heuteIso() ? ab : null;
 }
 
 function heuteIso(): string {

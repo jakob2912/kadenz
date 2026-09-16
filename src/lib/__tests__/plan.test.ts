@@ -2,9 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   EINGESCHOBENE_PAUSEN,
   datumFuerPushIndex,
+  montagVon,
   pushIndexAbDatum,
   rotationFor,
+  schalterSperren,
   trainingAls,
+  wocheAm,
+  wochenText,
+  type Frueh,
+  type Spaet,
+  type Wochenwahl,
 } from "../plan";
 
 /** Mittag UTC liegt in beiden Zeitzonenlagen sicher im gemeinten Wiener Tag. */
@@ -159,71 +166,120 @@ describe("Wochenplan ab dem 07.09.2026", () => {
   });
 });
 
-describe("Wochenende als zweiter Plan", () => {
-  const wochenende = [{ ab: "2026-09-28", plan: "wochenende" as const }];
-
-  it("legt Push auf Di und Sa, Pull auf Mi und So", () => {
-    expect(rotationFor(tag("2026-09-28"), wochenende)).toMatchObject({ art: "pause" }); // Mo
-    expect(rotationFor(tag("2026-09-29"), wochenende)).toMatchObject({ einheit: "push" }); // Di
-    expect(rotationFor(tag("2026-09-30"), wochenende)).toMatchObject({ einheit: "pull" }); // Mi
-    expect(rotationFor(tag("2026-10-02"), wochenende)).toMatchObject({ art: "pause", naechste: "push" }); // Fr
-    expect(rotationFor(tag("2026-10-03"), wochenende)).toMatchObject({ einheit: "push" }); // Sa
-    expect(rotationFor(tag("2026-10-04"), wochenende)).toMatchObject({ einheit: "pull" }); // So
-    expect(rotationFor(tag("2026-10-05"), wochenende)).toMatchObject({ art: "pause", naechste: "push" }); // Mo
+describe("Wochenschalter", () => {
+  // Woche ab Mo, 28.09.2026. Standard: Push Mo (13) und Fr (14).
+  const W = "2026-09-28";
+  const wahl = (woche: string, frueh: Frueh | null, spaet: Spaet | null): Wochenwahl => ({
+    woche,
+    frueh,
+    spaet,
   });
 
-  it("schiebt den ausgefallenen Montag auf Dienstag, ohne einen Push-Index zu verlieren", () => {
-    // Werktage: Mo, 28.09. wäre Push 13 gewesen.
-    expect(rotationFor(tag("2026-09-28"))).toMatchObject({ einheit: "push", pushIndex: 13 });
-    expect(rotationFor(tag("2026-09-29"), wochenende)).toMatchObject({ pushIndex: 13 });
-    expect(rotationFor(tag("2026-10-03"), wochenende)).toMatchObject({ pushIndex: 14 });
-    expect(datumFuerPushIndex(13, wochenende)).toBe("2026-09-29");
-    expect(pushIndexAbDatum("2026-09-28", wochenende)).toBe(13);
+  it("findet den Montag jeder Woche", () => {
+    expect(montagVon("2026-09-28")).toBe(W);
+    expect(montagVon("2026-10-04")).toBe(W); // So gehört zur Woche davor
+    expect(montagVon("2026-10-05")).toBe("2026-10-05");
   });
 
-  it("kann mitten in der Woche zurück: nach dem Mi-Pull ist Fr wieder Push", () => {
-    const zurueck = [...wochenende, { ab: "2026-10-01", plan: "werktage" as const }];
-    expect(rotationFor(tag("2026-09-29"), zurueck)).toMatchObject({ einheit: "push", pushIndex: 13 });
-    expect(rotationFor(tag("2026-09-30"), zurueck)).toMatchObject({ einheit: "pull" });
-    expect(rotationFor(tag("2026-10-02"), zurueck)).toMatchObject({ einheit: "push", pushIndex: 14 });
-    expect(rotationFor(tag("2026-10-03"), zurueck)).toMatchObject({ einheit: "pull" });
+  it("legt den ersten Push auf Di, ohne einen Push-Index zu verlieren", () => {
+    const wahlen = [wahl(W, "di", null)];
+    expect(rotationFor(tag("2026-09-28"), wahlen)).toMatchObject({ art: "pause", naechste: "push" });
+    expect(rotationFor(tag("2026-09-29"), wahlen)).toMatchObject({ einheit: "push", pushIndex: 13 });
+    expect(rotationFor(tag("2026-09-30"), wahlen)).toMatchObject({ einheit: "pull" });
+    expect(rotationFor(tag("2026-10-02"), wahlen)).toMatchObject({ einheit: "push", pushIndex: 14 });
+    expect(datumFuerPushIndex(13, wahlen)).toBe("2026-09-29");
+    expect(pushIndexAbDatum("2026-09-28", wahlen)).toBe(13);
   });
 
-  it("schiebt den ausgefallenen Freitag auf Samstag", () => {
-    const abFreitag = [{ ab: "2026-10-02", plan: "wochenende" as const }];
-    expect(rotationFor(tag("2026-10-02"))).toMatchObject({ einheit: "push", pushIndex: 14 });
-    expect(rotationFor(tag("2026-10-02"), abFreitag)).toMatchObject({ art: "pause", naechste: "push" });
-    expect(rotationFor(tag("2026-10-03"), abFreitag)).toMatchObject({ einheit: "push", pushIndex: 14 });
-    expect(rotationFor(tag("2026-10-04"), abFreitag)).toMatchObject({ einheit: "pull" });
-    // Montag ist dann frei, Dienstag der nächste Push.
-    expect(rotationFor(tag("2026-10-05"), abFreitag)).toMatchObject({ art: "pause" });
-    expect(rotationFor(tag("2026-10-06"), abFreitag)).toMatchObject({ einheit: "push", pushIndex: 15 });
+  it("legt das Wochenende auf Sa + So", () => {
+    const wahlen = [wahl(W, null, "saso")];
+    expect(rotationFor(tag("2026-09-28"), wahlen)).toMatchObject({ einheit: "push", pushIndex: 13 });
+    expect(rotationFor(tag("2026-10-02"), wahlen)).toMatchObject({ art: "pause", naechste: "push" });
+    expect(rotationFor(tag("2026-10-03"), wahlen)).toMatchObject({ einheit: "push", pushIndex: 14 });
+    expect(rotationFor(tag("2026-10-04"), wahlen)).toMatchObject({ einheit: "pull" });
   });
 
-  it("wechselt Push und Pull über jeden Übergang ohne Doppelung ab", () => {
-    // Ein halbes Jahr mit Wechseln an den vorgesehenen Stellen.
-    const plaene = [
-      { ab: "2026-09-28", plan: "wochenende" as const },
-      { ab: "2026-10-08", plan: "werktage" as const },
-      { ab: "2026-10-23", plan: "wochenende" as const },
-      { ab: "2026-11-05", plan: "werktage" as const },
+  it("sperrt nach Sa + So den Montag der Folgewoche", () => {
+    const wahlen = [wahl(W, null, "saso"), wahl("2026-10-05", "mo", null)];
+    const folge = wocheAm("2026-10-05", wahlen);
+    expect(folge).toMatchObject({ frueh: "di", montagGesperrt: true });
+    expect(rotationFor(tag("2026-10-05"), wahlen)).toMatchObject({ art: "pause" });
+    expect(rotationFor(tag("2026-10-06"), wahlen)).toMatchObject({ einheit: "push", pushIndex: 15 });
+    // Eine Woche später ist wieder alles Standard.
+    expect(wocheAm("2026-10-12", wahlen)).toMatchObject({ frueh: "mo", spaet: "frsa", montagGesperrt: false });
+  });
+
+  it("fängt jede Woche beim Standard an", () => {
+    const wahlen = [wahl(W, "di", null)];
+    expect(wocheAm("2026-10-05", wahlen)).toMatchObject({ frueh: "mo", spaet: "frsa" });
+  });
+
+  it("beschreibt eine Woche", () => {
+    expect(wochenText(wocheAm(W, [wahl(W, "di", "saso")]))).toBe("Push Di und Sa, Pull Mi und So");
+  });
+
+  it("wechselt Push und Pull in jeder Kombination ohne Doppelung ab", () => {
+    const kombis: [Frueh | null, Spaet | null][] = [
+      ["di", null],
+      [null, "saso"],
+      ["mo", "saso"],
+      [null, null],
+      ["di", "saso"],
+      ["di", "frsa"],
     ];
+    const wahlen: Wochenwahl[] = [];
+    let montag = Date.UTC(2026, 8, 21);
+    for (let i = 0; i < 26; i++, montag += 7 * 864e5) {
+      const [frueh, spaet] = kombis[i % kombis.length];
+      wahlen.push(wahl(new Date(montag).toISOString().slice(0, 10), frueh, spaet));
+    }
+
     let letzte: string | null = null;
-    let erwarteterIndex = 10;
+    let letzterTag = 0;
+    let index = 10;
     for (let t = Date.UTC(2026, 8, 16); t < Date.UTC(2027, 2, 16); t += 864e5) {
-      const r = rotationFor(new Date(t + 12 * 3600e3), plaene);
+      const r = rotationFor(new Date(t + 12 * 3600e3), wahlen);
       if (r.art !== "training") continue;
       expect(r.einheit).not.toBe(letzte);
       if (r.einheit === "push") {
-        expect(r.pushIndex).toBe(erwarteterIndex);
-        expect(datumFuerPushIndex(erwarteterIndex, plaene)).toBe(new Date(t).toISOString().slice(0, 10));
-        erwarteterIndex++;
+        expect(r.pushIndex).toBe(index);
+        expect(datumFuerPushIndex(index, wahlen)).toBe(new Date(t).toISOString().slice(0, 10));
+        index++;
+      }
+      // Nie drei Trainingstage am Stück.
+      if (letzterTag && t - letzterTag === 864e5) {
+        const vorvorher = rotationFor(new Date(t - 2 * 864e5 + 12 * 3600e3), wahlen);
+        expect(vorvorher.art).toBe("pause");
       }
       letzte = r.einheit;
+      letzterTag = t;
     }
   });
 
-  it("holt Push im Wochenendplan am Folgetag nach", () => {
-    expect(trainingAls(tag("2026-09-30"), "push", wochenende)).toMatchObject({ pushIndex: 13 });
+  it("sperrt Schalter, deren Tage vorbei oder trainiert sind", () => {
+    const woche = wocheAm(W, []);
+    const leer = new Set<string>();
+    // Di, nach ausgefallenem Montag: beide Schalter frei.
+    expect(schalterSperren(woche, "2026-09-29", leer)).toEqual({ fruehGesperrt: null, spaetGesperrt: null });
+    // Montag trainiert: der erste Push ist fest.
+    expect(schalterSperren(woche, "2026-09-28", new Set([W])).fruehGesperrt).toContain("schon trainiert");
+    // Mittwoch: Mo/Di vorbei, das Wochenende noch offen.
+    expect(schalterSperren(woche, "2026-09-30", leer)).toMatchObject({
+      fruehGesperrt: "Mo und Di sind vorbei.",
+      spaetGesperrt: null,
+    });
+    // Sa nach ausgefallenem Fr: Wochenende noch umlegbar.
+    expect(schalterSperren(woche, "2026-10-03", leer).spaetGesperrt).toBeNull();
+    // Fr trainiert: Wochenende fest.
+    expect(schalterSperren(woche, "2026-10-02", new Set(["2026-10-02"])).spaetGesperrt).toContain(
+      "schon trainiert"
+    );
+    // Nach einer Sa + So-Woche ist Mo gesperrt.
+    const folge = wocheAm("2026-10-05", [wahl(W, null, "saso")]);
+    expect(schalterSperren(folge, "2026-10-04", leer).fruehGesperrt).toContain("dritte Tag");
+  });
+
+  it("holt Push am Folgetag nach", () => {
+    expect(trainingAls(tag("2026-09-29"), "push")).toMatchObject({ pushIndex: 13 });
   });
 });

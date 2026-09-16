@@ -38,12 +38,12 @@ import {
   sollGewichtAm,
   zielKorridor,
 } from "../src/lib/gewichtsplan";
-import { heutigeSaetze, rotationFor, SESSIONS, WOCHENPLAN_NAMEN } from "../src/lib/plan";
+import { heutigeSaetze, rotationFor, SESSIONS, wochenText } from "../src/lib/plan";
 import {
-  aktuellerWochenplan,
   rotationMitPlan,
-  wochenplaeneLesen,
-  wochenplanSetzen,
+  wochenstand,
+  wochenwahlenLesen,
+  wochenwahlSetzen,
 } from "../src/lib/wochenplan";
 import {
   einheitFuerTag,
@@ -246,27 +246,32 @@ server.registerTool(
 server.registerTool(
   "wochenplan",
   {
-    title: "Wochenplan lesen oder umschalten",
+    title: "Wochenschalter lesen oder umlegen",
     description:
-      "Zwei Wochenpläne: \"werktage\" (Mo Push, Mi Pull, Fr Push, Sa Pull) und \"wochenende\" (Di Push, Mi Pull, Sa Push, So Pull). Ohne `plan` kommt der aktuelle zurück. Mit `plan` wird umgeschaltet — umgeschaltet wird, wenn ein Push-Tag ausfällt (Mo fällt aus: Wochenende, Di wird Push; Fr fällt aus: Wochenende, Sa wird Push). Der Wechsel gilt ab heute, ab gestern wenn gestern ein Trainingstag ohne Einheit war, ab morgen wenn heute schon trainiert wurde.",
+      "Jede Woche: Mi ist Pull. Erster Push `frueh` am \"mo\" (Standard) oder \"di\". Wochenende `spaet` als \"frsa\" (Standard: Fr Push, Sa Pull) oder \"saso\" (Sa Push, So Pull). Nach einer Woche mit Sa + So ist Mo gesperrt, der erste Push liegt dann am Di. Jede Woche beginnt beim Standard; umgelegt wird die laufende Woche (am Sonntag die nächste). Schalter, deren Tage vorbei oder schon trainiert sind, lassen sich nicht mehr umlegen. Ohne Angabe kommt der Stand zurück.",
     inputSchema: {
-      plan: z.enum(["werktage", "wochenende"]).optional(),
+      frueh: z.enum(["mo", "di"]).optional(),
+      spaet: z.enum(["frsa", "saso"]).optional(),
     },
   },
-  async ({ plan }) => {
+  async ({ frueh, spaet }) => {
     try {
       datenbankPruefen();
-      if (plan) {
-        const r = await wochenplanSetzen(plan);
-        if (!r.ok) return antwort({ fehler: r.fehler });
-        return antwort({
-          plan: WOCHENPLAN_NAMEN[plan],
-          ab: r.ab,
-          hinweis: r.ab === null ? "War schon eingestellt." : undefined,
-        });
+      const fehlerListe: string[] = [];
+      if (frueh) {
+        const r = await wochenwahlSetzen({ frueh });
+        if (!r.ok) fehlerListe.push(r.fehler);
       }
-      const aktuell = await aktuellerWochenplan();
-      return antwort({ ...aktuell, beschreibung: WOCHENPLAN_NAMEN[aktuell.plan] });
+      if (spaet) {
+        const r = await wochenwahlSetzen({ spaet });
+        if (!r.ok) fehlerListe.push(r.fehler);
+      }
+      const stand = await wochenstand();
+      return antwort({
+        ...stand,
+        beschreibung: wochenText(stand),
+        fehler: fehlerListe.length > 0 ? fehlerListe : undefined,
+      });
     } catch (e) {
       return fehler(e);
     }
@@ -278,7 +283,7 @@ server.registerTool(
   {
     title: "Training heute",
     description:
-      "Welche Einheit heute ansteht, laut aktuellem Wochenplan (Werktage: Mo/Fr Push, Mi/Sa Pull; Wochenende: Di/Sa Push, Mi/So Pull), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
+      "Welche Einheit heute ansteht, laut Wochenschaltern (Standard: Push Mo und Fr, Pull Mi und Sa; siehe Werkzeug wochenplan), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
   },
   async () => {
     try {
@@ -741,8 +746,8 @@ server.registerTool(
   async () => {
     try {
       datenbankPruefen();
-      const plaene = await wochenplaeneLesen();
-      const rotation = rotationFor(new Date(), plaene);
+      const wahlen = await wochenwahlenLesen();
+      const rotation = rotationFor(new Date(), wahlen);
 
       if (rotation.art !== "training" || rotation.pushIndex === null) {
         return antwort({
@@ -753,7 +758,7 @@ server.registerTool(
         });
       }
 
-      const stand = await bankstandFuer(rotation.pushIndex, plaene);
+      const stand = await bankstandFuer(rotation.pushIndex, wahlen);
       return antwort({
         art: stand.position.art,
         bankTag: stand.position.art === "tm" || stand.position.art === "test",

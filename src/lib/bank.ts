@@ -39,7 +39,7 @@ export { BANK_UEBUNG } from "./kraft";
 import {
   datumFuerPushIndex,
   pushIndexAbDatum,
-  type Planwechsel,
+  type Wochenwahl,
   type Programmvorgabe,
 } from "./plan";
 
@@ -81,7 +81,7 @@ function zuTrainingsmax(zeile: {
  * Meinungen darüber, wann das Programm begann. Aus einem Datum lässt sie sich
  * jederzeit neu ausrechnen, und der Stichtag steht ohnehin schon da.
  */
-async function zyklusanker(plaene: readonly Planwechsel[]): Promise<Zyklusanker | null> {
+async function zyklusanker(wahlen: readonly Wochenwahl[]): Promise<Zyklusanker | null> {
   /* Die JÜNGSTE Zeile, nicht mehr die von Zyklus 1.
      
      Jede Zeile trägt in gueltigAb den Tag, ab dem ihr Trainingsmax gilt — und
@@ -97,7 +97,7 @@ async function zyklusanker(plaene: readonly Planwechsel[]): Promise<Zyklusanker 
   if (!zeile) return null;
 
   return {
-    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10), plaene),
+    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10), wahlen),
     zyklus: zeile.zyklus,
   };
 }
@@ -188,10 +188,10 @@ export async function trainingsmaxSetzen(
 async function amrapSatzVon(
   pushIndex: number,
   mindestKg: number,
-  plaene: readonly Planwechsel[]
+  wahlen: readonly Wochenwahl[]
 ): Promise<SetLog | null> {
-  const ab = new Date(`${datumFuerPushIndex(pushIndex, plaene)}T00:00:00Z`);
-  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1, plaene)}T00:00:00Z`);
+  const ab = new Date(`${datumFuerPushIndex(pushIndex, wahlen)}T00:00:00Z`);
+  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1, wahlen)}T00:00:00Z`);
 
   return prisma.setLog.findFirst({
     where: {
@@ -250,13 +250,13 @@ async function aufZyklusBringen(
   zielZyklus: number,
   start: Trainingsmax,
   ankerIndex: number,
-  plaene: readonly Planwechsel[]
+  wahlen: readonly Wochenwahl[]
 ): Promise<Trainingsmax> {
   let aktuell = start;
   let anker = ankerIndex;
 
   if (zielZyklus - aktuell.zyklus > MAX_NACHGEHOLTE_ZYKLEN) {
-    return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", plaene, {
+    return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", wahlen, {
       /* Der Anker des Zielzyklus, auch wenn die Zyklen dazwischen leer
          blieben: acht Push-Tage je Zyklus, vom bekannten Anker aus. Sonst
          stünde als Anfang des neuen Zyklus der Tag, an dem jemand zufällig
@@ -278,7 +278,7 @@ async function aufZyklusBringen(
 
     let satz: SetLog | null = null;
     try {
-      satz = await amrapSatzVon(amrapPushIndex(anker), sollKg, plaene);
+      satz = await amrapSatzVon(amrapPushIndex(anker), sollKg, wahlen);
     } catch (e) {
       console.error("AMRAP-Satz nicht lesbar:", e);
     }
@@ -291,7 +291,7 @@ async function aufZyklusBringen(
        der Welle nichts zu tun hat, und die Wochen liefen ab da schief. */
     anker += PUSH_TAGE_JE_ZYKLUS;
 
-    aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", plaene, {
+    aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", wahlen, {
       abPushIndex: anker,
       begruendung: entscheidung.begruendung,
     });
@@ -304,14 +304,14 @@ async function anlegenOderLesen(
   zyklus: number,
   tmKg: number,
   quelle: string,
-  plaene: readonly Planwechsel[],
+  wahlen: readonly Wochenwahl[],
   opts: { begruendung: string; abPushIndex: number }
 ): Promise<Trainingsmax> {
   try {
     const zeile = await prisma.bankTrainingsmax.create({
       data: {
         zyklus,
-        gueltigAb: new Date(`${datumFuerPushIndex(opts.abPushIndex, plaene)}T00:00:00Z`),
+        gueltigAb: new Date(`${datumFuerPushIndex(opts.abPushIndex, wahlen)}T00:00:00Z`),
         tmKg,
         quelle,
         begruendung: opts.begruendung,
@@ -350,7 +350,7 @@ export type Bankstand = {
  */
 export async function bankstandFuer(
   pushIndex: number,
-  plaene: readonly Planwechsel[]
+  wahlen: readonly Wochenwahl[]
 ): Promise<Bankstand> {
   let tm = await aktuellerTrainingsmax();
 
@@ -373,7 +373,7 @@ export async function bankstandFuer(
     };
   }
 
-  const anker = (await zyklusanker(plaene)) ?? { pushIndex, zyklus: tm.zyklus };
+  const anker = (await zyklusanker(wahlen)) ?? { pushIndex, zyklus: tm.zyklus };
   const position = bankPosition(pushIndex, anker);
 
   /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
@@ -383,15 +383,15 @@ export async function bankstandFuer(
   const naechsterBankTag =
     position.art === "tm" || position.art === "test"
       ? null
-      : datumFuerPushIndex(pushIndex + 1, plaene);
+      : datumFuerPushIndex(pushIndex + 1, wahlen);
 
   if (tm.zyklus < position.zyklus) {
-    tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, plaene);
+    tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, wahlen);
   }
 
   const schaetzung =
     position.art === "test"
-      ? await geschaetztesMaximum(datumFuerPushIndex(pushIndex, plaene))
+      ? await geschaetztesMaximum(datumFuerPushIndex(pushIndex, wahlen))
       : null;
 
   return {
