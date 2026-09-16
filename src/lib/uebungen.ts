@@ -13,12 +13,14 @@ import { prisma } from "./db";
 import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
+import { wochenplaeneLesen } from "./wochenplan";
 import {
   SESSIONS,
   mitHistorie,
   rotationFor,
   trainingAls,
   saetzeFuerTag,
+  type Planwechsel,
   type PlannedExercise,
   type ZuPlanen,
 } from "./plan";
@@ -141,43 +143,46 @@ export type Tagesplan =
       naechsterTag: string;
     };
 
-export async function einheitFuerTag(date: Date): Promise<Tagesplan> {
-  const rotation = rotationFor(date);
+/**
+ * `plaene` reicht mit, wer die Planwechsel schon geladen hat; sonst liest die
+ * Funktion sie selbst.
+ */
+export async function einheitFuerTag(
+  date: Date,
+  plaene?: readonly Planwechsel[]
+): Promise<Tagesplan> {
+  plaene ??= await wochenplaeneLesen();
+  const rotation = rotationFor(date, plaene);
 
   if (rotation.art === "pause") {
-    const naechsterTag = naechsterTrainingstag(date);
+    const naechsterTag = naechsterTrainingstag(date, plaene);
     return {
       art: "pause",
-      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`)),
+      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), plaene),
       naechsterTag,
     };
   }
 
-  return { art: "training", ...(await trainingsplanFuer(date)) };
+  return { art: "training", ...(await trainingsplanFuer(date, plaene)) };
 }
 
 /**
  * Der nächste Tag mit einer Einheit, als ISO-Datum.
  *
- * Vorher stand hier schlicht "morgen": auf einen Rest Day folgte immer Push.
- * Mit eingeschobenen Rest Days stimmt das nicht mehr — zwei Pausentage
- * hintereinander sind möglich, und trainingsplanFuer() wirft für einen
- * Pausentag. Die Schranke von sieben Tagen ist großzügig: drei Tage Rotation
- * plus jeder denkbare Einschub liegen darunter. Wird sie erreicht, ist etwas
- * an den Einschüben falsch, und ein Fehler ist besser als eine Endlosschleife.
+ * Nicht zwingend morgen: im Wochenendplan liegen Do und Fr zwischen Mi und
+ * Sa. Jeder Wochenplan hat in jeder Woche Trainingstage, sieben Tage reichen
+ * also; wird die Schranke erreicht, ist ein Plan kaputt, und ein Fehler ist
+ * besser als eine Endlosschleife.
  */
-function naechsterTrainingstag(date: Date): string {
+function naechsterTrainingstag(date: Date, plaene: readonly Planwechsel[]): string {
   let tag = date;
 
   for (let n = 0; n < 7; n++) {
     tag = morgen(tag);
-    if (rotationFor(tag).art === "training") return wienerDatum(tag);
+    if (rotationFor(tag, plaene).art === "training") return wienerDatum(tag);
   }
 
-  throw new Error(
-    `Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an. ` +
-      `Das kann nur an den eingeschobenen Rest Days liegen.`
-  );
+  throw new Error(`Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an.`);
 }
 
 /**
@@ -198,12 +203,20 @@ function morgen(date: Date): Date {
  * Day. Übungen und Gewichte folgen denselben Regeln wie am planmäßigen Tag;
  * welcher Push-Tag gilt, sagt trainingAls().
  */
-export function trainingsplanAls(date: Date, einheit: Einheit): Promise<Trainingsplan> {
-  return trainingsplanFuer(date, einheit);
+export async function trainingsplanAls(
+  date: Date,
+  einheit: Einheit,
+  plaene?: readonly Planwechsel[]
+): Promise<Trainingsplan> {
+  return trainingsplanFuer(date, plaene ?? (await wochenplaeneLesen()), einheit);
 }
 
-async function trainingsplanFuer(date: Date, gewaehlt?: Einheit): Promise<Trainingsplan> {
-  const rotation = gewaehlt ? trainingAls(date, gewaehlt) : rotationFor(date);
+async function trainingsplanFuer(
+  date: Date,
+  plaene: readonly Planwechsel[],
+  gewaehlt?: Einheit
+): Promise<Trainingsplan> {
+  const rotation = gewaehlt ? trainingAls(date, gewaehlt, plaene) : rotationFor(date, plaene);
 
   /* Kann nur eintreten, wenn jemand diese Funktion für einen Pausentag
      aufruft. Dann ist der Fehler im Aufrufer, nicht in den Daten — lieber
@@ -219,7 +232,7 @@ async function trainingsplanFuer(date: Date, gewaehlt?: Einheit): Promise<Traini
   let bank: Bankstand | null = null;
   if (einheit === "push" && rotation.pushIndex !== null) {
     try {
-      bank = await bankstandFuer(rotation.pushIndex);
+      bank = await bankstandFuer(rotation.pushIndex, plaene);
     } catch (e) {
       // Ohne Trainingsmax fällt der Bank-Slot weg, der Rest der Einheit steht.
       console.error("Bankstand nicht lesbar:", e);

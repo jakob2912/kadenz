@@ -27,6 +27,14 @@ model Einstellung {
   aktualisiert DateTime @updatedAt
 }
 
+/// Ab welchem Tag welcher Wochenplan gilt ("werktage" oder "wochenende").
+/// Ohne Zeile gilt "werktage". Die Rechnung dazu steht in plan.ts.
+model Planwechsel {
+  ab       DateTime @id @db.Date
+  plan     String
+  angelegt DateTime @default(now())
+}
+
 model Workout {
   id         String    @id @default(cuid())
   /// Trainingstag in Ortszeit — nicht der Zeitstempel, sonst rutscht ein

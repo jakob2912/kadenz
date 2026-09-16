@@ -36,7 +36,12 @@ import {
 /* Weiterhin von hier lesbar: bank.ts war die Heimat dieses Namens, und der
    MCP-Server sowie mehrere Seiten importieren ihn von hier. */
 export { BANK_UEBUNG } from "./kraft";
-import { datumFuerPushIndex, pushIndexAbDatum, type Programmvorgabe } from "./plan";
+import {
+  datumFuerPushIndex,
+  pushIndexAbDatum,
+  type Planwechsel,
+  type Programmvorgabe,
+} from "./plan";
 
 /**
  * Der Name, unter dem geloggt wird — die Verbindung zwischen Katalog und
@@ -76,7 +81,7 @@ function zuTrainingsmax(zeile: {
  * Meinungen darüber, wann das Programm begann. Aus einem Datum lässt sie sich
  * jederzeit neu ausrechnen, und der Stichtag steht ohnehin schon da.
  */
-async function zyklusanker(): Promise<Zyklusanker | null> {
+async function zyklusanker(plaene: readonly Planwechsel[]): Promise<Zyklusanker | null> {
   /* Die JÜNGSTE Zeile, nicht mehr die von Zyklus 1.
      
      Jede Zeile trägt in gueltigAb den Tag, ab dem ihr Trainingsmax gilt — und
@@ -92,7 +97,7 @@ async function zyklusanker(): Promise<Zyklusanker | null> {
   if (!zeile) return null;
 
   return {
-    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10)),
+    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10), plaene),
     zyklus: zeile.zyklus,
   };
 }
@@ -180,9 +185,13 @@ export async function trainingsmaxSetzen(
  * bestandener AMRAP-Satz der Woche 3 aus, wenn der echte fehlt. Gezählt wird
  * deshalb nur, was mindestens mit dem Sollgewicht lief.
  */
-async function amrapSatzVon(pushIndex: number, mindestKg: number): Promise<SetLog | null> {
-  const ab = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
-  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1)}T00:00:00Z`);
+async function amrapSatzVon(
+  pushIndex: number,
+  mindestKg: number,
+  plaene: readonly Planwechsel[]
+): Promise<SetLog | null> {
+  const ab = new Date(`${datumFuerPushIndex(pushIndex, plaene)}T00:00:00Z`);
+  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1, plaene)}T00:00:00Z`);
 
   return prisma.setLog.findFirst({
     where: {
@@ -240,13 +249,14 @@ const MAX_NACHGEHOLTE_ZYKLEN = 6;
 async function aufZyklusBringen(
   zielZyklus: number,
   start: Trainingsmax,
-  ankerIndex: number
+  ankerIndex: number,
+  plaene: readonly Planwechsel[]
 ): Promise<Trainingsmax> {
   let aktuell = start;
   let anker = ankerIndex;
 
   if (zielZyklus - aktuell.zyklus > MAX_NACHGEHOLTE_ZYKLEN) {
-    return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", {
+    return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", plaene, {
       /* Der Anker des Zielzyklus, auch wenn die Zyklen dazwischen leer
          blieben: acht Push-Tage je Zyklus, vom bekannten Anker aus. Sonst
          stünde als Anfang des neuen Zyklus der Tag, an dem jemand zufällig
@@ -268,7 +278,7 @@ async function aufZyklusBringen(
 
     let satz: SetLog | null = null;
     try {
-      satz = await amrapSatzVon(amrapPushIndex(anker), sollKg);
+      satz = await amrapSatzVon(amrapPushIndex(anker), sollKg, plaene);
     } catch (e) {
       console.error("AMRAP-Satz nicht lesbar:", e);
     }
@@ -281,7 +291,7 @@ async function aufZyklusBringen(
        der Welle nichts zu tun hat, und die Wochen liefen ab da schief. */
     anker += PUSH_TAGE_JE_ZYKLUS;
 
-    aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", {
+    aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", plaene, {
       abPushIndex: anker,
       begruendung: entscheidung.begruendung,
     });
@@ -294,13 +304,14 @@ async function anlegenOderLesen(
   zyklus: number,
   tmKg: number,
   quelle: string,
+  plaene: readonly Planwechsel[],
   opts: { begruendung: string; abPushIndex: number }
 ): Promise<Trainingsmax> {
   try {
     const zeile = await prisma.bankTrainingsmax.create({
       data: {
         zyklus,
-        gueltigAb: new Date(`${datumFuerPushIndex(opts.abPushIndex)}T00:00:00Z`),
+        gueltigAb: new Date(`${datumFuerPushIndex(opts.abPushIndex, plaene)}T00:00:00Z`),
         tmKg,
         quelle,
         begruendung: opts.begruendung,
@@ -337,7 +348,10 @@ export type Bankstand = {
  * im Plan, und dass sie noch keine Zahlen hat, ist eine Information, kein
  * Grund, sie zu verstecken.
  */
-export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
+export async function bankstandFuer(
+  pushIndex: number,
+  plaene: readonly Planwechsel[]
+): Promise<Bankstand> {
   let tm = await aktuellerTrainingsmax();
 
   if (tm === null) {
@@ -359,7 +373,7 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
     };
   }
 
-  const anker = (await zyklusanker()) ?? { pushIndex, zyklus: tm.zyklus };
+  const anker = (await zyklusanker(plaene)) ?? { pushIndex, zyklus: tm.zyklus };
   const position = bankPosition(pushIndex, anker);
 
   /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
@@ -367,14 +381,18 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
      bereits laufendem Programm — gilt dasselbe: der TM-Tag liegt eine
      Push-Einheit weiter. */
   const naechsterBankTag =
-    position.art === "tm" || position.art === "test" ? null : datumFuerPushIndex(pushIndex + 1);
+    position.art === "tm" || position.art === "test"
+      ? null
+      : datumFuerPushIndex(pushIndex + 1, plaene);
 
   if (tm.zyklus < position.zyklus) {
-    tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex);
+    tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, plaene);
   }
 
   const schaetzung =
-    position.art === "test" ? await geschaetztesMaximum(datumFuerPushIndex(pushIndex)) : null;
+    position.art === "test"
+      ? await geschaetztesMaximum(datumFuerPushIndex(pushIndex, plaene))
+      : null;
 
   return {
     position,

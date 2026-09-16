@@ -3,7 +3,8 @@ import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
 import { Eyebrow, NichtVerbunden, Skelett, de, heuteWien } from "@/components/ui";
 import { aktuellePhase } from "@/lib/gewichtsplan";
-import { SESSIONS, rotationFor } from "@/lib/plan";
+import { SESSIONS } from "@/lib/plan";
+import { rotationMitPlan } from "@/lib/wochenplan";
 
 /**
  * Der Kopf steht sofort, die Auswertungen strömen nach.
@@ -57,7 +58,7 @@ async function Auswertungen() {
   await connection();
 
   const data = await loadDashboard(30);
-  const heuteTraining = rotationFor(new Date());
+  const heuteTraining = await rotationMitPlan(new Date());
 
   if (!data.verbunden) {
     return <NichtVerbunden titel="Der Coach braucht deine Daten" grund={data.grund} />;

@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
 import { aktuellePhase } from "@/lib/gewichtsplan";
 import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
-import { rotationFor } from "@/lib/plan";
+import { rotationMitPlan } from "@/lib/wochenplan";
 import { wienerStunde } from "@/lib/datum";
 import { GewichtEingabe } from "@/components/gewicht-eingabe";
 import {
@@ -63,6 +63,7 @@ async function Dashboard() {
   await connection();
 
   const data = await loadDashboard(30);
+  const trainingHeute = (await rotationMitPlan(new Date())).art === "training";
 
   if (!data.verbunden) {
     return <NichtVerbunden titel="Erst mit Google Health verbinden" grund={data.grund} />;
@@ -206,7 +207,7 @@ async function Dashboard() {
                       urteil: heute.regeneration,
                       nachtDatum: heute.date,
                       heuteIso,
-                      trainingHeute: rotationFor(new Date()).art === "training",
+                      trainingHeute,
                       stunde: wienerStunde(),
                     })}
                   />

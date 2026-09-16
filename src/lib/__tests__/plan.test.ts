@@ -158,3 +158,72 @@ describe("Wochenplan ab dem 07.09.2026", () => {
     expect(rotationFor(tag("2026-09-15"))).toMatchObject({ art: "pause", naechste: "pull" });
   });
 });
+
+describe("Wochenende als zweiter Plan", () => {
+  const wochenende = [{ ab: "2026-09-28", plan: "wochenende" as const }];
+
+  it("legt Push auf Di und Sa, Pull auf Mi und So", () => {
+    expect(rotationFor(tag("2026-09-28"), wochenende)).toMatchObject({ art: "pause" }); // Mo
+    expect(rotationFor(tag("2026-09-29"), wochenende)).toMatchObject({ einheit: "push" }); // Di
+    expect(rotationFor(tag("2026-09-30"), wochenende)).toMatchObject({ einheit: "pull" }); // Mi
+    expect(rotationFor(tag("2026-10-02"), wochenende)).toMatchObject({ art: "pause", naechste: "push" }); // Fr
+    expect(rotationFor(tag("2026-10-03"), wochenende)).toMatchObject({ einheit: "push" }); // Sa
+    expect(rotationFor(tag("2026-10-04"), wochenende)).toMatchObject({ einheit: "pull" }); // So
+    expect(rotationFor(tag("2026-10-05"), wochenende)).toMatchObject({ art: "pause", naechste: "push" }); // Mo
+  });
+
+  it("schiebt den ausgefallenen Montag auf Dienstag, ohne einen Push-Index zu verlieren", () => {
+    // Werktage: Mo, 28.09. wäre Push 13 gewesen.
+    expect(rotationFor(tag("2026-09-28"))).toMatchObject({ einheit: "push", pushIndex: 13 });
+    expect(rotationFor(tag("2026-09-29"), wochenende)).toMatchObject({ pushIndex: 13 });
+    expect(rotationFor(tag("2026-10-03"), wochenende)).toMatchObject({ pushIndex: 14 });
+    expect(datumFuerPushIndex(13, wochenende)).toBe("2026-09-29");
+    expect(pushIndexAbDatum("2026-09-28", wochenende)).toBe(13);
+  });
+
+  it("kann mitten in der Woche zurück: nach dem Mi-Pull ist Fr wieder Push", () => {
+    const zurueck = [...wochenende, { ab: "2026-10-01", plan: "werktage" as const }];
+    expect(rotationFor(tag("2026-09-29"), zurueck)).toMatchObject({ einheit: "push", pushIndex: 13 });
+    expect(rotationFor(tag("2026-09-30"), zurueck)).toMatchObject({ einheit: "pull" });
+    expect(rotationFor(tag("2026-10-02"), zurueck)).toMatchObject({ einheit: "push", pushIndex: 14 });
+    expect(rotationFor(tag("2026-10-03"), zurueck)).toMatchObject({ einheit: "pull" });
+  });
+
+  it("schiebt den ausgefallenen Freitag auf Samstag", () => {
+    const abFreitag = [{ ab: "2026-10-02", plan: "wochenende" as const }];
+    expect(rotationFor(tag("2026-10-02"))).toMatchObject({ einheit: "push", pushIndex: 14 });
+    expect(rotationFor(tag("2026-10-02"), abFreitag)).toMatchObject({ art: "pause", naechste: "push" });
+    expect(rotationFor(tag("2026-10-03"), abFreitag)).toMatchObject({ einheit: "push", pushIndex: 14 });
+    expect(rotationFor(tag("2026-10-04"), abFreitag)).toMatchObject({ einheit: "pull" });
+    // Montag ist dann frei, Dienstag der nächste Push.
+    expect(rotationFor(tag("2026-10-05"), abFreitag)).toMatchObject({ art: "pause" });
+    expect(rotationFor(tag("2026-10-06"), abFreitag)).toMatchObject({ einheit: "push", pushIndex: 15 });
+  });
+
+  it("wechselt Push und Pull über jeden Übergang ohne Doppelung ab", () => {
+    // Ein halbes Jahr mit Wechseln an den vorgesehenen Stellen.
+    const plaene = [
+      { ab: "2026-09-28", plan: "wochenende" as const },
+      { ab: "2026-10-08", plan: "werktage" as const },
+      { ab: "2026-10-23", plan: "wochenende" as const },
+      { ab: "2026-11-05", plan: "werktage" as const },
+    ];
+    let letzte: string | null = null;
+    let erwarteterIndex = 10;
+    for (let t = Date.UTC(2026, 8, 16); t < Date.UTC(2027, 2, 16); t += 864e5) {
+      const r = rotationFor(new Date(t + 12 * 3600e3), plaene);
+      if (r.art !== "training") continue;
+      expect(r.einheit).not.toBe(letzte);
+      if (r.einheit === "push") {
+        expect(r.pushIndex).toBe(erwarteterIndex);
+        expect(datumFuerPushIndex(erwarteterIndex, plaene)).toBe(new Date(t).toISOString().slice(0, 10));
+        erwarteterIndex++;
+      }
+      letzte = r.einheit;
+    }
+  });
+
+  it("holt Push im Wochenendplan am Folgetag nach", () => {
+    expect(trainingAls(tag("2026-09-30"), "push", wochenende)).toMatchObject({ pushIndex: 13 });
+  });
+});

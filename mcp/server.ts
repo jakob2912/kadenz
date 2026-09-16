@@ -38,7 +38,13 @@ import {
   sollGewichtAm,
   zielKorridor,
 } from "../src/lib/gewichtsplan";
-import { heutigeSaetze, rotationFor, SESSIONS } from "../src/lib/plan";
+import { heutigeSaetze, rotationFor, SESSIONS, WOCHENPLAN_NAMEN } from "../src/lib/plan";
+import {
+  aktuellerWochenplan,
+  rotationMitPlan,
+  wochenplaeneLesen,
+  wochenplanSetzen,
+} from "../src/lib/wochenplan";
 import {
   einheitFuerTag,
   katalogVollstaendig,
@@ -238,11 +244,41 @@ server.registerTool(
 );
 
 server.registerTool(
+  "wochenplan",
+  {
+    title: "Wochenplan lesen oder umschalten",
+    description:
+      "Zwei Wochenpläne: \"werktage\" (Mo Push, Mi Pull, Fr Push, Sa Pull) und \"wochenende\" (Di Push, Mi Pull, Sa Push, So Pull). Ohne `plan` kommt der aktuelle zurück. Mit `plan` wird umgeschaltet — umgeschaltet wird, wenn ein Push-Tag ausfällt (Mo fällt aus: Wochenende, Di wird Push; Fr fällt aus: Wochenende, Sa wird Push). Der Wechsel gilt ab heute, ab gestern wenn gestern ein Trainingstag ohne Einheit war, ab morgen wenn heute schon trainiert wurde.",
+    inputSchema: {
+      plan: z.enum(["werktage", "wochenende"]).optional(),
+    },
+  },
+  async ({ plan }) => {
+    try {
+      datenbankPruefen();
+      if (plan) {
+        const r = await wochenplanSetzen(plan);
+        if (!r.ok) return antwort({ fehler: r.fehler });
+        return antwort({
+          plan: WOCHENPLAN_NAMEN[plan],
+          ab: r.ab,
+          hinweis: r.ab === null ? "War schon aktiv." : undefined,
+        });
+      }
+      const aktuell = await aktuellerWochenplan();
+      return antwort({ plan: aktuell, beschreibung: WOCHENPLAN_NAMEN[aktuell] });
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
   "training_heute",
   {
     title: "Training heute",
     description:
-      "Welche Einheit heute ansteht (trainiert wird Mo, Mi, Fr und Sa, Push und Pull im Wechsel), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
+      "Welche Einheit heute ansteht, laut aktuellem Wochenplan (Werktage: Mo/Fr Push, Mi/Sa Pull; Wochenende: Di/Sa Push, Mi/So Pull), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
   },
   async () => {
     try {
@@ -346,7 +382,7 @@ server.registerTool(
   async ({ uebung, satz, kg, wdh, einheit }) => {
     try {
       datenbankPruefen();
-      const heute = rotationFor(new Date());
+      const heute = await rotationMitPlan(new Date());
       const kind =
         einheit ??
         (await heutigeEinheit()) ??
@@ -705,7 +741,8 @@ server.registerTool(
   async () => {
     try {
       datenbankPruefen();
-      const rotation = rotationFor(new Date());
+      const plaene = await wochenplaeneLesen();
+      const rotation = rotationFor(new Date(), plaene);
 
       if (rotation.art !== "training" || rotation.pushIndex === null) {
         return antwort({
@@ -716,7 +753,7 @@ server.registerTool(
         });
       }
 
-      const stand = await bankstandFuer(rotation.pushIndex);
+      const stand = await bankstandFuer(rotation.pushIndex, plaene);
       return antwort({
         art: stand.position.art,
         bankTag: stand.position.art === "tm" || stand.position.art === "test",
@@ -802,7 +839,7 @@ server.registerTool(
           urteil: readiness(heute, baseline),
           nachtDatum: heute.date,
           heuteIso: heuteWien(),
-          trainingHeute: rotationFor(new Date()).art === "training",
+          trainingHeute: (await rotationMitPlan(new Date())).art === "training",
           stunde: wienerStunde(),
         })
       );

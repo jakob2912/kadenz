@@ -3,7 +3,16 @@ import Link from "next/link";
 import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
 import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
-import { heutigeSaetze, rotationFor, type Einheitskopf } from "@/lib/plan";
+import {
+  heutigeSaetze,
+  rotationFor,
+  wochenplanAm,
+  WOCHENPLAN_NAMEN,
+  type Einheitskopf,
+  type Planwechsel,
+} from "@/lib/plan";
+import { wochenplaeneLesen } from "@/lib/wochenplan";
+import { WochenplanSchalter } from "@/components/wochenplan-schalter";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { vorTest } from "@/lib/kraft";
 import { TrainingLogger, TrainingStart } from "@/components/training-logger";
@@ -60,7 +69,8 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   await connection();
 
   const { einheit: gewuenscht } = await searchParams;
-  const rotation = rotationFor(new Date());
+  const plaene = await wochenplaeneLesen();
+  const rotation = rotationFor(new Date(), plaene);
   const lautPlan: Art | null = rotation.art === "training" ? rotation.einheit : null;
 
   /* Der Kalender schlägt vor, er schreibt nicht vor. Welche Einheit auf dem
@@ -78,11 +88,16 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   }
   art ??= lautPlan;
 
-  if (art === null) return <RestDay />;
+  if (art === null) return <RestDay plaene={plaene} />;
 
-  const plan = await trainingsplanAls(new Date(), art);
+  const plan = await trainingsplanAls(new Date(), art, plaene);
   const kopf: Einheitskopf = { key: plan.einheit, title: plan.titel, focus: plan.fokus };
-  const wechsel = <EinheitWechsel art={art} lautPlan={lautPlan} />;
+  const wechsel = (
+    <>
+      <EinheitWechsel art={art} lautPlan={lautPlan} />
+      <WochenplanSchalter aktuell={wochenplanAm(heuteIso(), plaene)} />
+    </>
+  );
 
   /* Der Schlüssel an Start und Logger ist nötig: beim Wechsel über den Link
      bleibt die Seite dieselbe, und ohne ihn behielte React den Zustand der
@@ -159,16 +174,16 @@ function EinheitWechsel({ art, lautPlan }: { art: Art; lautPlan: Art | null }) {
   );
 }
 
-async function RestDay() {
-  const heute = await einheitFuerTag(new Date());
+async function RestDay({ plaene }: { plaene: readonly Planwechsel[] }) {
+  const heute = await einheitFuerTag(new Date(), plaene);
+  const wochenplan = wochenplanAm(heuteIso(), plaene);
   if (heute.art !== "pause") return null;
 
   const naechste = heute.naechste;
 
-  /* Seit es eingeschobene Rest Days gibt, ist die nächste Einheit nicht
-     zwingend die von morgen — zwei Pausentage hintereinander sind möglich.
-     Der Text muss das sagen, sonst sucht man morgen früh eine Einheit, die
-     erst übermorgen ansteht. */
+  /* Die nächste Einheit ist nicht zwingend morgen — im Wochenendplan liegen
+     Do und Fr zwischen zwei Trainingstagen. Der Text muss das sagen, sonst
+     sucht man morgen früh eine Einheit, die erst übermorgen ansteht. */
   const istMorgen = heute.naechsterTag === naechsterKalendertag();
 
   return (
@@ -176,7 +191,7 @@ async function RestDay() {
       <Eyebrow>Heute</Eyebrow>
       <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-        Du trainierst Mo, Mi, Fr und Sa, Push und Pull im Wechsel.{" "}
+        Wochenplan {WOCHENPLAN_NAMEN[wochenplan]}.{" "}
         {istMorgen ? (
           <>
             Als nächstes steht morgen{" "}
@@ -184,7 +199,7 @@ async function RestDay() {
           </>
         ) : (
           <>
-            Heute und morgen ist Pause; als nächstes steht am{" "}
+            Als nächstes steht am{" "}
             <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>{" "}
             <b className="font-semibold text-fg">{naechste.fokus}</b> an.
           </>
@@ -250,6 +265,8 @@ async function RestDay() {
           wann={istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}
         />
       )}
+
+      <WochenplanSchalter aktuell={wochenplan} />
     </div>
   );
 }
@@ -345,6 +362,10 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
       </p>
     </Card>
   );
+}
+
+function heuteIso(): string {
+  return wienerDatum(new Date());
 }
 
 /** Der morgige Kalendertag in Wiener Zeit, ISO. */
