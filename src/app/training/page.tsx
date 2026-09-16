@@ -4,6 +4,7 @@ import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
 import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
 import {
+  eingestellterWochenplan,
   heutigeSaetze,
   rotationFor,
   wochenplanAm,
@@ -95,7 +96,10 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   const wechsel = (
     <>
       <EinheitWechsel art={art} lautPlan={lautPlan} />
-      <WochenplanSchalter aktuell={wochenplanAm(heuteIso(), plaene)} />
+      <WochenplanSchalter
+        aktuell={eingestellterWochenplan(plaene)}
+        kommtAb={kommtAb(plaene)}
+      />
     </>
   );
 
@@ -266,7 +270,10 @@ async function RestDay({ plaene }: { plaene: readonly Planwechsel[] }) {
         />
       )}
 
-      <WochenplanSchalter aktuell={wochenplan} />
+      <WochenplanSchalter
+        aktuell={eingestellterWochenplan(plaene)}
+        kommtAb={kommtAb(plaene)}
+      />
     </div>
   );
 }
@@ -362,6 +369,11 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
       </p>
     </Card>
   );
+}
+
+function kommtAb(plaene: readonly Planwechsel[]): string | null {
+  const ab = plaene.at(-1)?.ab ?? null;
+  return ab !== null && ab > heuteIso() ? ab : null;
 }
 
 function heuteIso(): string {

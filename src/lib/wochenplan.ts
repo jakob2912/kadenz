@@ -11,8 +11,8 @@ import { prisma } from "./db";
 import { heuteWien } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import {
+  eingestellterWochenplan,
   rotationFor,
-  wochenplanAm,
   type Planwechsel,
   type Rotation,
   type Wochenplan,
@@ -52,9 +52,10 @@ export async function rotationMitPlan(date: Date): Promise<Rotation> {
   return rotationFor(date, await wochenplaeneLesen());
 }
 
-/** Der heute geltende Wochenplan. */
-export async function aktuellerWochenplan(): Promise<Wochenplan> {
-  return wochenplanAm(heuteWien(), await wochenplaeneLesen());
+/** Der eingestellte Wochenplan, und ab wann er gilt. */
+export async function aktuellerWochenplan(): Promise<{ plan: Wochenplan; ab: string | null }> {
+  const plaene = await wochenplaeneLesen();
+  return { plan: eingestellterWochenplan(plaene), ab: plaene.at(-1)?.ab ?? null };
 }
 
 /**
@@ -81,9 +82,7 @@ export async function wochenplanSetzen(
     const gestern = tagVerschoben(heute, -1);
     const plaene = await wochenplaeneLesen();
 
-    if (wochenplanAm(heute, plaene) === plan && !plaene.some((w) => w.ab > heute)) {
-      return { ok: true, ab: null };
-    }
+    if (eingestellterWochenplan(plaene) === plan) return { ok: true, ab: null };
 
     const geloggt = await prisma.workout.findMany({
       where: {

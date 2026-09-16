@@ -262,11 +262,11 @@ server.registerTool(
         return antwort({
           plan: WOCHENPLAN_NAMEN[plan],
           ab: r.ab,
-          hinweis: r.ab === null ? "War schon aktiv." : undefined,
+          hinweis: r.ab === null ? "War schon eingestellt." : undefined,
         });
       }
       const aktuell = await aktuellerWochenplan();
-      return antwort({ plan: aktuell, beschreibung: WOCHENPLAN_NAMEN[aktuell] });
+      return antwort({ ...aktuell, beschreibung: WOCHENPLAN_NAMEN[aktuell.plan] });
     } catch (e) {
       return fehler(e);
     }

@@ -14,7 +14,14 @@ import { kurzDatum } from "@/components/ui";
  * wochenplanSetzen() aus dem, was schon geloggt ist; hier steht nur die
  * Antwort.
  */
-export function WochenplanSchalter({ aktuell }: { aktuell: Wochenplan }) {
+export function WochenplanSchalter({
+  aktuell,
+  kommtAb,
+}: {
+  aktuell: Wochenplan;
+  /** Gesetzt, wenn der eingestellte Plan erst an einem späteren Tag greift. */
+  kommtAb: string | null;
+}) {
   const router = useRouter();
   const [meldung, setMeldung] = useState<string | null>(null);
   const [laeuft, starte] = useTransition();
@@ -66,7 +73,9 @@ export function WochenplanSchalter({ aktuell }: { aktuell: Wochenplan }) {
       </div>
       <p className="mt-2 text-center text-[11px] leading-relaxed text-fg-faint" aria-live="polite">
         {meldung ??
-          "Fällt Mo oder Fr aus, auf Wochenende schalten — dann ist Di bzw. Sa Push."}
+          (kommtAb
+            ? `Gilt ab ${kurzDatum(kommtAb)}.`
+            : "Fällt Mo oder Fr aus, auf Wochenende schalten — dann ist Di bzw. Sa Push.")}
       </p>
     </div>
   );

@@ -317,6 +317,14 @@ export function wochenplanAm(iso: string, plaene: readonly Planwechsel[]): Woche
   return plan;
 }
 
+/**
+ * Der Plan, der nach allen eingetragenen Wechseln gilt — auch wenn der
+ * letzte erst morgen greift. Das zeigt der Schalter an.
+ */
+export function eingestellterWochenplan(plaene: readonly Planwechsel[]): Wochenplan {
+  return plaene.at(-1)?.plan ?? "werktage";
+}
+
 /** Welche Einheit an diesem Kalendertag ansteht, oder null am Rest Day. */
 function einheitAm(tagMs: number, plaene: readonly Planwechsel[]): "push" | "pull" | null {
   if (tagMs >= FESTE_TAGE_AB) {
