@@ -164,27 +164,26 @@ export async function trainingsmaxSetzen(
  * falsch — wer einen Aufwärmsatz mitloggt, verschiebt die Nummerierung, und
  * dann zählt Kadenz die falsche Zeile.
  *
- * Zeitraum statt Datum, seit sich Push an jedem Tag wählen lässt: wer
- * vorzieht, trainiert den nächsten anstehenden Push-Tag (trainingAls() in
- * plan.ts), also irgendwann nach dem vorigen Push-Tag und spätestens am
- * geplanten. Über das genaue Datum fände Kadenz einen vorgezogenen
- * AMRAP-Satz nicht, und der Trainingsmax bliebe stillschweigend stehen.
+ * Zeitraum statt Datum, weil ein ausgefallener Push-Tag nachgeholt wird: der
+ * Freitag am Samstag oder Sonntag, der Montag am Dienstag (trainingAls() in
+ * plan.ts). Gesucht wird deshalb ab dem planmäßigen Tag bis vor den nächsten
+ * Push-Tag. Über das genaue Datum fände Kadenz einen nachgeholten AMRAP-Satz
+ * nicht, und der Trainingsmax bliebe stillschweigend stehen.
  *
- * `mindestKg` ist das vorgegebene Gewicht des AMRAP-Satzes. Wer den leichten
- * Tag einen Tag später trainiert, landet mit ihm im Zeitraum des TM-Tags —
- * und dessen schwerer Single (1 Wiederholung bei 90 %) sähe ohne diese
- * Schranke wie ein bestandener AMRAP-Satz der Woche 3 aus, wenn der echte
- * fehlt. Gezählt wird deshalb nur, was mindestens mit dem Sollgewicht lief.
+ * `mindestKg` ist das vorgegebene Gewicht des AMRAP-Satzes. Ein schwerer
+ * Single (1 Wiederholung bei 90 %) sähe ohne diese Schranke wie ein
+ * bestandener AMRAP-Satz der Woche 3 aus, wenn der echte fehlt. Gezählt wird
+ * deshalb nur, was mindestens mit dem Sollgewicht lief.
  */
 async function amrapSatzVon(pushIndex: number, mindestKg: number): Promise<SetLog | null> {
-  const nach = new Date(`${datumFuerPushIndex(pushIndex - 1)}T00:00:00Z`);
-  const bis = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
+  const ab = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
+  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1)}T00:00:00Z`);
 
   return prisma.setLog.findFirst({
     where: {
       exercise: BANK_UEBUNG,
       kg: { gte: mindestKg },
-      workout: { kind: "push", date: { gt: nach, lte: bis } },
+      workout: { kind: "push", date: { gte: ab, lt: bis } },
       /* Markieren lässt sich seit dem 11.09.2026 nicht mehr — eine unsaubere
          letzte Wiederholung zählt Jakob einfach nicht mit. Die alten
          Markierungen gelten aber weiter, deshalb bleibt der Filter.

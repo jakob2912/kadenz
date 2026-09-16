@@ -195,8 +195,8 @@ function morgen(date: Date): Date {
 
 /**
  * Der Plan einer frei gewählten Einheit — "trotzdem Pull", Training am Rest
- * Day. Übungen und Gewichte folgen denselben Regeln wie am
- * planmäßigen Tag; welcher Push- und Bezugstag gilt, sagt trainingAls().
+ * Day. Übungen und Gewichte folgen denselben Regeln wie am planmäßigen Tag;
+ * welcher Push-Tag gilt, sagt trainingAls().
  */
 export function trainingsplanAls(date: Date, einheit: Einheit): Promise<Trainingsplan> {
   return trainingsplanFuer(date, einheit);

@@ -239,11 +239,11 @@ const TAG_MS = 864e5;
  * Tag neu beschriftet, und die Push-Indizes wären mitgewandert — der
  * 5/3/1-Zyklus hinge dann plötzlich an anderen Kalendertagen.
  *
- * Aufsteigend halten. Ein neuer Einschub kommt hinten dazu.
- *
- * Der 14.09.2026 (Mo, planmäßig Pull) fiel aus. Ohne Einschub lief der
- * Kalender weiter und schlug am Mi, 16.09. Push vor, obwohl Jakobs letzte
- * Einheit Push war (So, 13.09.) und er Pull trainiert hat.
+ * Der 14.09.2026 (Mo, damals planmäßig Pull) ist der letzte Einschub, und er
+ * bleibt es. Er hat den Wochenplan auf Jakobs feste Tage gedreht: seit dem
+ * 16.09. ist Push immer Mo und Fr, Pull immer Mi und Sa. Ein weiterer
+ * Einschub würde genau das wieder verschieben — ausgefallene Tage werden
+ * stattdessen nachgeholt, siehe trainingAls(). Ein Test hält das fest.
  */
 export const EINGESCHOBENE_PAUSEN: readonly string[] = ["2026-08-21", "2026-09-14"];
 
@@ -368,24 +368,38 @@ export type Trainingstag = Extract<Rotation, { art: "training" }>;
 
 /**
  * Eine Einheit an einem Tag, an dem der Kalender sie nicht vorsieht —
- * "trotzdem Pull" am Push-Tag, Training am Rest Day.
+ * "trotzdem Push" am Dienstag, Training am Sonntag.
  *
- * Push gilt als der nächste anstehende Push-Tag, am Push-Tag also er selbst:
- * wer vorzieht, trainiert dessen 5/3/1-Vorgabe. Pull braucht keinen Bezug —
- * dort wird nicht gebankt. An einem Tag, an dem die Einheit ohnehin dran ist,
- * kommt genau dasselbe heraus wie aus rotationFor().
+ * Jakobs Regel (16.09.2026): Push ist immer Mo und Fr, Pull Mi und Sa. Fällt
+ * ein Tag aus, wird er nachgeholt — Mo auf Di, Fr auf Sa und So —, der
+ * Kalender verschiebt sich dabei nicht. Ein Push außer Plan ist deshalb der
+ * letzte Push-Tag an oder vor diesem Tag, und er trainiert dessen
+ * 5/3/1-Vorgabe. Vorher galt der nächste anstehende Push-Tag; ein am Di
+ * nachgeholter Montag hätte damit das Programm vom Freitag bekommen, und der
+ * Freitag dieselbe Vorgabe ein zweites Mal.
+ *
+ * An einem Tag, an dem die Einheit ohnehin dran ist, kommt genau dasselbe
+ * heraus wie aus rotationFor().
  */
 export function trainingAls(date: Date, einheit: "push" | "pull"): Trainingstag {
-  return trainingNach(trainingstageVor(Date.parse(`${wienerDatum(date)}T00:00:00Z`)), einheit);
+  if (einheit === "pull") return { art: "training", einheit, pushIndex: null };
+
+  const heute = rotationFor(date);
+  if (heute.art === "training" && heute.einheit === "push") return heute;
+
+  /* Hinter heute liegen `vorher` Trainingstage, der letzte davon hat die
+     Nummer vorher − 1. Push k ist Trainingstag 2k, der letzte Push-Tag davor
+     also ⌊(vorher − 1) / 2⌋. */
+  const vorher = trainingstageVor(Date.parse(`${wienerDatum(date)}T00:00:00Z`));
+  return { art: "training", einheit, pushIndex: Math.floor((vorher - 1) / 2) };
 }
 
 /**
- * Hinter heute liegen `vorher` Trainingstage. Der nächste Push-Tag ist damit
- * Nummer ⌈vorher / 2⌉ — am planmäßigen Tag genau der Kalender: Trainingstag 2k
- * ist Push k.
+ * Hinter heute liegen `vorher` Trainingstage, heute ist einer. Trainingstag 2k
+ * ist Push k, jeder ungerade ist Pull.
  */
 function trainingNach(vorher: number, einheit: "push" | "pull"): Trainingstag {
-  if (einheit === "push") return { art: "training", einheit, pushIndex: Math.ceil(vorher / 2) };
+  if (einheit === "push") return { art: "training", einheit, pushIndex: vorher / 2 };
   return { art: "training", einheit, pushIndex: null };
 }
 

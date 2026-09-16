@@ -127,13 +127,29 @@ describe("Wochenplan ab dem 07.09.2026", () => {
       expect(trainingAls(tag(iso), r.einheit)).toEqual(r);
     }
 
-    // Push vorgezogen gilt als der nächste Push-Tag: Fr, 11.09. und Rest Day
-    // Do, 10.09. trainieren beide den Push vom Sa, 12.09. (Index 9).
-    expect(trainingAls(tag("2026-09-11"), "push")).toMatchObject({ pushIndex: 9 });
-    expect(trainingAls(tag("2026-09-10"), "push")).toMatchObject({ pushIndex: 9 });
+    // Push außer Plan holt den letzten Push-Tag nach: Mo, 21.09. (Index 11)
+    // am Di, Fr, 25.09. (Index 12) am Sa oder So.
+    expect(trainingAls(tag("2026-09-22"), "push")).toMatchObject({ pushIndex: 11 });
+    expect(trainingAls(tag("2026-09-26"), "push")).toMatchObject({ pushIndex: 12 });
+    expect(trainingAls(tag("2026-09-27"), "push")).toMatchObject({ pushIndex: 12 });
+    // Am Push-Tag selbst bleibt es dessen Index.
+    expect(trainingAls(tag("2026-09-25"), "push")).toMatchObject({ pushIndex: 12 });
 
     // Pull trägt keinen Push-Index — dort wird nicht gebankt.
     expect(trainingAls(tag("2026-09-12"), "pull")).toEqual({ art: "training", einheit: "pull", pushIndex: null });
+  });
+
+  it("legt Push ab dem 16.09. fest auf Mo und Fr, Pull auf Mi und Sa", () => {
+    /* Jakobs Regel. Ein neuer Eintrag in EINGESCHOBENE_PAUSEN würde das
+       verschieben — dieser Test schlägt dann an. Ein Jahr weit geprüft. */
+    const soll: Record<number, string> = { 1: "push", 3: "pull", 5: "push", 6: "pull" };
+    for (let t = Date.UTC(2026, 8, 16); t < Date.UTC(2027, 8, 16); t += 864e5) {
+      const datum = new Date(t + 12 * 3600e3);
+      const r = rotationFor(datum);
+      const erwartet = soll[datum.getUTCDay()];
+      if (erwartet) expect(r, datum.toISOString()).toMatchObject({ art: "training", einheit: erwartet });
+      else expect(r.art, datum.toISOString()).toBe("pause");
+    }
   });
 
   it("nennt am Rest Day die Einheit, die wirklich als nächste kommt", () => {
