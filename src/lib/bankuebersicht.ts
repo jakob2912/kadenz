@@ -26,6 +26,9 @@ import {
   bankPosition,
   besterSatz,
   e1rm,
+  SCHAETZUNG_TAGE,
+  schaetzungAus,
+  testPlan,
   type BankSatz,
   type BankWoche,
   type GeloggterSatz,
@@ -63,7 +66,12 @@ export type Wochenvorschau = {
   saetze: BankSatz[];
   /** Deload-Woche — keine AMRAP-Zeile, bewusst leicht. */
   deload: boolean;
+  /** Testtag statt Deload: Aufwärmen, dann Singles. */
+  test: boolean;
 };
+
+/** Ein sauber gehobener Single. */
+export type EchterPr = { kg: number; datum: string };
 
 export type Bankuebersicht = {
   tm: Trainingsmax | null;
@@ -76,7 +84,16 @@ export type Bankuebersicht = {
   vorschau: Wochenvorschau[];
   einheiten: Bankeinheit[];
   ziel: Zielstand | null;
+  /** Schwerster sauberer Single im Fenster — ein gehobenes Gewicht, keine Formel. */
+  pr: EchterPr | null;
+  /** Kalendertag des nächsten Testtags. */
+  naechsterTest: string | null;
+  /** Geschätztes Maximum der letzten Wochen — Grundlage des ersten Testversuchs. */
+  schaetzung: number | null;
 };
+
+/** Wie weit der nächste Testtag gesucht wird: gut drei Zyklen. */
+const TEST_SUCHE_PUSH_TAGE = 26;
 
 /**
  * Der Tag, für den der Bank-Tab den Stand zeigt.
@@ -140,28 +157,31 @@ function zuEinheiten(saetze: GeloggterSatz[]): Bankeinheit[] {
  * entfernt, und bis dahin kann sich der Trainingsmax bewegt haben. Weiter weg
  * wäre eine Zahl mit Verfallsdatum.
  *
- * In Einerschritten gesucht, aber nur TM-Tage aufgenommen: nur jede zweite
- * Push-Einheit trägt die Welle (bankPosition()), die dazwischen läuft
+ * In Einerschritten gesucht, aber nur TM- und Testtage aufgenommen: nur jede
+ * zweite Push-Einheit trägt die Welle (bankPosition()), die dazwischen läuft
  * submaximal und gehört nicht in eine Programmvorschau.
  */
 function vorschauAb(
   pushIndex: number,
   anker: Zyklusanker,
-  tmKg: number
+  tmKg: number,
+  schaetzung: number | null
 ): Wochenvorschau[] {
   const out: Wochenvorschau[] = [];
 
   for (let n = 0; out.length < 2 && n < 6; n++) {
     const index = pushIndex + n;
     const pos = bankPosition(index, anker);
-    if (pos.art !== "tm") continue;
+    if (pos.art !== "tm" && pos.art !== "test") continue;
 
+    const test = pos.art === "test";
     out.push({
       zyklus: pos.zyklus,
       woche: pos.woche,
       datum: datumFuerPushIndex(index),
-      saetze: bankPlan(tmKg, pos.woche),
-      deload: pos.woche === 4,
+      saetze: test ? testPlan(tmKg, schaetzung) : bankPlan(tmKg, pos.woche),
+      deload: !test && pos.woche === 4,
+      test,
     });
   }
 
@@ -196,8 +216,20 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
 
   const einheiten = zuEinheiten(saetze);
 
+  const seit = new Date(Date.parse(`${heute}T00:00:00Z`) - SCHAETZUNG_TAGE * 864e5)
+    .toISOString()
+    .slice(0, 10);
+  const schaetzung = schaetzungAus(saetze.filter((s) => s.datum >= seit && s.datum <= heute));
+
+  let pr: EchterPr | null = null;
+  for (const s of saetze) {
+    if (s.reps !== 1 || s.sauber === false) continue;
+    if (pr === null || s.kg > pr.kg) pr = { kg: s.kg, datum: s.datum };
+  }
+
   let vorschau: Wochenvorschau[] = [];
   let ziel: Zielstand | null = null;
+  let naechsterTest: string | null = null;
 
   if (tm !== null && naechster !== null) {
     /* Der Anker ist der Anfang des LAUFENDEN Zyklus, nicht der des Programms:
@@ -208,7 +240,14 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
       zyklus: tm.zyklus,
     };
 
-    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg);
+    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung);
+
+    for (let n = 0; n < TEST_SUCHE_PUSH_TAGE; n++) {
+      if (bankPosition(naechster.pushIndex + n, anker).art === "test") {
+        naechsterTest = datumFuerPushIndex(naechster.pushIndex + n);
+        break;
+      }
+    }
 
     /* Die Projektion beginnt am Anfang des laufenden Zyklus, nicht heute: der
        Trainingsmax gilt für diesen Zyklus bereits, und ihn ab heute
@@ -224,5 +263,8 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     vorschau,
     einheiten,
     ziel,
+    pr,
+    naechsterTest,
+    schaetzung,
   };
 }

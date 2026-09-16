@@ -7,11 +7,16 @@ import {
   besterSatz,
   e1rm,
   e1rmReihe,
+  istTestZyklus,
   kraftTrend,
   naechsterTm,
   rangliste,
+  schaetzungAus,
+  testPlan,
+  vorTest,
   type GeloggterSatz,
 } from "../kraft";
+import { datumFuerPushIndex } from "../plan";
 
 /** Sätze über mehrere Trainingstage, alle drei Tage einer. */
 function reihe(uebung: string, tage: { datum: string; kg: number; reps: number }[]): GeloggterSatz[] {
@@ -212,6 +217,58 @@ describe("bankZusatzPlan", () => {
       expect(fuenfer).toBeLessThan(amrapSoll(woche)!.prozent);
     }
     expect(plan.at(-1)!.kg).toBeLessThan(amrapSoll(3)!.prozent);
+  });
+});
+
+describe("Testtag", () => {
+  const anker = { pushIndex: 8, zyklus: 2 };
+  // Zyklus n beginnt bei Push-Index 8 + 8·(n − 2); Woche 4 liegt 6 Push-Tage später.
+  const woche4 = (zyklus: number) => 8 + 8 * (zyklus - 2) + 6;
+
+  it("liegt in jedem dritten Zyklus am TM-Tag der Deload-Woche", () => {
+    expect([2, 3, 4, 5, 6, 7, 10, 13].filter(istTestZyklus)).toEqual([4, 7, 10, 13]);
+    expect(bankPosition(woche4(4), anker)).toEqual({ art: "test", zyklus: 4, woche: 4 });
+    expect(bankPosition(woche4(7), anker)).toEqual({ art: "test", zyklus: 7, woche: 4 });
+    expect(bankPosition(woche4(3), anker)).toEqual({ art: "tm", zyklus: 3, woche: 4 });
+    expect(bankPosition(woche4(5), anker).art).toBe("tm");
+  });
+
+  it("fällt für Jakobs Kalender auf Fr, 27.11.2026", () => {
+    expect(datumFuerPushIndex(woche4(4))).toBe("2026-11-27");
+    expect(datumFuerPushIndex(woche4(7))).toBe("2027-02-19");
+    expect(new Date("2026-11-27T12:00:00Z").getUTCDay()).toBe(5);
+  });
+
+  it("nimmt dem leichten Tag davor den Single", () => {
+    const davor = bankPosition(woche4(4) - 1, anker);
+    expect(davor).toEqual({ art: "zusatz", zyklus: 4, woche: 3 });
+    expect(vorTest(davor)).toBe(true);
+    expect(vorTest(bankPosition(woche4(3) - 1, anker))).toBe(false);
+    expect(bankZusatzPlan(95, false)).toHaveLength(3);
+  });
+
+  it("wärmt auf und beginnt beim geschätzten Maximum, abgerundet", () => {
+    const plan = testPlan(95, 103.4);
+    expect(plan.map((s) => [s.kg, s.wdh])).toEqual([
+      [47.5, 5],
+      [67.5, 3],
+      [75, 1],
+      [85, 1],
+      [102.5, 1],
+      [105, 1],
+      [107.5, 1],
+    ]);
+    expect(plan.some((s) => s.amrap)).toBe(false);
+  });
+
+  it("beginnt ohne Schätzung beim Trainingsmax und nie unter dem letzten Aufwärmsatz", () => {
+    expect(testPlan(95, null)[4].kg).toBe(95);
+    expect(testPlan(95, 70)[4].kg).toBe(87.5);
+  });
+
+  it("schätzt nur aus sauberen Sätzen", () => {
+    expect(schaetzungAus([{ kg: 90, reps: 3 }, { kg: 100, reps: 1, sauber: false }])).toBeCloseTo(99);
+    expect(schaetzungAus([])).toBeNull();
   });
 });
 

@@ -1,9 +1,19 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { connection } from "next/server";
-import { bankuebersicht, type Bankeinheit, type Wochenvorschau } from "@/lib/bankuebersicht";
+import {
+  bankuebersicht,
+  type Bankeinheit,
+  type EchterPr,
+  type Wochenvorschau,
+} from "@/lib/bankuebersicht";
 import { behauptetesMaximum, type Trainingsmax } from "@/lib/bank";
-import { SINGLE_PROZENT, ZUSATZ_PROZENT, bankZusatzPlan } from "@/lib/kraft";
+import {
+  SINGLE_PROZENT,
+  TEST_ALLE_ZYKLEN,
+  ZUSATZ_PROZENT,
+  bankZusatzPlan,
+} from "@/lib/kraft";
 import { ZIEL_DATUM, ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib/bankziel";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { ReihenChart } from "@/components/reihen-chart";
@@ -93,6 +103,7 @@ async function Inhalt() {
       </div>
 
       <div className="flex flex-col gap-3.5">
+        <Pr pr={daten.pr} naechsterTest={daten.naechsterTest} schaetzung={daten.schaetzung} />
         {daten.ziel && <Ziel stand={daten.ziel} />}
         <Ablauf tmKg={daten.tm.tmKg} />
         <Verlauf einheiten={daten.einheiten} />
@@ -159,6 +170,7 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                 </span>
               </p>
               {w.deload && <Tag tone="warnung">Deload</Tag>}
+              {w.test && <Tag tone="akzent">Testtag</Tag>}
             </div>
 
             <ol className="mt-2 flex flex-col gap-1">
@@ -174,6 +186,9 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                   <span>
                     × {s.wdh}
                     {s.amrap && "+"}
+                    {w.test && si >= w.saetze.length - 3 && (
+                      <span className="ml-1.5 text-fg-faint">Versuch {si - w.saetze.length + 4}</span>
+                    )}
                   </span>
                   <span className="ml-auto text-[11px] text-fg-faint">
                     {de(s.prozent, 0)} %
@@ -185,9 +200,11 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
             {/* Ohne diesen Hinweis ist das "+" hinter der Zahl bloß ein
                 Zeichen. Der AMRAP-Satz ist das Messinstrument des Programms. */}
             <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-              {w.deload
-                ? "Bewusst leicht, kein Satz auf Maximalwiederholungen. Die Woche ist zum Zurücknehmen da."
-                : "Der letzte Satz geht auf Maximalwiederholungen — aus ihm rechnet Kadenz den nächsten Trainingsmax."}
+              {w.test
+                ? "Aufwärmen, dann Singles. Den nächsten Versuch nur, wenn der vorige glatt ging — beim ersten Kampf-Rep ist Schluss."
+                : w.deload
+                  ? "Bewusst leicht, kein Satz auf Maximalwiederholungen. Die Woche ist zum Zurücknehmen da."
+                  : "Der letzte Satz geht auf Maximalwiederholungen — aus ihm rechnet Kadenz den nächsten Trainingsmax."}
             </p>
           </div>
         ))}
@@ -236,6 +253,59 @@ function TmHistorie({ historie }: { historie: Trainingsmax[] }) {
           );
         })}
       </ol>
+    </Card>
+  );
+}
+
+/**
+ * Der echte Bestwert: der schwerste saubere Single, kein geschätztes Maximum.
+ * Daneben, wann wieder getestet wird.
+ */
+function Pr({
+  pr,
+  naechsterTest,
+  schaetzung,
+}: {
+  pr: EchterPr | null;
+  naechsterTest: string | null;
+  schaetzung: number | null;
+}) {
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between gap-3">
+        <Eyebrow>Echter PR</Eyebrow>
+        {naechsterTest && (
+          <span className="text-[11px] text-fg-faint">
+            Nächster Test {kurzDatum(naechsterTest)}
+          </span>
+        )}
+      </div>
+
+      {pr ? (
+        <>
+          <p className="mt-2 text-[27px] font-bold leading-none tracking-[-0.03em]">
+            {de(pr.kg, 1)} kg
+          </p>
+          <p className="mt-1.5 text-[13px] text-fg-dim">
+            Schwerster sauberer Single, am {kurzDatum(pr.datum)}.
+          </p>
+        </>
+      ) : (
+        <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
+          Noch kein sauberer Single geloggt.
+        </p>
+      )}
+
+      <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
+        Getestet wird in jedem {TEST_ALLE_ZYKLEN}. Zyklus am Freitag der Deload-Woche.
+        {schaetzung !== null && (
+          <>
+            {" "}
+            Geschätztes Maximum aus den letzten Wochen: {de(schaetzung, 1)} kg — dort beginnt der
+            erste Versuch.
+          </>
+        )}
+      </p>
     </Card>
   );
 }
@@ -336,6 +406,17 @@ function Ablauf({ tmKg }: { tmKg: number }) {
             Die Push-Einheit dazwischen. Der Single ist eine saubere, schnelle Wiederholung —
             kein Grinder und keine zweite. Zählt nicht für den Trainingsmax. In der
             Deload-Woche fällt der Tag aus.
+          </p>
+        </div>
+
+        <div className="border-t border-hair-soft pt-3.5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">Testtag</span>
+            <Tag tone="warnung">1RM</Tag>
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
+            Jeder {TEST_ALLE_ZYKLEN}. Zyklus: Der Freitag der Deload-Woche wird zum Maximalversuch.
+            Der leichte Tag davor läuft ohne Single. Bewegt den Trainingsmax nicht.
           </p>
         </div>
 

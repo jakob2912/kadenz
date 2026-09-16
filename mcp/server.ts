@@ -261,7 +261,7 @@ server.registerTool(
         bank: heute.bank
           ? {
               art: heute.bank.position.art,
-              bankTag: heute.bank.position.art === "tm",
+              bankTag: heute.bank.position.art === "tm" || heute.bank.position.art === "test",
               zyklus: heute.bank.position.zyklus,
               woche: heute.bank.position.woche,
               trainingsmaxKg: heute.bank.tm?.tmKg ?? null,
@@ -700,7 +700,7 @@ server.registerTool(
   {
     title: "Bankdrücken heute",
     description:
-      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
+      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"test\" der Freitag der Deload-Woche in jedem dritten Zyklus (Aufwärmen, dann bis zu drei Singles ab dem geschätzten Maximum, ohne Wirkung auf den Trainingsmax), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
   },
   async () => {
     try {
@@ -719,7 +719,7 @@ server.registerTool(
       const stand = await bankstandFuer(rotation.pushIndex);
       return antwort({
         art: stand.position.art,
-        bankTag: stand.position.art === "tm",
+        bankTag: stand.position.art === "tm" || stand.position.art === "test",
         zyklus: stand.position.zyklus,
         woche: stand.position.woche,
         naechsterBankTag: stand.naechsterBankTag,

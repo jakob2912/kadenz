@@ -20,10 +20,15 @@ import {
   bankPosition,
   bankZusatzPlan,
   naechsterTm,
+  SCHAETZUNG_TAGE,
+  schaetzungAus,
+  testPlan,
+  TEST_VERSUCHE,
   TM_ANTEIL,
   PUSH_TAGE_JE_ZYKLUS,
   SINGLE_PROZENT,
   ZUSATZ_PROZENT,
+  vorTest,
   type BankPosition,
   type Zyklusanker,
 } from "./kraft";
@@ -362,13 +367,35 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
      bereits laufendem Programm — gilt dasselbe: der TM-Tag liegt eine
      Push-Einheit weiter. */
   const naechsterBankTag =
-    position.art === "tm" ? null : datumFuerPushIndex(pushIndex + 1);
+    position.art === "tm" || position.art === "test" ? null : datumFuerPushIndex(pushIndex + 1);
 
   if (tm.zyklus < position.zyklus) {
     tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex);
   }
 
-  return { position, tm, naechsterBankTag, vorgabe: vorgabeFuer(position, tm.tmKg) };
+  const schaetzung =
+    position.art === "test" ? await geschaetztesMaximum(datumFuerPushIndex(pushIndex)) : null;
+
+  return {
+    position,
+    tm,
+    naechsterBankTag,
+    vorgabe: vorgabeFuer(position, tm.tmKg, schaetzung),
+  };
+}
+
+/**
+ * Das beste geschätzte Maximum der letzten Wochen vor einem Tag — die
+ * Grundlage für den ersten Versuch am Testtag.
+ */
+export async function geschaetztesMaximum(vorIso: string): Promise<number | null> {
+  const bis = new Date(`${vorIso}T00:00:00Z`);
+  const ab = new Date(bis.getTime() - SCHAETZUNG_TAGE * 864e5);
+  const saetze = await prisma.setLog.findMany({
+    where: { exercise: BANK_UEBUNG, workout: { date: { gte: ab, lt: bis } } },
+    select: { kg: true, reps: true, sauber: true },
+  });
+  return schaetzungAus(saetze);
 }
 
 /**
@@ -380,9 +407,36 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
  * TM-Tags der Woche 3 und nur ab dessen Sollgewicht (amrapSatzVon()). Der
  * Single des leichten Tags liegt darunter, auch wenn er sich verschiebt.
  */
-function vorgabeFuer(position: BankPosition, tmKg: number): Programmvorgabe {
+function vorgabeFuer(
+  position: BankPosition,
+  tmKg: number,
+  schaetzung: number | null
+): Programmvorgabe {
   if (position.art === "tm") {
     return { saetze: bankPlan(tmKg, position.woche), hinweis: null };
+  }
+
+  if (position.art === "test") {
+    return {
+      saetze: testPlan(tmKg, schaetzung),
+      hinweis:
+        `Testtag: vier Aufwärmsätze, dann bis zu ${TEST_VERSUCHE} Singles. Den nächsten ` +
+        `Versuch nur, wenn der vorige glatt ging — beim ersten Kampf-Rep ist Schluss. Hüfte ` +
+        `bleibt auf der Bank, sonst zählt der Versuch nicht. 3–5 Minuten Pause. Nicht ` +
+        `geschaffte Versuche einfach nicht abhaken.` +
+        (schaetzung === null
+          ? " Keine Schätzung aus den letzten Wochen — der erste Versuch liegt beim Trainingsmax."
+          : ""),
+    };
+  }
+
+  if (vorTest(position)) {
+    return {
+      saetze: bankZusatzPlan(tmKg, false),
+      hinweis:
+        `Leichter Tag vor dem Testtag: nur drei Fünfer bei ` +
+        `${String(ZUSATZ_PROZENT).replace(".", ",")} %, kein Single — frisch in den Test.`,
+    };
   }
 
   if (position.art === "zusatz") {

@@ -235,7 +235,7 @@ async function trainingsplanFuer(date: Date, gewaehlt?: Einheit): Promise<Traini
      jeder Push-Einheit, an der das Programm läuft — am TM-Tag nach der Welle,
      dazwischen als leichter Tag mit schwerem Single. Die Vorgabe dafür kommt fertig
      aus bankstandFuer(); hier ist bloß zu entscheiden, ob der Slot mitkommt. */
-  const istTmTag = bank !== null && bank.position.art === "tm";
+  const istTmTag = bank !== null && (bank.position.art === "tm" || bank.position.art === "test");
   const bankSlot = bank !== null && bank.position.art !== "keiner";
 
   const geplant: ZuPlanen[] = [];

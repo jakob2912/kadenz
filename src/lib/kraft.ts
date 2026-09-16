@@ -376,7 +376,7 @@ export const ZUSATZ_SAETZE = 3;
 export const ZUSATZ_WDH = 5;
 export const SINGLE_PROZENT = 90;
 
-export function bankZusatzPlan(tmKg: number): BankSatz[] {
+export function bankZusatzPlan(tmKg: number, mitSingle = true): BankSatz[] {
   const satz = {
     prozent: ZUSATZ_PROZENT,
     wdh: ZUSATZ_WDH,
@@ -389,8 +389,92 @@ export function bankZusatzPlan(tmKg: number): BankSatz[] {
     amrap: false,
     kg: aufZweiKommaFuenf((tmKg * SINGLE_PROZENT) / 100),
   };
-  return [...Array.from({ length: ZUSATZ_SAETZE }, () => ({ ...satz })), single];
+  const fuenfer = Array.from({ length: ZUSATZ_SAETZE }, () => ({ ...satz }));
+  return mitSingle ? [...fuenfer, single] : fuenfer;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Testtag
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Ein echter Maximalversuch, einmal im Quartal.
+ *
+ * 5/3/1 testet von sich aus nie — die AMRAP-Sätze sind Wiederholungsrekorde.
+ * Jakobs Ziel heißt aber "140 kg sauber", und das ist ein Single. Deshalb
+ * ersetzt in jedem dritten Zyklus (4, 7, 10, …) der Freitag der Deload-Woche
+ * die Deload-Welle durch einen Test: gut drei Monate Abstand, und die
+ * Deload-Woche davor ist ohnehin die frischeste Stelle im Zyklus.
+ *
+ * Der Test bewegt den Trainingsmax nicht. Der folgt weiter dem AMRAP-Satz der
+ * Woche 3; liegt ein Test deutlich unter dem, was der Trainingsmax behauptet,
+ * setzt Jakob ihn von Hand zurück.
+ */
+export const TEST_ALLE_ZYKLEN = 3;
+
+export function istTestZyklus(zyklus: number): boolean {
+  return zyklus > 1 && (zyklus - 1) % TEST_ALLE_ZYKLEN === 0;
+}
+
+/** Aufwärmen am Testtag, in Prozent vom Trainingsmax. */
+const TEST_AUFWAERMEN: readonly { prozent: number; wdh: number }[] = [
+  { prozent: 50, wdh: 5 },
+  { prozent: 70, wdh: 3 },
+  { prozent: 80, wdh: 1 },
+  { prozent: 90, wdh: 1 },
+];
+
+export const TEST_VERSUCHE = 3;
+
+/**
+ * Wie weit zurück die Schätzung für den ersten Versuch schaut: gut ein
+ * Zyklus. Ältere Sätze sagen über die Kraft von heute wenig.
+ */
+export const SCHAETZUNG_TAGE = 56;
+
+/**
+ * Das beste geschätzte Maximum aus einer Satzliste. Unsaubere Sätze zählen
+ * nicht, siehe besterSatz().
+ */
+export function schaetzungAus(saetze: SetLog[]): number | null {
+  let best: number | null = null;
+  for (const s of saetze) {
+    if (s.sauber === false) continue;
+    const wert = e1rm(s);
+    if (wert !== null && (best === null || wert > best)) best = wert;
+  }
+  return best;
+}
+
+/**
+ * Die Sätze des Testtags: Aufwärmen, dann bis zu drei Singles.
+ *
+ * Der erste Versuch liegt beim geschätzten Maximum, abgerundet auf 2,5 kg —
+ * die Schätzung kommt aus AMRAP-Sätzen mit Reserve und liegt eher unter dem
+ * echten Wert. Danach je 2,5 kg mehr, aber nur, solange der vorige glatt
+ * ging. Ohne Schätzung beginnt der Test beim Trainingsmax.
+ */
+export function testPlan(tmKg: number, schaetzungKg: number | null): BankSatz[] {
+  const aufwaermen = TEST_AUFWAERMEN.map((s) => ({
+    ...s,
+    amrap: false,
+    kg: aufZweiKommaFuenf((tmKg * s.prozent) / 100),
+  }));
+
+  const letzterAufwaermsatz = aufwaermen[aufwaermen.length - 1].kg;
+  const erster = Math.max(
+    Math.floor((schaetzungKg ?? tmKg) / 2.5) * 2.5,
+    letzterAufwaermsatz + 2.5
+  );
+
+  const versuche = Array.from({ length: TEST_VERSUCHE }, (_, i) => {
+    const kg = erster + i * 2.5;
+    return { prozent: Math.round((kg / tmKg) * 100), wdh: 1, amrap: false, kg };
+  });
+
+  return [...aufwaermen, ...versuche];
+}
+
 
 /** Der AMRAP-Satz der Woche, falls es einen gibt. */
 export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | null {
@@ -406,6 +490,8 @@ export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | 
  *             wird.
  * "zusatz"  — die Push-Einheit dazwischen: leicht plus ein schwerer Single,
  *             ohne Wirkung auf den Trainingsmax.
+ * "test"    — der TM-Tag der Deload-Woche in jedem dritten Zyklus: statt der
+ *             Deload-Welle ein echter Maximalversuch (testPlan()).
  * "keiner"  — vor dem Programmstart, und die Zusatz-Einheit der Deload-Woche.
  *
  * Ein Aufzählungstyp statt zweier Wahrheitswerte: mit istBankTag und
@@ -413,7 +499,7 @@ export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | 
  * nicht gibt, und jede Stelle müsste selbst wissen, welcher der beiden
  * Vorrang hat.
  */
-export type BankTagArt = "tm" | "zusatz" | "keiner";
+export type BankTagArt = "tm" | "test" | "zusatz" | "keiner";
 
 export type BankPosition = {
   art: BankTagArt;
@@ -472,9 +558,13 @@ export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPositio
      Math.floor() rundet den ungeraden Versatz auf denselben Bank-Index ab.
      Das ist die Absicht: solange die Welle läuft, soll nicht mitten zwischen
      zwei Programmtagen die Woche umspringen. */
+  const zyklus = anker.zyklus + Math.floor(bankIndex / 4);
+
   const art: BankTagArt =
     versatz % 2 === 0
-      ? "tm"
+      ? woche === 4 && istTestZyklus(zyklus)
+        ? "test"
+        : "tm"
       : /* In der Deload-Woche fällt die Zusatz-Einheit aus. 72,5 % lägen über
            jedem ihrer Sätze (40/50/60 %), und eine Woche, deren ganzer Sinn
            das Zurücknehmen ist, wäre damit die schwerere von beiden. */
@@ -482,7 +572,12 @@ export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPositio
         ? "keiner"
         : "zusatz";
 
-  return { art, zyklus: anker.zyklus + Math.floor(bankIndex / 4), woche };
+  return { art, zyklus, woche };
+}
+
+/** Ist das der leichte Tag direkt vor einem Testtag? Dann ohne Single. */
+export function vorTest(position: BankPosition): boolean {
+  return position.art === "zusatz" && position.woche === 3 && istTestZyklus(position.zyklus);
 }
 
 /** Wie viele Push-Tage ein voller Zyklus dauert: vier Wochen à zwei. */

@@ -5,6 +5,7 @@ import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
 import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
 import { heutigeSaetze, rotationFor, type Einheitskopf } from "@/lib/plan";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
+import { vorTest } from "@/lib/kraft";
 import { TrainingLogger, TrainingStart } from "@/components/training-logger";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { Card, Eyebrow, Skelett, anzahl, de, kurzDatum, uebungsVorschau } from "@/components/ui";
@@ -256,7 +257,7 @@ async function RestDay() {
 /**
  * Wo das Bankdrücken gerade steht.
  *
- * Vier Zustände, und alle vier sind eine Auskunft wert: kein Trainingsmax
+ * Fünf Zustände, und alle sind eine Auskunft wert: Testtag, kein Trainingsmax
  * (dann steht hier die Eingabe), leichter Tag (mit schwerem Single, ohne Wirkung
  * auf den Trainingsmax), gar keine Bankeinheit (Deload-Zwischentag), oder der
  * TM-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil heute nichts
@@ -268,6 +269,26 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
     return <BankTrainingsmax aktuellerTm={null} zyklus={bank.position.zyklus} />;
   }
 
+  if (bank.position.art === "test") {
+    return (
+      <Card className="mt-3.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <Eyebrow>Bankdrücken · Testtag</Eyebrow>
+          <span className="text-[11px] text-fg-faint">Zyklus {bank.position.zyklus}</span>
+        </div>
+        <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
+          {wann} wird echt getestet: aufwärmen, dann Singles bis zum ersten Kampf-Rep. Jeder
+          Versuch nur, wenn der vorige glatt ging. Die Hüfte bleibt auf der Bank.
+        </p>
+        <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+          Der Test ersetzt die Deload-Welle und bewegt den Trainingsmax nicht (
+          {de(bank.tm.tmKg, 1)} kg, behauptet rund {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg).
+          Liegt dein bester Single deutlich darunter, setz den Trainingsmax zurück.
+        </p>
+      </Card>
+    );
+  }
+
   if (bank.position.art !== "tm") {
     const zusatz = bank.position.art === "zusatz";
     return (
@@ -276,9 +297,15 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           {zusatz ? (
             <>
-              {wann} kein TM-Tag. Bankdrücken läuft leicht — drei Fünfer mit Reserve, danach
-              ein <b className="font-semibold text-fg">schwerer Single</b>. Ohne Wirkung auf
-              den Trainingsmax, keine Auswertung.
+              {wann} kein TM-Tag. Bankdrücken läuft leicht — drei Fünfer mit Reserve
+              {vorTest(bank.position) ? (
+                <>, ohne Single: am nächsten Bank-Tag wird getestet.</>
+              ) : (
+                <>
+                  , danach ein <b className="font-semibold text-fg">schwerer Single</b>. Ohne
+                  Wirkung auf den Trainingsmax, keine Auswertung.
+                </>
+              )}
             </>
           ) : (
             <>
