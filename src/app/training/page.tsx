@@ -257,8 +257,8 @@ async function RestDay() {
  * Wo das Bankdrücken gerade steht.
  *
  * Vier Zustände, und alle vier sind eine Auskunft wert: kein Trainingsmax
- * (dann steht hier die Eingabe), Zusatz-Einheit (submaximal, ohne Wirkung auf
- * den Trainingsmax), gar keine Bankeinheit (Deload-Zwischentag), oder der
+ * (dann steht hier die Eingabe), leichter Tag (mit schwerem Single, ohne Wirkung
+ * auf den Trainingsmax), gar keine Bankeinheit (Deload-Zwischentag), oder der
  * TM-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil heute nichts
  * ansteht, hieße jedes Mal neu nachzurechnen, wann wieder.
  */
@@ -272,24 +272,22 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
     const zusatz = bank.position.art === "zusatz";
     return (
       <Card className="mt-3.5">
-        <Eyebrow>Bankdrücken · {zusatz ? "Zusatz-Einheit" : "5/3/1"}</Eyebrow>
+        <Eyebrow>Bankdrücken · {zusatz ? "Leichter Tag" : "5/3/1"}</Eyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           {zusatz ? (
             <>
-              {wann} kein TM-Tag. Statt des schweren Bankdrückens steht die{" "}
-              <b className="font-semibold text-fg">Paused Bench Press</b> im Plan:
-              submaximal, mit eigener Gewichtssteuerung aus ihrer Historie und ohne
-              Wirkung auf den Trainingsmax. Sie bringt Frequenz an der Hantel, keine
-              Auswertung.
+              {wann} kein TM-Tag. Bankdrücken läuft leicht — drei Fünfer mit Reserve, danach
+              ein <b className="font-semibold text-fg">schwerer Single</b>. Ohne Wirkung auf
+              den Trainingsmax, keine Auswertung.
             </>
           ) : (
             <>
-              {wann} keine Bankeinheit. In der Deload-Woche fällt die Zusatz-Einheit aus, die
+              {wann} keine Bankeinheit. In der Deload-Woche fällt der leichte Tag aus, die
               Woche ist zum Zurücknehmen da.
             </>
           )}
           {bank.naechsterBankTag && (
-            <> Schwer gebankt wird wieder am {kurzDatum(bank.naechsterBankTag)}.</>
+            <> Der nächste TM-Tag ist am {kurzDatum(bank.naechsterBankTag)}.</>
           )}
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">

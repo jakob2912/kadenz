@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { bankuebersicht, type Bankeinheit, type Wochenvorschau } from "@/lib/bankuebersicht";
 import { behauptetesMaximum, type Trainingsmax } from "@/lib/bank";
-import { PRESSVARIANTEN, PRESS_NAMEN, type Pressvariante } from "@/lib/kraft";
+import { SINGLE_PROZENT, ZUSATZ_PROZENT, bankZusatzPlan } from "@/lib/kraft";
 import { ZIEL_DATUM, ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib/bankziel";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { ReihenChart } from "@/components/reihen-chart";
@@ -15,9 +15,9 @@ import { Card, Eyebrow, Skelett, Tag, anzahl, de, kurzDatum, langDatum } from "@
  * Getrennt vom Verlauf, obwohl es dort längst eine Seite je Übung gibt
  * (/verlauf/[uebung]). Der Unterschied ist nicht die Übung, sondern die Frage:
  * /verlauf beantwortet "wie läuft diese Übung", hier steht ein Programm mit
- * Zyklus, Woche, Trainingsmax und einem Ziel mit Datum. Drei Varianten gehören
- * zusammen gelesen, und eine Vorschau auf die nächste Programmwoche hat auf
- * einer generischen Verlaufsseite nichts verloren.
+ * Zyklus, Woche, Trainingsmax und einem Ziel mit Datum. Eine Vorschau auf die
+ * nächste Programmwoche hat auf einer generischen Verlaufsseite nichts
+ * verloren.
  *
  * Die Hülle ist vorgerendert, alles Datengebundene strömt nach — dasselbe
  * Muster wie auf den übrigen Seiten.
@@ -28,7 +28,7 @@ export default function Bank() {
       <header className="pt-10 md:pt-14">
         <Eyebrow>Bankdrücken</Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em] md:text-[33px]">
-          5/3/1 und die Varianten
+          5/3/1 mit leichtem Tag
         </h1>
       </header>
 
@@ -94,7 +94,7 @@ async function Inhalt() {
 
       <div className="flex flex-col gap-3.5">
         {daten.ziel && <Ziel stand={daten.ziel} />}
-        <Varianten heute={daten.heute} gewicht={daten.arbeitsgewicht} />
+        <Ablauf tmKg={daten.tm.tmKg} />
         <Verlauf einheiten={daten.einheiten} />
       </div>
     </div>
@@ -297,85 +297,57 @@ function Ziel({ stand }: { stand: Zielstand }) {
 }
 
 /**
- * Die drei Varianten: was sie sind, wie sie ausgeführt werden, was sie steuert.
- *
- * Steht auf diesem Tab und nicht als Notiz an der Übung im Trainings-Logger.
- * Im Gym liest niemand drei Absätze, dort zählt die Zahl im Feld — die Notiz
- * dort ist deshalb eine Zeile lang. Nachschlagen, wie eine Spoto Press
- * eigentlich geht, tut man dazwischen, und dazwischen ist man hier.
- *
- * Die heute anstehende Variante steht oben und ist hervorgehoben: die Frage
- * "was mache ich heute und wie" ist die häufigste, mit der man das aufschlägt.
+ * Wie sich die Bankeinheiten abwechseln — mit den Gewichten des leichten
+ * Tags. Die des TM-Tags stehen satzweise in der Vorschau.
  */
-function Varianten({
-  heute,
-  gewicht,
-}: {
-  heute: Pressvariante | null;
-  gewicht: Partial<Record<Pressvariante, number>>;
-}) {
-  const sortiert = [...PRESS_NAMEN].sort((a, b) =>
-    a === heute ? -1 : b === heute ? 1 : 0
-  );
+function Ablauf({ tmKg }: { tmKg: number }) {
+  const leicht = bankZusatzPlan(tmKg);
+  const fuenfer = leicht[0];
+  const single = leicht[leicht.length - 1];
 
   return (
     <Card>
-      <Eyebrow>Die drei Varianten</Eyebrow>
+      <Eyebrow>So wechselt es sich ab</Eyebrow>
 
-      <div className="mt-3 flex flex-col gap-4">
-        {sortiert.map((name) => {
-          const v = PRESSVARIANTEN[name];
-          const aktiv = name === heute;
+      <div className="mt-3 flex flex-col gap-3.5">
+        <div>
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">TM-Tag</span>
+            <Tag tone="akzent">AMRAP</Tag>
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
+            Jede zweite Push-Einheit. Drei Sätze nach der Welle, der letzte auf
+            Maximalwiederholungen — nur dieser Satz in Woche 3 bewegt den Trainingsmax.
+          </p>
+        </div>
 
-          return (
-            <div
-              key={name}
-              className="border-t border-hair-soft pt-3.5 first:border-0 first:pt-0"
-            >
-              <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-                <span className="text-[15px] font-semibold tracking-[-0.015em]">{v.lang}</span>
-                <Tag tone={v.schwer ? "akzent" : "gut"}>{v.kurz}</Tag>
-                {aktiv && <Tag tone="warnung">heute</Tag>}
-              </div>
+        <div className="border-t border-hair-soft pt-3.5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">Leichter Tag</span>
+            <Tag tone="gut">+ Single</Tag>
+          </div>
+          <p className="mt-1.5 text-[13px] tabular-nums text-fg">
+            3 × {fuenfer.wdh} mit {de(fuenfer.kg, 1)} kg
+            <span className="text-fg-faint"> · {de(ZUSATZ_PROZENT, 1)} %</span>, dann 1 ×{" "}
+            {de(single.kg, 1)} kg
+            <span className="text-fg-faint"> · {de(SINGLE_PROZENT, 0)} %</span>
+          </p>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
+            Die Push-Einheit dazwischen. Der Single ist eine saubere, schnelle Wiederholung —
+            kein Grinder und keine zweite. Zählt nicht für den Trainingsmax. In der
+            Deload-Woche fällt der Tag aus.
+          </p>
+        </div>
 
-              <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <p className="text-[11px] uppercase tracking-[0.11em] text-fg-faint">
-                  {v.wann}
-                </p>
-                {/* Beim schweren Bankdrücken steht das Gewicht satzweise in
-                    der Vorschau — hier eine einzelne Zahl danebenzustellen
-                    wäre eine zweite Meinung darüber, was aufliegt. */}
-                <p className="text-[13px] font-semibold tabular-nums">
-                  {v.schwer ? (
-                    <span className="text-[11px] font-normal text-fg-faint">
-                      Gewicht aus dem Trainingsmax
-                    </span>
-                  ) : gewicht[name] !== undefined ? (
-                    <>
-                      {de(gewicht[name]!, 1)} kg
-                      <span className="ml-1.5 text-[11px] font-normal text-fg-faint">
-                        aktuell
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-[11px] font-normal text-fg-faint">
-                      noch keine Ausführung geloggt
-                    </span>
-                  )}
-                </p>
-              </div>
-
-              <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">{v.ausfuehrung}</p>
-              <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">{v.steuerung}</p>
-            </div>
-          );
-        })}
+        <p className="border-t border-hair-soft pt-3.5 text-[11px] leading-relaxed text-fg-faint">
+          Am Pull-Tag wird nicht gebankt.
+        </p>
       </div>
     </Card>
   );
 }
 
-/** Alle drei Varianten chronologisch. */
+/** Alle Bankeinheiten chronologisch. */
 function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
   if (einheiten.length === 0) {
     return (
@@ -383,7 +355,7 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
         <Eyebrow>Verlauf</Eyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           Noch keine Bankeinheit geloggt. Sobald der erste Satz steht, läuft hier die
-          Zeitleiste — schwer, Paused und Spoto nebeneinander.
+          Zeitleiste.
         </p>
       </Card>
     );
@@ -403,14 +375,13 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
       <ol className="mt-3 flex flex-col gap-3">
         {einheiten.map((e) => (
           <li
-            key={`${e.datum}-${e.uebung}`}
+            key={e.datum}
             className="border-t border-hair-soft pt-3 first:border-0 first:pt-0"
           >
             <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               <span className="text-[13px] font-semibold tracking-[-0.015em]">
                 {kurzDatum(e.datum)}
               </span>
-              <Tag tone={e.schwer ? "akzent" : "gut"}>{e.kurz}</Tag>
               {e.unsauber && <Tag tone="schlecht">nicht sauber</Tag>}
               {e.e1rm !== null && (
                 <span className="ml-auto text-[11px] tabular-nums text-fg-faint">
@@ -442,7 +413,7 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
         href="/verlauf/Bankdr%C3%BCcken"
         className="mt-3.5 inline-flex min-h-[36px] items-center text-[13px] font-semibold text-accent md:hover:underline"
       >
-        Kraftverlauf des schweren Bankdrückens →
+        Kraftverlauf des Bankdrückens →
       </Link>
     </Card>
   );

@@ -5,109 +5,9 @@ import {
   PUSH_TAGE_JE_ZYKLUS,
   besterSatz,
   e1rmReihe,
-  istPressvariante,
-  varianteFuer,
   type GeloggterSatz,
 } from "../kraft";
-import { rotationFor } from "../plan";
 import { TAGE_JE_ZYKLUS, ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankziel";
-
-/**
- * Der Programmstart aus Jakobs Daten: Zyklus 1 gilt ab dem 20.08.2026, und
- * pushIndexAbDatum() macht daraus den Push-Index 2. Alle Versätze hier sind
- * relativ dazu — Versatz 0 ist der erste TM-Tag.
- */
-const START = 2;
-const ANKER = { pushIndex: START, zyklus: 1 };
-
-function positionBei(versatz: number) {
-  return bankPosition(START + versatz, ANKER);
-}
-
-describe("varianteFuer", () => {
-  it("macht aus dem TM-Tag die schwere Push-Variante", () => {
-    expect(varianteFuer("push", positionBei(0))).toBe("schwer");
-    expect(varianteFuer("push", positionBei(2))).toBe("schwer");
-  });
-
-  it("macht aus der Push-Einheit dazwischen die leichte Variante", () => {
-    expect(varianteFuer("push", positionBei(1))).toBe("leicht");
-    expect(varianteFuer("push", positionBei(3))).toBe("leicht");
-  });
-
-  it("lässt die Presse in der Deload-Woche weg", () => {
-    /* Versatz 6 ist der TM-Tag der vierten Woche, Versatz 7 wäre die
-       Zusatz-Einheit — die fällt im Deload aus (bankPosition() gibt "keiner").
-       72,5 % lägen über jedem Satz der Deload-Woche, und eine Woche, deren
-       Zweck das Zurücknehmen ist, wäre damit die schwerere. */
-    expect(positionBei(6).woche).toBe(4);
-    expect(varianteFuer("push", positionBei(6))).toBe("schwer");
-    expect(varianteFuer("push", positionBei(7))).toBe("ohne");
-  });
-
-  it("setzt die Spoto Press auf das Pull nach einer leichten Push-Einheit", () => {
-    // Der Bezug eines Pull-Tags ist der Push-Tag davor. Lag dort die leichte
-    // Einheit, kommen heute die zwei Sätze dazu.
-    expect(varianteFuer("pull", positionBei(1))).toBe("presse");
-    expect(varianteFuer("pull", positionBei(3))).toBe("presse");
-  });
-
-  it("lässt das Pull nach dem schweren Tag rein", () => {
-    // Am Tag nach der schwersten Bankeinheit kommt nichts Zusätzliches auf
-    // die Brust.
-    expect(varianteFuer("pull", positionBei(0))).toBe("rein");
-    expect(varianteFuer("pull", positionBei(2))).toBe("rein");
-  });
-
-  it("lässt auch die Pull-Tage der Deload-Woche ohne Presse", () => {
-    expect(varianteFuer("pull", positionBei(6))).toBe("rein");
-    expect(varianteFuer("pull", positionBei(7))).toBe("rein");
-  });
-
-  it("gibt vor dem Programmstart keine Presse aus", () => {
-    const vorher = bankPosition(START - 1, ANKER);
-    expect(vorher.art).toBe("keiner");
-    expect(varianteFuer("push", vorher)).toBe("ohne");
-    expect(varianteFuer("pull", vorher)).toBe("rein");
-  });
-});
-
-describe("rotationFor trägt den Bezugs-Push-Index", () => {
-  it("nennt an einem Push-Tag ihn selbst", () => {
-    // 09.09.2026 ist laut Rotation ein Push-Tag mit Index 8.
-    const r = rotationFor(new Date("2026-09-09T12:00:00Z"));
-    if (r.art !== "training") throw new Error("kein Trainingstag");
-    expect(r.einheit).toBe("push");
-    expect(r.pushIndex).toBe(8);
-    expect(r.bezugPushIndex).toBe(8);
-  });
-
-  it("nennt an einem Pull-Tag den Push-Tag davor", () => {
-    // Fr, 11.09. — der Donnerstag davor ist im Wochenplan Rest Day.
-    const r = rotationFor(new Date("2026-09-11T12:00:00Z"));
-    if (r.art !== "training") throw new Error("kein Trainingstag");
-    expect(r.einheit).toBe("pull");
-    // pushIndex bleibt null: an einem Pull-Tag wird nicht gebankt, und
-    // bankstandFuer() darf von hier aus nichts fortschreiben.
-    expect(r.pushIndex).toBeNull();
-    expect(r.bezugPushIndex).toBe(8);
-  });
-
-  it("bildet Jakobs eigene Beispieltage ab", () => {
-    /* Fr, 28.08. lief schwer (62,5/72,5/80 kg — Woche 2), Mo, 31.08. leicht
-       (dreimal 65 kg). Genau diese Abwechslung meinte der Wunsch mit
-       "Freitag schwer, Montag leicht"; der Wochentag selbst trug sie nicht,
-       die Ferienroutine wanderte alle drei Tage durch die Woche. */
-    const freitag = rotationFor(new Date("2026-08-28T12:00:00Z"));
-    const montag = rotationFor(new Date("2026-08-31T12:00:00Z"));
-    if (freitag.art !== "training" || montag.art !== "training") {
-      throw new Error("kein Trainingstag");
-    }
-
-    expect(varianteFuer("push", bankPosition(freitag.bezugPushIndex, ANKER))).toBe("schwer");
-    expect(varianteFuer("push", bankPosition(montag.bezugPushIndex, ANKER))).toBe("leicht");
-  });
-});
 
 describe("Zyklus vorziehen (Deload überspringen)", () => {
   /* Jakob am 07.09.2026: "das fühlt sich zu leicht an, skip den Deload, ich
@@ -153,19 +53,6 @@ describe("Zyklus vorziehen (Deload überspringen)", () => {
     expect(
       bankPosition(ankerZyklus2.pushIndex + PUSH_TAGE_JE_ZYKLUS, ankerZyklus2)
     ).toEqual({ art: "tm", zyklus: 3, woche: 1 });
-  });
-});
-
-describe("istPressvariante", () => {
-  it("kennt die drei Varianten", () => {
-    expect(istPressvariante("Bankdrücken")).toBe(true);
-    expect(istPressvariante("Paused Bench Press")).toBe(true);
-    expect(istPressvariante("Spoto Press")).toBe(true);
-  });
-
-  it("hält alles andere heraus", () => {
-    expect(istPressvariante("Incline Chest Press")).toBe(false);
-    expect(istPressvariante("Latzug")).toBe(false);
   });
 });
 

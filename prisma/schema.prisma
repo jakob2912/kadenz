@@ -263,33 +263,6 @@ model Uebung {
   /// progression(). Bisher nur "531" für das Bankdrücken.
   programm String?
 
-  /// In welcher Ausprägung der Einheit diese Übung vorkommt.
-  ///
-  /// NULL heißt "in jeder" — das gilt für die große Mehrheit und ist der
-  /// Grund, warum die Spalte nullable ist statt einer Pflichtangabe: der
-  /// bestehende Katalog bleibt unverändert richtig.
-  ///
-  /// Der Anlass: Push sieht nicht an jedem Push-Tag gleich aus. Am TM-Tag
-  /// steht das schwere 5/3/1-Bankdrücken, an der Einheit dazwischen eine
-  /// submaximale Variante. Beide sind Push, beide gehören in den Katalog,
-  /// aber nie am selben Tag. Ohne diese Spalte ließe sich die zweite nur
-  /// hinzufügen, indem sie auch am schweren Tag erschiene.
-  ///
-  /// Die Werte kommen aus varianteFuer() in kraft.ts und lauten:
-  ///   "schwer" — Push am TM-Tag: Langhantel-Bankdrücken nach 5/3/1
-  ///   "leicht" — Push an der Einheit dazwischen: Paused Bench Press
-  ///   "presse" — Pull nach einem leichten Push-Tag: Spoto Press
-  /// Ein Tag ohne passende Variante ("ohne" in der Deload-Woche, "rein" beim
-  /// gewöhnlichen Pull) trägt schlicht keine variantengebundene Übung.
-  ///
-  /// Ausdrücklich KEIN Wochentag, obwohl der Wunsch so formuliert war.
-  /// Jakobs Rotation läuft alle drei Tage (siehe rotationFor() in plan.ts) —
-  /// ein Montag ist mal Push, mal Pull, mal Pause. Ein Wochentagsfeld hätte
-  /// die Übung in zwei von vier Wochen am falschen Tag gezeigt oder gar
-  /// nicht. Was tatsächlich abwechselt, ist die Position in der 5/3/1-Welle,
-  /// und daran hängt die Variante.
-  variante String?
-
   /// Wie viele Sätze diese Übung vorsieht.
   ///
   /// Stand bis hierher nirgends. heutigeSaetze() zählte stattdessen die Sätze

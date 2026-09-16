@@ -97,17 +97,23 @@ describe("Wochenplan ab dem 07.09.2026", () => {
     expect(rotationFor(tag("2026-09-11"))).toMatchObject({ art: "training", einheit: "pull" }); // Fr
     expect(rotationFor(tag("2026-09-12"))).toMatchObject({ art: "training", einheit: "push" }); // Sa
     expect(rotationFor(tag("2026-09-13"))).toMatchObject({ art: "pause" }); // So
-    expect(rotationFor(tag("2026-09-14"))).toMatchObject({ art: "training", einheit: "pull" }); // Mo
+  });
+
+  it("schiebt nach dem ausgefallenen Mo, 14.09. alles einen Trainingstag weiter", () => {
+    expect(rotationFor(tag("2026-09-14"))).toMatchObject({ art: "pause", naechste: "pull" }); // Mo
+    expect(rotationFor(tag("2026-09-16"))).toMatchObject({ art: "training", einheit: "pull" }); // Mi
+    expect(rotationFor(tag("2026-09-18"))).toMatchObject({ einheit: "push", pushIndex: 10 }); // Fr
+    expect(rotationFor(tag("2026-09-19"))).toMatchObject({ einheit: "pull" }); // Sa
+    expect(rotationFor(tag("2026-09-21"))).toMatchObject({ einheit: "push", pushIndex: 11 }); // Mo
   });
 
   it("zählt die Push-Tage über die Umstellung hinweg weiter", () => {
     expect(rotationFor(tag("2026-09-06"))).toMatchObject({ einheit: "push", pushIndex: 7 });
     expect(rotationFor(tag("2026-09-09"))).toMatchObject({ pushIndex: 8 });
     expect(rotationFor(tag("2026-09-12"))).toMatchObject({ pushIndex: 9 });
-    expect(rotationFor(tag("2026-09-16"))).toMatchObject({ pushIndex: 10 });
 
     expect(datumFuerPushIndex(9)).toBe("2026-09-12");
-    expect(datumFuerPushIndex(10)).toBe("2026-09-16");
+    expect(datumFuerPushIndex(10)).toBe("2026-09-18");
     for (const index of [7, 8, 9, 10, 11, 40]) {
       expect(pushIndexAbDatum(datumFuerPushIndex(index))).toBe(index);
     }
@@ -123,17 +129,16 @@ describe("Wochenplan ab dem 07.09.2026", () => {
 
     // Push vorgezogen gilt als der nächste Push-Tag: Fr, 11.09. und Rest Day
     // Do, 10.09. trainieren beide den Push vom Sa, 12.09. (Index 9).
-    expect(trainingAls(tag("2026-09-11"), "push")).toMatchObject({ pushIndex: 9, bezugPushIndex: 9 });
+    expect(trainingAls(tag("2026-09-11"), "push")).toMatchObject({ pushIndex: 9 });
     expect(trainingAls(tag("2026-09-10"), "push")).toMatchObject({ pushIndex: 9 });
 
-    // Pull hängt am letzten Push-Tag davor: am Sa, 12.09. ist das der Mi (8).
-    expect(trainingAls(tag("2026-09-12"), "pull")).toMatchObject({ pushIndex: null, bezugPushIndex: 8 });
-    expect(trainingAls(tag("2026-09-13"), "pull")).toMatchObject({ bezugPushIndex: 9 });
+    // Pull trägt keinen Push-Index — dort wird nicht gebankt.
+    expect(trainingAls(tag("2026-09-12"), "pull")).toEqual({ art: "training", einheit: "pull", pushIndex: null });
   });
 
   it("nennt am Rest Day die Einheit, die wirklich als nächste kommt", () => {
     // Auf Mittwoch-Push folgt am Freitag Pull, nicht wieder Push.
     expect(rotationFor(tag("2026-09-10"))).toMatchObject({ art: "pause", naechste: "pull" });
-    expect(rotationFor(tag("2026-09-15"))).toMatchObject({ art: "pause", naechste: "push" });
+    expect(rotationFor(tag("2026-09-15"))).toMatchObject({ art: "pause", naechste: "pull" });
   });
 });

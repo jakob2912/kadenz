@@ -240,8 +240,12 @@ const TAG_MS = 864e5;
  * 5/3/1-Zyklus hinge dann plötzlich an anderen Kalendertagen.
  *
  * Aufsteigend halten. Ein neuer Einschub kommt hinten dazu.
+ *
+ * Der 14.09.2026 (Mo, planmäßig Pull) fiel aus. Ohne Einschub lief der
+ * Kalender weiter und schlug am Mi, 16.09. Push vor, obwohl Jakobs letzte
+ * Einheit Push war (So, 13.09.) und er Pull trainiert hat.
  */
-export const EINGESCHOBENE_PAUSEN: readonly string[] = ["2026-08-21"];
+export const EINGESCHOBENE_PAUSEN: readonly string[] = ["2026-08-21", "2026-09-14"];
 
 /** Wie viele Einschübe vor diesem Tag liegen. */
 function pausenVor(tagMs: number): number {
@@ -330,23 +334,6 @@ export type Rotation =
        * ist und in welcher Programmwoche der Zyklus steht.
        */
       pushIndex: number | null;
-      /**
-       * Der Push-Tag, zu dem dieser Trainingstag gehört: an einem Push-Tag er
-       * selbst, an einem Pull-Tag der Push-Tag davor.
-       *
-       * Neu für die Session-Varianten. Auch ein Pull-Tag muss wissen, wo die
-       * 5/3/1-Welle gerade steht — die Spoto Press steht nur am Pull nach
-       * einer leichten Push-Einheit, und in der Deload-Woche gar nicht. Ohne
-       * diesen Bezug müsste jede Stelle selbst einen Tag zurückrechnen, und
-       * das über den Wiener Kalendertag samt eingeschobener Pausen.
-       *
-       * Getrennt von pushIndex und nicht an dessen Stelle: pushIndex heißt
-       * weiterhin "heute ist ein Push-Tag, und zwar dieser". Beides in ein
-       * Feld zu legen hieße, dass bankstandFuer() an Pull-Tagen einen
-       * scheinbar gültigen Index bekäme und den Trainingsmax von einem Tag aus
-       * fortschriebe, an dem gar nicht gebankt wird.
-       */
-      bezugPushIndex: number;
     }
   | { art: "pause"; naechste: "push" | "pull" };
 
@@ -384,10 +371,9 @@ export type Trainingstag = Extract<Rotation, { art: "training" }>;
  * "trotzdem Pull" am Push-Tag, Training am Rest Day.
  *
  * Push gilt als der nächste anstehende Push-Tag, am Push-Tag also er selbst:
- * wer vorzieht, trainiert dessen 5/3/1-Vorgabe. Pull bezieht sich wie jedes
- * Pull auf den letzten Push-Tag davor — daran hängt, ob die Spoto Press
- * mitkommt. An einem Tag, an dem die Einheit ohnehin dran ist, kommt genau
- * dasselbe heraus wie aus rotationFor().
+ * wer vorzieht, trainiert dessen 5/3/1-Vorgabe. Pull braucht keinen Bezug —
+ * dort wird nicht gebankt. An einem Tag, an dem die Einheit ohnehin dran ist,
+ * kommt genau dasselbe heraus wie aus rotationFor().
  */
 export function trainingAls(date: Date, einheit: "push" | "pull"): Trainingstag {
   return trainingNach(trainingstageVor(Date.parse(`${wienerDatum(date)}T00:00:00Z`)), einheit);
@@ -395,16 +381,12 @@ export function trainingAls(date: Date, einheit: "push" | "pull"): Trainingstag 
 
 /**
  * Hinter heute liegen `vorher` Trainingstage. Der nächste Push-Tag ist damit
- * Nummer ⌈vorher / 2⌉, der letzte davor Nummer ⌊(vorher − 1) / 2⌋. Am
- * planmäßigen Tag fällt beides mit dem Kalender zusammen: Trainingstag 2k ist
- * Push k, Trainingstag 2k + 1 das Pull danach mit Bezug k.
+ * Nummer ⌈vorher / 2⌉ — am planmäßigen Tag genau der Kalender: Trainingstag 2k
+ * ist Push k.
  */
 function trainingNach(vorher: number, einheit: "push" | "pull"): Trainingstag {
-  if (einheit === "push") {
-    const pushIndex = Math.ceil(vorher / 2);
-    return { art: "training", einheit, pushIndex, bezugPushIndex: pushIndex };
-  }
-  return { art: "training", einheit, pushIndex: null, bezugPushIndex: Math.floor((vorher - 1) / 2) };
+  if (einheit === "push") return { art: "training", einheit, pushIndex: Math.ceil(vorher / 2) };
+  return { art: "training", einheit, pushIndex: null };
 }
 
 /** Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest. */

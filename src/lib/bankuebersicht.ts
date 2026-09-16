@@ -12,7 +12,6 @@
 
 import {
   aktuellerTrainingsmax,
-  bankPositionFuer,
   bankstandFuer,
   trainingsmaxHistorie,
   type Bankstand,
@@ -21,21 +20,15 @@ import {
 import { saetzeFuerMehrere } from "./kraftverlauf";
 import { heuteWien } from "./datum";
 import { datumFuerPushIndex, pushIndexAbDatum, rotationFor } from "./plan";
-import { progression } from "./coach";
 import {
-  PRESSVARIANTEN,
-  PRESS_NAMEN,
+  BANK_UEBUNG,
   bankPlan,
   bankPosition,
   besterSatz,
-  varianteFuer,
   e1rm,
-  istPressvariante,
   type BankSatz,
   type BankWoche,
   type GeloggterSatz,
-  type Pressvariante,
-  type Variante,
   type Zyklusanker,
 } from "./kraft";
 import { zielProjektion, type Zielstand } from "./bankziel";
@@ -53,11 +46,6 @@ export const BANK_FENSTER_TAGE = 365;
 /** Eine Bankeinheit, wie sie in der Zeitleiste steht. */
 export type Bankeinheit = {
   datum: string;
-  uebung: Pressvariante;
-  /** "5/3/1", "Paused", "Spoto" — die kurze Beschriftung. */
-  kurz: string;
-  /** Bewegt diese Variante den Trainingsmax? */
-  schwer: boolean;
   saetze: GeloggterSatz[];
   /** Schwerster Satz des Tages, unsaubere übergangen. */
   best: GeloggterSatz | null;
@@ -88,25 +76,7 @@ export type Bankuebersicht = {
   vorschau: Wochenvorschau[];
   einheiten: Bankeinheit[];
   ziel: Zielstand | null;
-  /** Welche Pressvariante heute ansteht. Null an einem Tag ohne Presse. */
-  heute: Pressvariante | null;
-  /**
-   * Das Arbeitsgewicht je submaximaler Variante, aus ihrer eigenen Historie.
-   *
-   * Nur für Paused und Spoto: beim schweren Bankdrücken gibt der Trainingsmax
-   * die Gewichte vor, und die stehen satzweise in der Vorschau. Ein zweiter
-   * Wert daneben wäre eine zweite Meinung darüber, was heute aufliegt.
-   */
-  arbeitsgewicht: Partial<Record<Pressvariante, number>>;
 };
-
-/** Welche Übung eine Ausprägung des Tages auf die Bank legt. */
-function presseFuer(variante: Variante): Pressvariante | null {
-  if (variante === "schwer") return PRESS_NAMEN[0];
-  if (variante === "leicht") return "Paused Bench Press";
-  if (variante === "presse") return "Spoto Press";
-  return null;
-}
 
 /**
  * Der Tag, für den der Bank-Tab den Stand zeigt.
@@ -132,32 +102,18 @@ function naechsterPushTag(heute: string): { iso: string; pushIndex: number } | n
   return null;
 }
 
-/**
- * Die Sätze eines Tages zu einer Einheit zusammenfassen.
- *
- * Gruppiert wird über Tag UND Übungsname. Vor den Session-Varianten hieß jede
- * Bankeinheit "Bankdrücken", ob schwer oder submaximal — eine Zeitleiste
- * daraus zeigte 85 kg und 65 kg nebeneinander, ohne dass man sah, dass das
- * zwei verschiedene Übungen an zwei verschiedenen Tagen waren.
- */
+/** Die Sätze eines Tages zu einer Einheit zusammenfassen. */
 function zuEinheiten(saetze: GeloggterSatz[]): Bankeinheit[] {
   const gruppen = new Map<string, GeloggterSatz[]>();
 
   for (const s of saetze) {
-    if (!istPressvariante(s.uebung)) continue;
-    const schluessel = `${s.datum}|${s.uebung}`;
-    const liste = gruppen.get(schluessel);
+    const liste = gruppen.get(s.datum);
     if (liste) liste.push(s);
-    else gruppen.set(schluessel, [s]);
+    else gruppen.set(s.datum, [s]);
   }
 
   const einheiten: Bankeinheit[] = [];
-  for (const [schluessel, liste] of gruppen) {
-    const trenner = schluessel.indexOf("|");
-    const datum = schluessel.slice(0, trenner);
-    const uebung = schluessel.slice(trenner + 1) as Pressvariante;
-    const meta = PRESSVARIANTEN[uebung];
-
+  for (const [datum, liste] of gruppen) {
     /* besterSatz() übergeht unsaubere Sätze von selbst — das ist der Sinn der
        Markierung. Der Tag verschwindet deswegen nicht: er hat stattgefunden,
        die Sätze stehen in der Liste, und `unsauber` sagt, dass etwas dabei
@@ -166,9 +122,6 @@ function zuEinheiten(saetze: GeloggterSatz[]): Bankeinheit[] {
 
     einheiten.push({
       datum,
-      uebung,
-      kurz: meta.kurz,
-      schwer: meta.schwer,
       saetze: [...liste].sort((a, b) => a.kg - b.kg),
       best,
       e1rm: best ? e1rm(best) : null,
@@ -221,7 +174,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
 
   const [historie, saetze] = await Promise.all([
     trainingsmaxHistorie(24),
-    saetzeFuerMehrere(PRESS_NAMEN, BANK_FENSTER_TAGE),
+    saetzeFuerMehrere([BANK_UEBUNG], BANK_FENSTER_TAGE),
   ]);
 
   let stand: Bankstand | null = null;
@@ -263,35 +216,6 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     ziel = zielProjektion(tm.tmKg, anker.zyklus, datumFuerPushIndex(anker.pushIndex));
   }
 
-  /* Was heute auf der Bank liegt. Ausdrücklich HEUTE und nicht am nächsten
-     Push-Tag: `standTag` beantwortet "wann wird wieder schwer gebankt", diese
-     Zeile beantwortet "was mache ich jetzt gerade". An einem Pull-Tag mit
-     Spoto Press sind das zwei verschiedene Antworten. */
-  let heutigePresse: Pressvariante | null = null;
-  const rotationHeute = rotationFor(new Date(`${heute}T12:00:00Z`));
-  if (rotationHeute.art === "training") {
-    try {
-      const pos = await bankPositionFuer(rotationHeute.bezugPushIndex);
-      heutigePresse = presseFuer(varianteFuer(rotationHeute.einheit, pos));
-    } catch (e) {
-      console.error("Heutige Pressvariante nicht bestimmbar:", e);
-    }
-  }
-
-  /* Arbeitsgewicht der submaximalen Varianten: dieselbe Rechnung, die auch
-     der Trainingsplan anstellt (progression() über die letzte Ausführung).
-     Zweimal gerechnet statt einmal geladen, weil der Plan an einer Einheit
-     hängt und dieser Tab an keiner — aber aus derselben Quelle, damit hier
-     nicht eine andere Zahl steht als morgen im Logger. */
-  const arbeitsgewicht: Partial<Record<Pressvariante, number>> = {};
-  for (const name of PRESS_NAMEN) {
-    if (PRESSVARIANTEN[name].schwer) continue;
-    const letzte = einheiten.find((e) => e.uebung === name);
-    if (!letzte) continue;
-    const rat = progression(letzte.saetze.map((s) => ({ kg: s.kg, reps: s.reps })));
-    if (rat.kg > 0) arbeitsgewicht[name] = rat.kg;
-  }
-
   return {
     tm,
     historie,
@@ -300,7 +224,5 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     vorschau,
     einheiten,
     ziel,
-    heute: heutigePresse,
-    arbeitsgewicht,
   };
 }

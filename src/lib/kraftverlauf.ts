@@ -83,9 +83,8 @@ export async function saetzeProUebung(
 /**
  * Alle Sätze mehrerer Übungen, aufsteigend nach Tag.
  *
- * Für den Bank-Tab, der die drei Pressvarianten in einer Zeitleiste zeigt.
- * Eine Abfrage statt drei: der Pool in db.ts steht auf max 1, drei Aufrufe
- * von saetzeFuer() liefen nacheinander über die Leitung — derselbe Grund,
+ * Eine Abfrage statt einer je Übung: der Pool in db.ts steht auf max 1, mehrere
+ * Aufrufe von saetzeFuer() liefen nacheinander über die Leitung — derselbe Grund,
  * aus dem letzteSaetzeFuer() in workouts.ts existiert.
  */
 export async function saetzeFuerMehrere(

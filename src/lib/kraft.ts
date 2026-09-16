@@ -295,79 +295,15 @@ export function rangliste(proUebung: Record<string, GeloggterSatz[]>): Rang[] {
  * wieder einfangen.
  *
  * Seit dem 27.08.2026 steht Bankdrücken trotzdem an jeder Push-Einheit: die
- * Tage dazwischen tragen einen submaximalen Zusatz-Slot (siehe
- * bankZusatzPlan()). Das ist ausdrücklich kein zweiter Programmtag — er rechnet
- * mit demselben Trainingsmax, verändert ihn aber nicht. Die Frequenz steigt von
+ * Tage dazwischen tragen einen leichten Tag mit schwerem Single (siehe
+ * bankZusatzPlan()). Seit dem 16.09.2026 ist das wieder dieselbe Übung — die
+ * Paused Bench Press und die Spoto Press am Pull-Tag sind raus. Der leichte Tag
+ * ist ausdrücklich kein zweiter Programmtag — er rechnet mit demselben
+ * Trainingsmax, verändert ihn aber nicht. Die Frequenz steigt von
  * gut einer auf gut zwei Bankeinheiten je Woche, der Zyklus bleibt 24 Tage.
  */
 
 export const BANK_UEBUNG = "Bankdrücken";
-
-/**
- * Die drei Bankdrück-Varianten, unter denen geloggt wird.
- *
- * Im Code und nicht im Katalog, aus demselben Grund wie BANK_UEBUNG darüber:
- * das 5/3/1 und der Bank-Tab rechnen mit genau diesen dreien, und ein
- * Tippfehler in einem Namen führt lautlos zu "keine Historie" statt zu einem
- * Fehler. Der Katalog bleibt trotzdem die Stelle, die entscheidet, ob und wann
- * eine davon im Plan steht — hier steht nur, wie sie zu lesen sind.
- *
- * "schwer" trennt die eine Variante, die den Trainingsmax bewegt, von den
- * beiden, die es ausdrücklich nicht tun. Der Bank-Tab beschriftet danach, und
- * naechsterTm() bekommt seinen AMRAP-Satz ohnehin nur aus BANK_UEBUNG.
- */
-export const PRESSVARIANTEN = {
-  [BANK_UEBUNG]: {
-    kurz: "5/3/1",
-    lang: "Schweres Bankdrücken",
-    schwer: true,
-    wann: "Push am TM-Tag, alle sechs Tage",
-    ausfuehrung:
-      "Wettkampfnah: Schulterblätter zusammen und unten, Füße fest am Boden, " +
-      "Gesäß bleibt auf der Bank. Die Hantel berührt die Brust und geht ohne " +
-      "Abfedern wieder hoch.",
-    steuerung:
-      "Gewicht aus dem Trainingsmax — 3 Sätze nach der Welle, der letzte auf " +
-      "Maximalwiederholungen. Nur dieser Satz bewegt den Trainingsmax.",
-  },
-  "Paused Bench Press": {
-    kurz: "Paused",
-    lang: "Paused Bench Press",
-    schwer: false,
-    wann: "Push an der Einheit dazwischen",
-    ausfuehrung:
-      "Wie das schwere Bankdrücken, aber mit einer Sekunde Pause auf der " +
-      "Brust — Hantel liegt still, Spannung bleibt, kein Abfedern. Danach " +
-      "aus dem Stand heraus drücken.",
-    steuerung:
-      "Submaximal, mit Reserve. Das Gewicht kommt aus der eigenen Historie, " +
-      "nicht aus dem Trainingsmax: acht Wiederholungen im ersten Satz heben " +
-      "es um 2,5 kg, ein Satz unter fünf senkt es.",
-  },
-  "Spoto Press": {
-    kurz: "Spoto",
-    lang: "Spoto Press",
-    schwer: false,
-    wann: "Pull nach der leichten Push-Einheit",
-    ausfuehrung:
-      "Zwei bis drei Zentimeter über der Brust anhalten, kurz halten, ohne " +
-      "abzusetzen wieder hochdrücken. Die Hantel berührt nie die Brust — " +
-      "genau das ist der Zweck: kein Abfedern, keine Entlastung im " +
-      "schwersten Punkt.",
-    steuerung:
-      "Zwei Sätze, submaximal, aus der eigenen Historie gesteuert. Kein " +
-      "Auswertungssatz — der Tag soll Frequenz an der Hantel bringen, keine " +
-      "Messung.",
-  },
-} as const;
-
-export type Pressvariante = keyof typeof PRESSVARIANTEN;
-
-export const PRESS_NAMEN = Object.keys(PRESSVARIANTEN) as Pressvariante[];
-
-export function istPressvariante(name: string): name is Pressvariante {
-  return name in PRESSVARIANTEN;
-}
 
 export type BankWoche = 1 | 2 | 3 | 4;
 
@@ -417,15 +353,19 @@ export function bankPlan(tmKg: number, woche: BankWoche): BankSatz[] {
 }
 
 /**
- * Der submaximale Zusatz-Slot an den Push-Einheiten zwischen zwei TM-Tagen.
+ * Der leichte Tag an den Push-Einheiten zwischen zwei TM-Tagen.
  *
  * Feste Prozente statt einer eigenen Wellenrechnung: der Tag soll Übung und
  * Volumen bringen, nicht eine zweite Meinung darüber, wie schwer diese Woche
  * ist. 72,5 % liegen unter jedem AMRAP-Satz des Programms (85, 90, 95 %) und
- * damit im Bereich, in dem fünf Wiederholungen mit Reserve stehen — drei Tage
- * nach einer schweren Einheit und drei Tage vor der nächsten ist das der Zweck.
- * Der zweite Satz der Woche liegt je nach Welle bei 75 bis 85 %; die
- * Zusatz-Einheit bleibt darunter.
+ * damit im Bereich, in dem fünf Wiederholungen mit Reserve stehen.
+ *
+ * Danach ein schwerer Single bei 90 %. Jakob hat an den leichten Tagen ohnehin
+ * schwer weitergemacht (13.09.2026: 70 × 5, dann 75 × 3 und 85 × 4) — die
+ * leichte Einheit allein war ihm zu wenig. Ein fest vorgegebener Single
+ * fängt das ein, ohne den Tag zum zweiten Testtag zu machen: eine
+ * Wiederholung, sauber und schnell, kein Satz bis zum Versagen. 90 % liegen
+ * unter dem AMRAP-Satz der Woche 3, und ein Single kostet kaum Erholung.
  *
  * Bewusst ohne AMRAP-Zeile: der AMRAP-Satz ist das Messinstrument des
  * Programms, und ein zweites Instrument an einem Tag, der den Trainingsmax
@@ -434,6 +374,7 @@ export function bankPlan(tmKg: number, woche: BankWoche): BankSatz[] {
 export const ZUSATZ_PROZENT = 72.5;
 export const ZUSATZ_SAETZE = 3;
 export const ZUSATZ_WDH = 5;
+export const SINGLE_PROZENT = 90;
 
 export function bankZusatzPlan(tmKg: number): BankSatz[] {
   const satz = {
@@ -442,7 +383,13 @@ export function bankZusatzPlan(tmKg: number): BankSatz[] {
     amrap: false,
     kg: aufZweiKommaFuenf((tmKg * ZUSATZ_PROZENT) / 100),
   };
-  return Array.from({ length: ZUSATZ_SAETZE }, () => ({ ...satz }));
+  const single = {
+    prozent: SINGLE_PROZENT,
+    wdh: 1,
+    amrap: false,
+    kg: aufZweiKommaFuenf((tmKg * SINGLE_PROZENT) / 100),
+  };
+  return [...Array.from({ length: ZUSATZ_SAETZE }, () => ({ ...satz })), single];
 }
 
 /** Der AMRAP-Satz der Woche, falls es einen gibt. */
@@ -457,8 +404,8 @@ export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | 
  * "tm"      — der Programmtag: drei Sätze nach der Welle, AMRAP obendrauf,
  *             und der einzige Tag, aus dem der Trainingsmax fortgeschrieben
  *             wird.
- * "zusatz"  — die Push-Einheit dazwischen: submaximal, ohne Wirkung auf den
- *             Trainingsmax.
+ * "zusatz"  — die Push-Einheit dazwischen: leicht plus ein schwerer Single,
+ *             ohne Wirkung auf den Trainingsmax.
  * "keiner"  — vor dem Programmstart, und die Zusatz-Einheit der Deload-Woche.
  *
  * Ein Aufzählungstyp statt zweier Wahrheitswerte: mit istBankTag und
@@ -544,54 +491,6 @@ export const PUSH_TAGE_JE_ZYKLUS = 8;
 /** Der Push-Tag, an dem der AMRAP-Satz eines Zyklus liegt — Woche 3. */
 export function amrapPushIndex(ankerPushIndex: number): number {
   return ankerPushIndex + 4;
-}
-
-/**
- * Welche Ausprägung eine Einheit an einem Tag hat.
- *
- * Der Wunsch war "Push und Pull sollen an verschiedenen Wochentagen
- * unterschiedlich aussehen" — mit Montag, Mittwoch, Freitag, Samstag als
- * Beispiel. Der Wochentag taugt dafür nicht: in der Ferienroutine lief die
- * Rotation alle drei Tage, und jede Einheit wanderte durch die Woche. Seit dem
- * Wochenplan (07.09.2026, rotationFor()) liegen die Einheiten zwar auf festen
- * Tagen, aber ein eingeschobener Rest Day verschiebt sie um einen — ein
- * Montagsfeld zeigte die Übung danach am falschen Tag.
- *
- * Was tatsächlich abwechselt — und was Jakob mit "Montag" und "Freitag"
- * gemeint hat —, ist die Position in der 5/3/1-Welle. Seine eigenen Logs
- * zeigen es: Fr, 28.08. war Woche 2 mit 62,5/72,5/80 kg, Mo, 31.08. lief bei
- * dreimal 65 kg, Do, 03.09. war Woche 3. Schwer und leicht wechseln sich seit
- * dem 27.08.2026 ab, nur hießen beide bisher "Bankdrücken".
- *
- * Die fünf Werte:
- *   "schwer" — Push am TM-Tag. Langhantel-Bankdrücken nach der Welle.
- *   "leicht" — Push dazwischen. Paused Bench Press, submaximal.
- *   "ohne"   — Push ohne Presse: die Zusatz-Einheit der Deload-Woche. Die
- *              Woche ist zum Zurücknehmen da, siehe bankPosition().
- *   "presse" — Pull nach einem leichten Push-Tag. Spoto Press, zwei Sätze.
- *   "rein"   — Pull ohne Presse.
- *
- * Warum die Spoto Press ausgerechnet auf das Pull nach dem LEICHTEN Push-Tag
- * fällt: so hat Jakob es beschrieben (Mittwoch mit, Samstag ohne), und in
- * seinem Kalender lag der Mittwoch, 26.08. hinter einer leichten Einheit, der
- * Samstag, 29.08. hinter dem schweren TM-Tag. Es ist außerdem die Anordnung,
- * die trainingsseitig aufgeht — am Tag nach der schwersten Bankeinheit kommt
- * nichts Zusätzliches auf die Brust.
- *
- * Dass die Deload-Woche dabei von selbst leer ausgeht, ist kein Zufall,
- * sondern folgt aus bankPosition(): dort ist die Zusatz-Einheit der vierten
- * Woche "keiner", und ein Pull ohne vorangegangenen Zusatz-Tag ist "rein".
- */
-export type Variante = "schwer" | "leicht" | "ohne" | "presse" | "rein";
-
-export function varianteFuer(einheit: "push" | "pull", position: BankPosition): Variante {
-  if (einheit === "push") {
-    if (position.art === "tm") return "schwer";
-    if (position.art === "zusatz") return "leicht";
-    return "ohne";
-  }
-
-  return position.art === "zusatz" ? "presse" : "rein";
 }
 
 export type TmEntscheidung = {

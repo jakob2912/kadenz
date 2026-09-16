@@ -177,30 +177,41 @@ describe("bankPlan", () => {
 });
 
 describe("bankZusatzPlan", () => {
-  it("gibt drei gleiche Sätze bei 72,5 % vom Trainingsmax", () => {
-    // 72,5 % von 90 sind 65,25 kg — auf 65 gerundet, wie überall sonst auch.
+  it("gibt drei Fünfer bei 72,5 % und einen Single bei 90 %", () => {
+    // 72,5 % von 90 sind 65,25 kg, 90 % sind 81 kg — auf 2,5 gerundet.
     expect(bankZusatzPlan(90)).toEqual([
       { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
       { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
       { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
+      { prozent: 90, wdh: 1, amrap: false, kg: 80 },
+    ]);
+  });
+
+  it("rechnet Jakobs aktuellen Trainingsmax", () => {
+    // 95 kg: 68,875 → 70, 85,5 → 85.
+    expect(bankZusatzPlan(95).map((s) => [s.kg, s.wdh])).toEqual([
+      [70, 5],
+      [70, 5],
+      [70, 5],
+      [85, 1],
     ]);
   });
 
   /* Der AMRAP-Satz ist das Messinstrument des Programms. An einem Tag, der den
-     Trainingsmax nicht bewegen darf, wäre er eine Zahl ohne Verwendung — und
-     spätestens beim nächsten Leser die Frage, warum sie nirgends eingeht. */
+     Trainingsmax nicht bewegen darf, wäre er eine Zahl ohne Verwendung. */
   it("hat keinen AMRAP-Satz", () => {
     expect(bankZusatzPlan(100).some((s) => s.amrap)).toBe(false);
   });
 
-  /* Submaximal heißt: unter jedem Satz, an dem das Programm etwas misst. Sonst
-     wäre der Zwischentag der schwerere von beiden und die Welle säße auf dem
-     falschen Fuß. */
-  it("bleibt unter jedem AMRAP-Satz des Programms", () => {
-    const zusatz = Math.max(...bankZusatzPlan(100).map((s) => s.kg));
+  /* Die Fünfer bleiben unter jedem AMRAP-Satz, der Single unter dem der
+     Woche 3 — sonst wäre der leichte Tag der schwerere. */
+  it("bleibt unter den AMRAP-Sätzen des Programms", () => {
+    const plan = bankZusatzPlan(100);
+    const fuenfer = Math.max(...plan.filter((s) => s.wdh > 1).map((s) => s.kg));
     for (const woche of [1, 2, 3] as const) {
-      expect(zusatz).toBeLessThan(amrapSoll(woche)!.prozent);
+      expect(fuenfer).toBeLessThan(amrapSoll(woche)!.prozent);
     }
+    expect(plan.at(-1)!.kg).toBeLessThan(amrapSoll(3)!.prozent);
   });
 });
 

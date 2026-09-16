@@ -22,23 +22,15 @@ import {
   naechsterTm,
   TM_ANTEIL,
   PUSH_TAGE_JE_ZYKLUS,
+  SINGLE_PROZENT,
   ZUSATZ_PROZENT,
   type BankPosition,
   type Zyklusanker,
 } from "./kraft";
 
-/* Weiterhin von hier lesbar: bank.ts war die Heimat dieser Namen, und der
-   MCP-Server sowie mehrere Seiten importieren sie von hier. Definiert sind sie
-   jetzt in kraft.ts — das ist der reine Teil, und eine Client-Komponente
-   (der Trainings-Logger) braucht istPressvariante(), darf aber nichts laden,
-   was prisma mitzieht. */
-export {
-  BANK_UEBUNG,
-  PRESSVARIANTEN,
-  PRESS_NAMEN,
-  istPressvariante,
-  type Pressvariante,
-} from "./kraft";
+/* Weiterhin von hier lesbar: bank.ts war die Heimat dieses Namens, und der
+   MCP-Server sowie mehrere Seiten importieren ihn von hier. */
+export { BANK_UEBUNG } from "./kraft";
 import { datumFuerPushIndex, pushIndexAbDatum, type Programmvorgabe } from "./plan";
 
 /**
@@ -177,14 +169,21 @@ export async function trainingsmaxSetzen(
  * plan.ts), also irgendwann nach dem vorigen Push-Tag und spätestens am
  * geplanten. Über das genaue Datum fände Kadenz einen vorgezogenen
  * AMRAP-Satz nicht, und der Trainingsmax bliebe stillschweigend stehen.
+ *
+ * `mindestKg` ist das vorgegebene Gewicht des AMRAP-Satzes. Wer den leichten
+ * Tag einen Tag später trainiert, landet mit ihm im Zeitraum des TM-Tags —
+ * und dessen schwerer Single (1 Wiederholung bei 90 %) sähe ohne diese
+ * Schranke wie ein bestandener AMRAP-Satz der Woche 3 aus, wenn der echte
+ * fehlt. Gezählt wird deshalb nur, was mindestens mit dem Sollgewicht lief.
  */
-async function amrapSatzVon(pushIndex: number): Promise<SetLog | null> {
+async function amrapSatzVon(pushIndex: number, mindestKg: number): Promise<SetLog | null> {
   const nach = new Date(`${datumFuerPushIndex(pushIndex - 1)}T00:00:00Z`);
   const bis = new Date(`${datumFuerPushIndex(pushIndex)}T00:00:00Z`);
 
   return prisma.setLog.findFirst({
     where: {
       exercise: BANK_UEBUNG,
+      kg: { gte: mindestKg },
       workout: { kind: "push", date: { gt: nach, lte: bis } },
       /* Markieren lässt sich seit dem 11.09.2026 nicht mehr — eine unsaubere
          letzte Wiederholung zählt Jakob einfach nicht mit. Die alten
@@ -261,10 +260,11 @@ async function aufZyklusBringen(
     // Woche 3 dieses Zyklus trägt den AMRAP-Satz, der über den nächsten
     // Trainingsmax entscheidet — vier Push-Tage nach seinem Anfang.
     const soll = amrapSoll(3)!;
+    const sollKg = bankPlan(aktuell.tmKg, 3).find((s) => s.amrap)!.kg;
 
     let satz: SetLog | null = null;
     try {
-      satz = await amrapSatzVon(amrapPushIndex(anker));
+      satz = await amrapSatzVon(amrapPushIndex(anker), sollKg);
     } catch (e) {
       console.error("AMRAP-Satz nicht lesbar:", e);
     }
@@ -326,25 +326,6 @@ export type Bankstand = {
 };
 
 /**
- * Nur die Wellenposition, ohne Trainingsmax und ohne Fortschreibung.
- *
- * Für Pull-Tage. Die brauchen die Position, um zu wissen, ob heute die Spoto
- * Press dazugehört (varianteFuer()) — aber ausdrücklich nicht den Rest:
- * bankstandFuer() liest den Trainingsmax, schreibt ihn nötigenfalls fort und
- * baut eine Satzvorgabe. Nichts davon hat an einem Pull-Tag etwas zu suchen,
- * und die Fortschreibung von einem Tag aus anzustoßen, an dem gar nicht
- * gebankt wird, wäre schlicht die falsche Stelle.
- *
- * Läuft das Programm noch nicht, ist die Antwort "keiner" — dann gibt es auch
- * keine Presse am Pull-Tag.
- */
-export async function bankPositionFuer(bezugPushIndex: number): Promise<BankPosition> {
-  const anker = await zyklusanker();
-  if (anker === null) return { art: "keiner", zyklus: 1, woche: 1 };
-  return bankPosition(bezugPushIndex, anker);
-}
-
-/**
  * Alles, was der Bank-Slot für einen Push-Tag braucht.
  *
  * Gibt auch dann eine Vorgabe zurück, wenn kein Trainingsmax existiert — dann
@@ -392,14 +373,13 @@ export async function bankstandFuer(pushIndex: number): Promise<Bankstand> {
 }
 
 /**
- * Die Sätze des Tages — aus der Welle oder aus dem Zusatz-Slot.
+ * Die Sätze des Tages — aus der Welle oder vom leichten Tag.
  *
  * Beide rechnen mit demselben Trainingsmax, und nur der TM-Tag schreibt ihn
- * fort. Dass der Zusatz-Slot dabei außen vor bleibt, steht nicht hier, sondern
- * folgt aus aufZyklusBringen(): das sucht den AMRAP-Satz über
- * datumFuerPushIndex(startIndex + bankIndex * 2), also ausschließlich über
- * gerade Versätze. Die Zusatz-Einheiten liegen auf ungeraden und werden nie
- * gelesen, so schwer dort auch geloggt wird.
+ * fort. Dass der leichte Tag dabei außen vor bleibt, steht nicht hier, sondern
+ * folgt aus aufZyklusBringen(): das sucht den AMRAP-Satz nur im Zeitraum des
+ * TM-Tags der Woche 3 und nur ab dessen Sollgewicht (amrapSatzVon()). Der
+ * Single des leichten Tags liegt darunter, auch wenn er sich verschiebt.
  */
 function vorgabeFuer(position: BankPosition, tmKg: number): Programmvorgabe {
   if (position.art === "tm") {
@@ -410,9 +390,10 @@ function vorgabeFuer(position: BankPosition, tmKg: number): Programmvorgabe {
     return {
       saetze: bankZusatzPlan(tmKg),
       hinweis:
-        `Zusatz-Einheit bei ${String(ZUSATZ_PROZENT).replace(".", ",")} % vom Trainingsmax. ` +
-        `Zählt nicht für die Trainingsmax-Progression — dafür ist der AMRAP-Satz am TM-Tag da. ` +
-        `Sauber und mit Reserve, nicht ausreizen.`,
+        `Leichter Tag: drei Fünfer bei ${String(ZUSATZ_PROZENT).replace(".", ",")} %, danach ` +
+        `ein schwerer Single bei ${SINGLE_PROZENT} % vom Trainingsmax. Eine Wiederholung, ` +
+        `sauber und schnell — kein Grinder, keine zweite. Zählt nicht für die ` +
+        `Trainingsmax-Progression, dafür ist der AMRAP-Satz am TM-Tag da.`,
     };
   }
 

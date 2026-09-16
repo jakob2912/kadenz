@@ -700,7 +700,7 @@ server.registerTool(
   {
     title: "Bankdrücken heute",
     description:
-      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" die submaximale Einheit dazwischen (3 × 5 bei 72,5 % vom Trainingsmax, ohne Wirkung auf die Progression), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
+      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
   },
   async () => {
     try {
