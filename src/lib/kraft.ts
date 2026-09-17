@@ -402,7 +402,7 @@ export function bankZusatzPlan(tmKg: number, mitSingle = true): BankSatz[] {
  *
  * 5/3/1 testet von sich aus nie — die AMRAP-Sätze sind Wiederholungsrekorde.
  * Jakobs Ziel heißt aber "140 kg sauber", und das ist ein Single. Deshalb
- * ersetzt in jedem dritten Zyklus (4, 7, 10, …) der Freitag der Deload-Woche
+ * ersetzt in jedem dritten Zyklus (4, 7, 10, …) der TM-Tag der Deload-Woche
  * die Deload-Welle durch einen Test: gut drei Monate Abstand, und die
  * Deload-Woche davor ist ohnehin die frischeste Stelle im Zyklus.
  *

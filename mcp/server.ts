@@ -248,7 +248,7 @@ server.registerTool(
   {
     title: "Wochenschalter lesen oder umlegen",
     description:
-      "Jede Woche: Mi ist Pull. Erster Push `frueh` am \"mo\" (Standard) oder \"di\". Wochenende `spaet` als \"frsa\" (Standard: Fr Push, Sa Pull) oder \"saso\" (Sa Push, So Pull). Nach einer Woche mit Sa + So ist Mo gesperrt, der erste Push liegt dann am Di. Jede Woche beginnt beim Standard; umgelegt wird die laufende Woche (am Sonntag die nächste). Schalter, deren Tage vorbei oder schon trainiert sind, lassen sich nicht mehr umlegen. Ohne Angabe kommt der Stand zurück.",
+      "Jede Woche: Mi ist Pull. Erster Push `frueh` am \"mo\" oder \"di\". Wochenende `spaet` als \"frsa\" (Fr Push, Sa Pull) oder \"saso\" (Sa Push, So Pull). Standard ist ein Zwei-Wochen-Rhythmus: Woche 1 (ab 14.09.2026, dann jede zweite) Mo + Sa/So, Woche 2 Di + Fr/Sa. Nach einer Woche mit Sa + So ist Mo gesperrt, der erste Push liegt dann am Di. Die Schalter gelten nur für ihre Woche; umgelegt wird die laufende Woche (am Sonntag die nächste). Schalter, deren Tage vorbei oder schon trainiert sind, lassen sich nicht mehr umlegen. Ohne Angabe kommt der Stand zurück.",
     inputSchema: {
       frueh: z.enum(["mo", "di"]).optional(),
       spaet: z.enum(["frsa", "saso"]).optional(),
@@ -283,7 +283,7 @@ server.registerTool(
   {
     title: "Training heute",
     description:
-      "Welche Einheit heute ansteht, laut Wochenschaltern (Standard: Push Mo und Fr, Pull Mi und Sa; siehe Werkzeug wochenplan), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
+      "Welche Einheit heute ansteht, laut Zwei-Wochen-Rhythmus und Wochenschaltern (siehe Werkzeug wochenplan), mit den Startgewichten aus der tatsächlichen Trainingshistorie und der Begründung, wo sich etwas ändert.",
   },
   async () => {
     try {
@@ -741,7 +741,7 @@ server.registerTool(
   {
     title: "Bankdrücken heute",
     description:
-      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"test\" der Freitag der Deload-Woche in jedem dritten Zyklus (Aufwärmen, dann bis zu drei Singles ab dem geschätzten Maximum, ohne Wirkung auf den Trainingsmax), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
+      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"test\" der TM-Tag der Deload-Woche in jedem dritten Zyklus (Aufwärmen, dann bis zu drei Singles ab dem geschätzten Maximum, ohne Wirkung auf den Trainingsmax), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
   },
   async () => {
     try {

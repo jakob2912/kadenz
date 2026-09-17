@@ -233,10 +233,9 @@ describe("Testtag", () => {
     expect(bankPosition(woche4(5), anker).art).toBe("tm");
   });
 
-  it("fällt für Jakobs Kalender auf Fr, 27.11.2026", () => {
-    expect(datumFuerPushIndex(woche4(4))).toBe("2026-11-27");
-    expect(datumFuerPushIndex(woche4(7))).toBe("2027-02-19");
-    expect(new Date("2026-11-27T12:00:00Z").getUTCDay()).toBe(5);
+  it("fällt für Jakobs Kalender auf Sa, 28.11.2026", () => {
+    expect(datumFuerPushIndex(woche4(4))).toBe("2026-11-28");
+    expect(datumFuerPushIndex(woche4(7))).toBe("2027-02-20");
   });
 
   it("nimmt dem leichten Tag davor den Single", () => {

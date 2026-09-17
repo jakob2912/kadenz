@@ -4,8 +4,8 @@ import { datenbankKonfiguriert } from "./konfiguration";
 
 /**
  * Jakobs Split. "Push/Pull" meint bei ihm Anterior/Posterior — Beine sind an
- * beiden Tagen dabei, nicht als eigener Tag. Trainiert wird Mo, Mi, Fr und Sa,
- * Push und Pull im Wechsel — siehe rotationFor().
+ * beiden Tagen dabei, nicht als eigener Tag. Trainiert wird viermal die Woche,
+ * Push und Pull im Wechsel, im Zwei-Wochen-Rhythmus — siehe rotationFor().
  *
  * Die Gewichte stammen aus dem Kraftwerte-Log (29.07.2026) und den
  * Lift-Off-Screenshots (16.08.2026).
@@ -208,8 +208,8 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
  * 15.08.2026). Vom 07.09. bis 15.09. trainierte Jakob Mo, Mi, Fr, Sa, Push und
  * Pull im Wechsel über jeden Trainingstag gezählt.
  *
- * Seit dem 16.09.2026 hängt die Einheit am Wochentag, mit zwei Schaltern je
- * Woche (siehe wocheAm()). Die ersten beiden Abschnitte bleiben als
+ * Seit dem 16.09.2026 hängt die Einheit am Wochentag: ein Zwei-Wochen-Rhythmus
+ * mit zwei Schaltern je Woche (siehe wocheAm()). Die ersten beiden Abschnitte bleiben als
  * geschlossene Rechnung stehen, damit die Vergangenheit ihre Beschriftung und
  * ihre Push-Indizes behält.
  *
@@ -232,7 +232,7 @@ export type Spaet = "frsa" | "saso";
 
 /**
  * Was für eine Woche ausdrücklich gewählt wurde. `woche` ist ihr Montag
- * (ISO). Null heißt: Standard.
+ * (ISO). Null heißt: Standard des Zwei-Wochen-Rhythmus.
  */
 export type Wochenwahl = { woche: string; frueh: Frueh | null; spaet: Spaet | null };
 
@@ -240,6 +240,8 @@ export type Wochenwahl = { woche: string; frueh: Frueh | null; spaet: Spaet | nu
 export type Woche = {
   /** Montag der Woche, ISO. */
   montag: string;
+  /** Woche 1 oder 2 im Zwei-Wochen-Rhythmus. */
+  rhythmus: 1 | 2;
   frueh: Frueh;
   spaet: Spaet;
   /** Mo ist gesperrt, weil die Vorwoche auf Sa + So stand. */
@@ -260,13 +262,37 @@ export function montagVon(iso: string): string {
 }
 
 /**
- * Eine Woche nach Jakobs Regeln (16.09.2026).
+ * Der Standard ist ein Zwei-Wochen-Rhythmus nach Jakobs Stundenplan
+ * (16.09.2026, "ideal, aber noch nicht fix"):
  *
- * Mi ist immer Pull. Dazu zwei Schalter, die jede Woche beim Standard
- * anfangen: der erste Push am Mo oder Di, und das Ende der Woche als
- * Fr Push + Sa Pull oder Sa Push + So Pull. Stand die Vorwoche auf Sa + So,
- * ist Mo gesperrt — sonst wären Sa, So und Mo drei Tage am Stück — und der
- * erste Push liegt am Di.
+ *   Woche 1 (langer Dienstag in der Schule): Push Mo, Pull Mi, Push Sa, Pull So
+ *   Woche 2 (kurzer Dienstag):               Push Di, Pull Mi, Push Fr, Pull Sa
+ *
+ * Woche 1 ist die Woche ab dem 14.09.2026, danach im Wechsel. Die Schalter
+ * überschreiben den Standard für eine einzelne Woche.
+ */
+const RHYTHMUS_WOCHE_1 = Date.UTC(2026, 8, 14);
+
+export function standardWoche(montag: string): { frueh: Frueh; spaet: Spaet; woche: 1 | 2 } {
+  const wochen = Math.round((Date.parse(`${montag}T00:00:00Z`) - RHYTHMUS_WOCHE_1) / (7 * TAG_MS));
+  return ((wochen % 2) + 2) % 2 === 0
+    ? { frueh: "mo", spaet: "saso", woche: 1 }
+    : { frueh: "di", spaet: "frsa", woche: 2 };
+}
+
+/** Das Wochenende einer Woche, wie es tatsächlich gilt — Wahl vor Standard. */
+function spaetAm(montag: string, wahlen: readonly Wochenwahl[]): Spaet {
+  return wahlen.find((w) => w.woche === montag)?.spaet ?? standardWoche(montag).spaet;
+}
+
+/**
+ * Eine Woche nach Jakobs Regeln.
+ *
+ * Mi ist immer Pull. Dazu zwei Schalter: der erste Push am Mo oder Di, und
+ * das Ende der Woche als Fr Push + Sa Pull oder Sa Push + So Pull. Ohne Wahl
+ * gilt der Zwei-Wochen-Rhythmus (standardWoche()). Stand die Vorwoche auf
+ * Sa + So, ist Mo gesperrt — sonst wären Sa, So und Mo drei Tage am Stück —
+ * und der erste Push liegt am Di.
  *
  * In jeder Variante folgt Push – Pull – Push – Pull, und jede Woche endet mit
  * Pull und beginnt mit Push. Die Abfolge bleibt damit über jede Kombination
@@ -275,12 +301,14 @@ export function montagVon(iso: string): string {
 export function wocheAm(montag: string, wahlen: readonly Wochenwahl[]): Woche {
   const vorwoche = isoTag(Date.parse(`${montag}T00:00:00Z`) - 7 * TAG_MS);
   const wahl = wahlen.find((w) => w.woche === montag);
-  const montagGesperrt = wahlen.find((w) => w.woche === vorwoche)?.spaet === "saso";
+  const standard = standardWoche(montag);
+  const montagGesperrt = spaetAm(vorwoche, wahlen) === "saso";
 
   return {
     montag,
-    frueh: montagGesperrt ? "di" : (wahl?.frueh ?? "mo"),
-    spaet: wahl?.spaet ?? "frsa",
+    rhythmus: standard.woche,
+    frueh: montagGesperrt ? "di" : (wahl?.frueh ?? standard.frueh),
+    spaet: wahl?.spaet ?? standard.spaet,
     montagGesperrt,
   };
 }
@@ -348,7 +376,7 @@ export function schalterSperren(
   return { fruehGesperrt, spaetGesperrt };
 }
 
-/** Kurzbeschreibung einer Woche, z. B. "Push Mo und Fr, Pull Mi und Sa". */
+/** Kurzbeschreibung einer Woche, z. B. "Push Mo und Sa, Pull Mi und So". */
 export function wochenText(woche: Woche): string {
   const erster = woche.frueh === "mo" ? "Mo" : "Di";
   const [push2, pull2] = woche.spaet === "frsa" ? ["Fr", "Sa"] : ["Sa", "So"];

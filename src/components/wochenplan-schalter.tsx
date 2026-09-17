@@ -9,7 +9,7 @@ import { kurzDatum } from "@/components/ui";
 
 /**
  * Die zwei Schalter der Woche: erster Push am Mo oder Di, Wochenende als
- * Fr + Sa oder Sa + So. Jede Woche beginnt beim Standard. Was sich nicht mehr
+ * Fr + Sa oder Sa + So. Ohne Wahl gilt der Zwei-Wochen-Rhythmus. Was sich nicht mehr
  * umlegen lässt, ist ausgegraut, mit dem Grund darunter — die Prüfung selbst
  * macht der Server (wochenwahlSetzen()).
  */
@@ -31,7 +31,7 @@ export function WochenplanSchalter({ stand }: { stand: Wochenstand }) {
   return (
     <div className="mt-6">
       <p className="text-center text-[11px] uppercase tracking-[0.11em] text-fg-faint">
-        Woche ab {kurzDatum(stand.montag)}
+        Woche {stand.rhythmus} · ab {kurzDatum(stand.montag)}
       </p>
       <p className="mt-1 text-center text-[13px] text-fg-dim">{wochenText(stand)}</p>
 

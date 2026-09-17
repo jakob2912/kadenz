@@ -297,7 +297,7 @@ function Pr({
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Getestet wird in jedem {TEST_ALLE_ZYKLEN}. Zyklus am Freitag der Deload-Woche.
+        Getestet wird in jedem {TEST_ALLE_ZYKLEN}. Zyklus am TM-Tag der Deload-Woche.
         {schaetzung !== null && (
           <>
             {" "}
@@ -415,7 +415,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
             <Tag tone="warnung">1RM</Tag>
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            Jeder {TEST_ALLE_ZYKLEN}. Zyklus: Der Freitag der Deload-Woche wird zum Maximalversuch.
+            Jeder {TEST_ALLE_ZYKLEN}. Zyklus: Der TM-Tag der Deload-Woche wird zum Maximalversuch.
             Der leichte Tag davor läuft ohne Single. Bewegt den Trainingsmax nicht.
           </p>
         </div>
