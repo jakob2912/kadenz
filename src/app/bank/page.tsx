@@ -11,6 +11,7 @@ import { behauptetesMaximum, type Trainingsmax } from "@/lib/bank";
 import {
   SINGLE_PROZENT,
   TEST_ALLE_ZYKLEN,
+  DELOAD_AB_TM_KG,
   ZUSATZ_PROZENT,
   bankZusatzPlan,
 } from "@/lib/kraft";
@@ -97,6 +98,7 @@ async function Inhalt() {
           tm={daten.tm}
           zyklus={daten.stand?.position.zyklus ?? daten.tm.zyklus}
           woche={daten.stand?.position.woche ?? 1}
+          wochen={daten.stand?.position.wochen ?? 4}
         />
         <Vorschau wochen={daten.vorschau} standTag={daten.standTag} />
         <TmHistorie historie={daten.historie} />
@@ -113,13 +115,23 @@ async function Inhalt() {
 }
 
 /** Wo der Zyklus steht. */
-function Stand({ tm, zyklus, woche }: { tm: Trainingsmax; zyklus: number; woche: number }) {
+function Stand({
+  tm,
+  zyklus,
+  woche,
+  wochen,
+}: {
+  tm: Trainingsmax;
+  zyklus: number;
+  woche: number;
+  wochen: number;
+}) {
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
         <Eyebrow>Aktueller Stand</Eyebrow>
         <span className="text-[11px] tabular-nums text-fg-faint">
-          Zyklus {zyklus} · Woche {woche} von 4
+          Zyklus {zyklus} · Woche {woche} von {wochen}
         </span>
       </div>
 
@@ -131,11 +143,12 @@ function Stand({ tm, zyklus, woche }: { tm: Trainingsmax; zyklus: number; woche:
         <b className="font-semibold text-fg">{de(behauptetesMaximum(tm.tmKg), 1)} kg</b>.
       </p>
 
-      {/* Vier Balken, einer je Programmwoche. Die Deload-Woche ist auch dann
-          eingefärbt, wenn sie nicht die laufende ist: dass sie leicht ist, ist
-          ihr Zweck und keine Lücke im Plan. */}
+      {/* Ein Balken je Programmwoche — drei, solange der Zyklus ohne Deload
+          läuft. Die Deload-Woche ist auch dann eingefärbt, wenn sie nicht die
+          laufende ist: dass sie leicht ist, ist ihr Zweck und keine Lücke im
+          Plan. */}
       <div className="mt-3.5 flex gap-1.5" aria-hidden>
-        {[1, 2, 3, 4].map((w) => (
+        {Array.from({ length: wochen }, (_, i) => i + 1).map((w) => (
           <div
             key={w}
             className={`h-1.5 flex-1 rounded-full ${
@@ -405,7 +418,8 @@ function Ablauf({ tmKg }: { tmKg: number }) {
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
             Die Push-Einheit dazwischen. Der Single ist eine saubere, schnelle Wiederholung —
             kein Grinder und keine zweite. Zählt nicht für den Trainingsmax. In der
-            Deload-Woche fällt der Tag aus.
+            Deload-Woche fällt der Tag aus — die gibt es erst ab {DELOAD_AB_TM_KG} kg
+            Trainingsmax, darunter dauert ein Zyklus drei Wochen.
           </p>
         </div>
 

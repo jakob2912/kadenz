@@ -7,11 +7,11 @@
  *
  * Nicht in gewichtsplan.ts, obwohl das auch ein Ziel hochrechnet: dort geht es
  * um Körpergewicht, das jeden Tag gemessen wird und sich jeden Tag bewegt.
- * Hier geht es um eine Zahl, die sich planmäßig nur alle 28 Tage bewegt. Genau
+ * Hier geht es um eine Zahl, die sich planmäßig nur alle 21 bis 28 Tage bewegt. Genau
  * dieser Unterschied ist der Inhalt der Datei.
  */
 
-import { TM_ANTEIL, TM_SCHRITT_KG } from "./kraft";
+import { DELOAD_AB_TM_KG, pushTageImZyklus, TM_ANTEIL, TM_SCHRITT_KG } from "./kraft";
 
 /** Sauberes Einer-Maximum, das erreicht werden soll. */
 export const ZIEL_KG = 140;
@@ -39,19 +39,19 @@ export const ZIEL_TM_KG =
 /**
  * Wie lange ein Zyklus dauert.
  *
- * Vier Programmwochen, und eine Programmwoche ist bei Jakob jede zweite
- * Push-Einheit (siehe bankPosition() in kraft.ts). Seit dem Wochenplan
- * (rotationFor() in plan.ts) kommt Push zweimal pro Woche, also sieben Tage je
- * Programmwoche und achtundzwanzig je Zyklus. In der Ferienroutine, Push alle
- * drei Tage, waren es vierundzwanzig.
+ * Drei oder vier Programmwochen (ohne bzw. mit Deload, siehe wochenImZyklus()
+ * in kraft.ts), und eine Programmwoche ist bei Jakob jede zweite
+ * Push-Einheit. Seit dem Wochenplan (rotationFor() in plan.ts) kommt Push
+ * zweimal pro Woche, also sieben Tage je Programmwoche — 21 Tage je Zyklus
+ * ohne Deload, 28 mit.
  *
- * Abgeleitet und nicht als 28 hingeschrieben: ändert sich der Kalender,
- * ändert sich diese Zahl mit, und die Projektion bleibt richtig.
+ * Abgeleitet und nicht hingeschrieben: ändert sich der Kalender, ändert sich
+ * diese Zahl mit, und die Projektion bleibt richtig.
  */
-export const WOCHEN_JE_ZYKLUS = 4;
-export const PUSH_TAGE_JE_ZYKLUS = WOCHEN_JE_ZYKLUS * 2;
 const PUSH_TAGE_JE_KALENDERWOCHE = 2;
-export const TAGE_JE_ZYKLUS = (PUSH_TAGE_JE_ZYKLUS / PUSH_TAGE_JE_KALENDERWOCHE) * 7;
+export function tageImZyklus(zyklus: number, tmKg: number): number {
+  return (pushTageImZyklus(zyklus, tmKg) / PUSH_TAGE_JE_KALENDERWOCHE) * 7;
+}
 
 export type Projektionspunkt = {
   /** ISO-Datum des ersten Tages dieses Zyklus. */
@@ -102,11 +102,11 @@ function plusTage(iso: string, tage: number): string {
  * bei 5/3/1 in zweierlei Hinsicht falsch:
  *
  *   - Der Trainingsmax bewegt sich überhaupt nur am Ende eines Zyklus, also
- *     alle 28 Tage, und dann um 2,5 kg. Dazwischen steht er still, während die
+ *     alle 21 bis 28 Tage, und dann um 2,5 kg. Dazwischen steht er still, während die
  *     Tagesgewichte zwischen 40 und 95 Prozent auf und ab gehen. Eine gerade
  *     Linie durch diese Welle beschreibt keinen einzigen echten Tag.
- *   - Die vierte Woche jedes Zyklus ist ein Deload. Dass es dort rückwärts
- *     geht, ist keine Stagnation, sondern der Zweck der Woche.
+ *   - Ab 100 kg Trainingsmax ist die vierte Woche jedes Zyklus ein Deload.
+ *     Dass es dort rückwärts geht, ist keine Stagnation, sondern ihr Zweck.
  *
  * Was hier herauskommt, ist deshalb eine echte Treppe, und zwar mit ZWEI
  * Punkten je Zyklus: einer am Anfang, einer am letzten Tag desselben Zyklus,
@@ -127,11 +127,13 @@ export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zie
   const zyklenNoetig = Math.ceil(fehltTmKg / TM_SCHRITT_KG);
 
   const kurve: Projektionspunkt[] = [];
+  let tage = 0;
   for (let n = 0; n <= zyklenNoetig; n++) {
     const tm = Math.min(ZIEL_TM_KG, tmKg + n * TM_SCHRITT_KG);
     const punkt = { zyklus: zyklus + n, tmKg: tm, maxKg: tm / TM_ANTEIL };
+    const dauer = tageImZyklus(zyklus + n, tm);
 
-    kurve.push({ datum: plusTage(abIso, n * TAGE_JE_ZYKLUS), ...punkt });
+    kurve.push({ datum: plusTage(abIso, tage), ...punkt });
 
     /* Der zweite Punkt liegt am letzten Tag desselben Zyklus — einen Tag vor
        dem nächsten Anstieg. Er trägt die Waagrechte. Beim letzten Zyklus
@@ -139,8 +141,9 @@ export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zie
        danach noch 27 Tage flach weiterliefe, behauptete eine Wartezeit, die
        es nicht gibt. */
     if (n < zyklenNoetig) {
-      kurve.push({ datum: plusTage(abIso, (n + 1) * TAGE_JE_ZYKLUS - 1), ...punkt });
+      kurve.push({ datum: plusTage(abIso, tage + dauer - 1), ...punkt });
     }
+    tage += dauer;
   }
 
   const fruehestensAm = kurve[kurve.length - 1].datum;
@@ -163,7 +166,7 @@ export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zie
  * Formuliert die Nichtlinearität aus, statt sie nur zu zeichnen: eine Treppe
  * wird als Gerade gelesen, wenn niemand dazuschreibt, dass sie keine ist. Und
  * die Zahl, auf die es ankommt, ist nicht "noch 50 kg", sondern "noch so und
- * so viele Zyklen à 28 Tage".
+ * so viele Zyklen à 21 bis 28 Tage".
  */
 export function zielSatz(stand: Zielstand): string {
   if (stand.fehltTmKg === 0) {
@@ -173,7 +176,7 @@ export function zielSatz(stand: Zielstand): string {
     );
   }
 
-  const monate = Math.round((stand.zyklenNoetig * TAGE_JE_ZYKLUS) / 30.44);
+  const monate = Math.round(tageZwischen(stand.kurve[0].datum, stand.fruehestensAm) / 30.44);
 
   const tempo = stand.imPlan
     ? `Das sind rund ${monate} Monate — und selbst dann nur, wenn kein einziger Zyklus stehen bleibt. ` +
@@ -185,8 +188,8 @@ export function zielSatz(stand: Zielstand): string {
     `Für saubere ${ZIEL_KG} kg braucht es einen Trainingsmax von ${zahl(ZIEL_TM_KG)} kg — ` +
     `${zahl(stand.fehltTmKg)} kg mehr als heute. Das 5/3/1 holt sie nicht gleichmäßig, ` +
     `sondern ${zahl(TM_SCHRITT_KG)} kg am Ende eines Zyklus; dazwischen steht der ` +
-    `Trainingsmax still, und die vierte Woche geht bewusst zurück. ` +
-    `${stand.zyklenNoetig} Zyklen à ${TAGE_JE_ZYKLUS} Tage. ${tempo}`
+    `Trainingsmax still, und ab ${zahl(DELOAD_AB_TM_KG)} kg geht die vierte Woche bewusst zurück. ` +
+    `${stand.zyklenNoetig} Zyklen à 21 bis 28 Tage. ${tempo}`
   );
 }
 

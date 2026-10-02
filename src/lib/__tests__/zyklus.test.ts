@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   amrapPushIndex,
   bankPosition,
-  PUSH_TAGE_JE_ZYKLUS,
+  pushTageImZyklus,
+  wochenImZyklus,
   besterSatz,
   e1rmReihe,
   type GeloggterSatz,
 } from "../kraft";
-import { TAGE_JE_ZYKLUS, ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankziel";
+import { ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankziel";
 
 describe("Zyklus vorziehen (Deload überspringen)", () => {
   /* Jakob am 07.09.2026: "das fühlt sich zu leicht an, skip den Deload, ich
@@ -18,29 +19,29 @@ describe("Zyklus vorziehen (Deload überspringen)", () => {
      Eingriff in die Vergangenheit: der neue Trainingsmax gilt ab dem 07.09.,
      der erste Push-Tag danach ist der 09.09. (Index 8), und dort fängt Zyklus
      2 mit Woche 1 an. */
-  const ankerZyklus2 = { pushIndex: 8, zyklus: 2 };
+  const ankerZyklus2 = { pushIndex: 8, zyklus: 2, tmKg: 100 };
 
   it("beginnt den vorgezogenen Zyklus mit Woche 1", () => {
-    expect(bankPosition(8, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 1 });
+    expect(bankPosition(8, ankerZyklus2)).toMatchObject({ art: "tm", zyklus: 2, woche: 1 });
   });
 
   it("führt die Welle von dort regulär weiter", () => {
-    expect(bankPosition(10, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 2 });
-    expect(bankPosition(12, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 3 });
-    expect(bankPosition(14, ankerZyklus2)).toEqual({ art: "tm", zyklus: 2, woche: 4 });
-    expect(bankPosition(16, ankerZyklus2)).toEqual({ art: "tm", zyklus: 3, woche: 1 });
+    expect(bankPosition(10, ankerZyklus2)).toMatchObject({ art: "tm", zyklus: 2, woche: 2 });
+    expect(bankPosition(12, ankerZyklus2)).toMatchObject({ art: "tm", zyklus: 2, woche: 3 });
+    expect(bankPosition(14, ankerZyklus2)).toMatchObject({ art: "tm", zyklus: 2, woche: 4 });
+    expect(bankPosition(16, ankerZyklus2)).toMatchObject({ art: "tm", zyklus: 3, woche: 1 });
   });
 
   it("behält die leichten Einheiten dazwischen", () => {
     // Die Abwechslung schwer/leicht hängt an der Parität des Versatzes und
     // bleibt vom Vorziehen unberührt.
-    expect(bankPosition(9, ankerZyklus2)).toEqual({ art: "zusatz", zyklus: 2, woche: 1 });
-    expect(bankPosition(11, ankerZyklus2)).toEqual({ art: "zusatz", zyklus: 2, woche: 2 });
+    expect(bankPosition(9, ankerZyklus2)).toMatchObject({ art: "zusatz", zyklus: 2, woche: 1 });
+    expect(bankPosition(11, ankerZyklus2)).toMatchObject({ art: "zusatz", zyklus: 2, woche: 2 });
   });
 
   it("lässt den nächsten Deload an seiner Stelle", () => {
     // Übersprungen wird genau einer, nicht das Konzept.
-    expect(bankPosition(15, ankerZyklus2)).toEqual({ art: "keiner", zyklus: 2, woche: 4 });
+    expect(bankPosition(15, ankerZyklus2)).toMatchObject({ art: "keiner", zyklus: 2, woche: 4 });
   });
 
   it("legt den AMRAP-Satz vier Push-Tage nach den Anfang", () => {
@@ -51,8 +52,38 @@ describe("Zyklus vorziehen (Deload überspringen)", () => {
 
   it("dauert weiterhin acht Push-Tage", () => {
     expect(
-      bankPosition(ankerZyklus2.pushIndex + PUSH_TAGE_JE_ZYKLUS, ankerZyklus2)
-    ).toEqual({ art: "tm", zyklus: 3, woche: 1 });
+      bankPosition(ankerZyklus2.pushIndex + pushTageImZyklus(2, 100), ankerZyklus2)
+    ).toMatchObject({ art: "tm", zyklus: 3, woche: 1 });
+  });
+});
+
+describe("Ohne Deload unter 100 kg Trainingsmax", () => {
+  /* Jakob am 02.10.2026: die Deloads weglassen, bis der Trainingsmax bei
+     rund 100 kg steht. Der Zyklus hat dann drei Wochen, und auf Woche 3
+     folgt direkt Woche 1 des nächsten. */
+  const anker = { pushIndex: 8, zyklus: 2, tmKg: 95 };
+
+  it("hat drei Wochen", () => {
+    expect(wochenImZyklus(2, 95)).toBe(3);
+    expect(wochenImZyklus(2, 100)).toBe(4);
+    expect(bankPosition(8, anker)).toMatchObject({ zyklus: 2, woche: 1, wochen: 3 });
+  });
+
+  it("springt nach Woche 3 in den nächsten Zyklus", () => {
+    expect(bankPosition(12, anker)).toEqual({ art: "tm", zyklus: 2, woche: 3, wochen: 3 });
+    expect(bankPosition(13, anker)).toEqual({ art: "zusatz", zyklus: 2, woche: 3, wochen: 3 });
+    expect(bankPosition(14, anker)).toEqual({ art: "tm", zyklus: 3, woche: 1, wochen: 3 });
+    expect(bankPosition(20, anker)).toEqual({ art: "tm", zyklus: 4, woche: 1, wochen: 4 });
+  });
+
+  it("behält im Testzyklus die vierte Woche für den Maximalversuch", () => {
+    // Zyklus 4 ist ein Testzyklus: Anfang bei 8 + 6 + 6 = 20, Woche 4 bei 26.
+    expect(bankPosition(26, anker)).toEqual({ art: "test", zyklus: 4, woche: 4, wochen: 4 });
+    expect(bankPosition(28, anker)).toMatchObject({ art: "tm", zyklus: 5, woche: 1 });
+  });
+
+  it("nimmt den AMRAP-Satz weiter aus Woche 3", () => {
+    expect(bankPosition(amrapPushIndex(anker.pushIndex), anker).woche).toBe(3);
   });
 });
 
@@ -122,7 +153,8 @@ describe("zielProjektion", () => {
 
     // Punkt 0 und 1 tragen denselben Trainingsmax — das ist die Waagrechte.
     expect(stand.kurve[1].tmKg).toBe(90);
-    expect(stand.kurve[1].datum).toBe("2026-09-16");
+    // Unter 100 kg ohne Deload: 21 Tage je Zyklus.
+    expect(stand.kurve[1].datum).toBe("2026-09-09");
     // Erst danach der Sprung.
     expect(stand.kurve[2].tmKg).toBe(92.5);
 
@@ -135,12 +167,20 @@ describe("zielProjektion", () => {
     }
     expect([...spruenge].sort()).toEqual([0, 2.5]);
 
-    // Ein Zyklus dauert 28 Tage; die Waagrechte deckt 27 davon ab.
+    // Ein Zyklus ohne Deload dauert 21 Tage; die Waagrechte deckt 20 davon ab.
     const abstand =
       (Date.parse(`${stand.kurve[2].datum}T00:00:00Z`) -
         Date.parse(`${stand.kurve[0].datum}T00:00:00Z`)) /
       864e5;
-    expect(abstand).toBe(TAGE_JE_ZYKLUS);
+    expect(abstand).toBe(21);
+
+    // Ab 100 kg kommt der Deload zurück, der Zyklus dauert wieder 28 Tage.
+    const ab100 = stand.kurve.findIndex((p) => p.tmKg === 100);
+    const dauer100 =
+      (Date.parse(`${stand.kurve[ab100 + 2].datum}T00:00:00Z`) -
+        Date.parse(`${stand.kurve[ab100].datum}T00:00:00Z`)) /
+      864e5;
+    expect(dauer100).toBe(28);
   });
 
   it("überschreitet das Ziel nicht", () => {

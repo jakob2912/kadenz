@@ -506,7 +506,36 @@ export type BankPosition = {
   /** Fortlaufend ab 1. Bei art "keiner" vor dem Start nicht aussagekräftig. */
   zyklus: number;
   woche: BankWoche;
+  /** 3 ohne Deload, sonst 4 — siehe wochenImZyklus(). */
+  wochen: 3 | 4;
 };
+
+/**
+ * Ab diesem Trainingsmax gibt es wieder eine Deload-Woche.
+ *
+ * Jakob am 02.10.2026: die Deloads weglassen, bis der Trainingsmax bei rund
+ * 100 kg steht — bei diesen Gewichten braucht es sie noch nicht. Darunter
+ * dauert ein Zyklus drei Programmwochen statt vier, die Welle 5/3/1 läuft
+ * ohne die Woche 40/50/60 % direkt in den nächsten Zyklus.
+ */
+export const DELOAD_AB_TM_KG = 100;
+
+/**
+ * Wie viele Programmwochen ein Zyklus hat.
+ *
+ * Ein Testzyklus behält seine vierte Woche auch unter der Schwelle: dort
+ * steht statt des Deloads der Maximalversuch, und der ist kein Deload, den
+ * man weglassen könnte. Ohne Trainingsmax (null) gilt der volle Zyklus.
+ */
+export function wochenImZyklus(zyklus: number, tmKg: number | null): 3 | 4 {
+  if (tmKg === null || tmKg >= DELOAD_AB_TM_KG || istTestZyklus(zyklus)) return 4;
+  return 3;
+}
+
+/** Push-Tage eines Zyklus: zwei je Programmwoche (TM-Tag plus leichter Tag). */
+export function pushTageImZyklus(zyklus: number, tmKg: number | null): number {
+  return wochenImZyklus(zyklus, tmKg) * 2;
+}
 
 /**
  * Wo im Programm steht ein Push-Tag?
@@ -542,23 +571,55 @@ export type BankPosition = {
  * Tag, an dem der Zyklus mit Woche 1 anfängt. Einen Zyklus vorzuziehen ist
  * damit keine Umgehung mehr, sondern ein Datum.
  */
-export type Zyklusanker = { pushIndex: number; zyklus: number };
+export type Zyklusanker = {
+  pushIndex: number;
+  zyklus: number;
+  /** Trainingsmax dieses Zyklus — entscheidet, ob er eine Deload-Woche hat. */
+  tmKg: number | null;
+};
+
+/**
+ * Der Push-Tag, an dem ein späterer Zyklus anfängt.
+ *
+ * Für die Zyklen nach dem Anker gilt dessen Trainingsmax: wie hoch er dort
+ * steht, entscheidet erst der AMRAP-Satz. Kreuzt er die Deload-Schwelle,
+ * stimmt die Vorausschau für die Zyklen danach um eine Woche nicht — sobald
+ * aufZyklusBringen() die neue Zeile anlegt, rechnet alles vom neuen Anker.
+ */
+export function zyklusAnfang(anker: Zyklusanker, zyklus: number): number {
+  let index = anker.pushIndex;
+  for (let z = anker.zyklus; z < zyklus; z++) index += pushTageImZyklus(z, anker.tmKg);
+  return index;
+}
 
 export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPosition {
-  const versatz = pushIndex - anker.pushIndex;
-
   // Vor dem Anfang dieses Zyklus: kein Bank-Tag, und die Woche steht auf 1.
   // So zeigt die Oberfläche einen Anfang statt einer negativen Woche.
-  if (versatz < 0) return { art: "keiner", zyklus: anker.zyklus, woche: 1 };
+  if (pushIndex < anker.pushIndex) {
+    return {
+      art: "keiner",
+      zyklus: anker.zyklus,
+      woche: 1,
+      wochen: wochenImZyklus(anker.zyklus, anker.tmKg),
+    };
+  }
 
-  const bankIndex = Math.floor(versatz / 2);
-  const woche = ((bankIndex % 4) + 1) as BankWoche;
+  /* Zyklus für Zyklus vorwärts statt einer Division: seit dem Deload-Skip
+     sind die Zyklen nicht mehr gleich lang. */
+  let zyklus = anker.zyklus;
+  let anfang = anker.pushIndex;
+  while (pushIndex - anfang >= pushTageImZyklus(zyklus, anker.tmKg)) {
+    anfang += pushTageImZyklus(zyklus, anker.tmKg);
+    zyklus++;
+  }
+  const wochen = wochenImZyklus(zyklus, anker.tmKg);
 
   /* Die Zusatz-Einheit teilt sich Zyklus und Woche mit dem TM-Tag davor —
      Math.floor() rundet den ungeraden Versatz auf denselben Bank-Index ab.
      Das ist die Absicht: solange die Welle läuft, soll nicht mitten zwischen
      zwei Programmtagen die Woche umspringen. */
-  const zyklus = anker.zyklus + Math.floor(bankIndex / 4);
+  const versatz = pushIndex - anfang;
+  const woche = (Math.floor(versatz / 2) + 1) as BankWoche;
 
   const art: BankTagArt =
     versatz % 2 === 0
@@ -572,16 +633,13 @@ export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPositio
         ? "keiner"
         : "zusatz";
 
-  return { art, zyklus, woche };
+  return { art, zyklus, woche, wochen };
 }
 
 /** Ist das der leichte Tag direkt vor einem Testtag? Dann ohne Single. */
 export function vorTest(position: BankPosition): boolean {
   return position.art === "zusatz" && position.woche === 3 && istTestZyklus(position.zyklus);
 }
-
-/** Wie viele Push-Tage ein voller Zyklus dauert: vier Wochen à zwei. */
-export const PUSH_TAGE_JE_ZYKLUS = 8;
 
 /** Der Push-Tag, an dem der AMRAP-Satz eines Zyklus liegt — Woche 3. */
 export function amrapPushIndex(ankerPushIndex: number): number {

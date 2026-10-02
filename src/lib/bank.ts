@@ -25,10 +25,11 @@ import {
   testPlan,
   TEST_VERSUCHE,
   TM_ANTEIL,
-  PUSH_TAGE_JE_ZYKLUS,
+  pushTageImZyklus,
   SINGLE_PROZENT,
   ZUSATZ_PROZENT,
   vorTest,
+  zyklusAnfang,
   type BankPosition,
   type Zyklusanker,
 } from "./kraft";
@@ -99,6 +100,7 @@ async function zyklusanker(wahlen: readonly Wochenwahl[]): Promise<Zyklusanker |
   return {
     pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10), wahlen),
     zyklus: zeile.zyklus,
+    tmKg: zeile.tmKg,
   };
 }
 
@@ -258,10 +260,13 @@ async function aufZyklusBringen(
   if (zielZyklus - aktuell.zyklus > MAX_NACHGEHOLTE_ZYKLEN) {
     return anlegenOderLesen(zielZyklus, aktuell.tmKg, "zyklus", wahlen, {
       /* Der Anker des Zielzyklus, auch wenn die Zyklen dazwischen leer
-         blieben: acht Push-Tage je Zyklus, vom bekannten Anker aus. Sonst
-         stünde als Anfang des neuen Zyklus der Tag, an dem jemand zufällig
-         die Seite aufgerufen hat. */
-      abPushIndex: anker + (zielZyklus - aktuell.zyklus) * PUSH_TAGE_JE_ZYKLUS,
+         blieben: Zyklus für Zyklus vom bekannten Anker aus. Sonst stünde als
+         Anfang des neuen Zyklus der Tag, an dem jemand zufällig die Seite
+         aufgerufen hat. */
+      abPushIndex: zyklusAnfang(
+        { pushIndex: anker, zyklus: aktuell.zyklus, tmKg: aktuell.tmKg },
+        zielZyklus
+      ),
       begruendung:
         `Zwischen Zyklus ${aktuell.zyklus} und ${zielZyklus} liegen ` +
         `${zielZyklus - aktuell.zyklus} Zyklen ohne Auswertung. Der Trainingsmax bleibt ` +
@@ -285,11 +290,12 @@ async function aufZyklusBringen(
 
     const entscheidung = naechsterTm(aktuell.tmKg, satz, soll.wdh);
 
-    /* Der nächste Zyklus beginnt acht Push-Tage nach diesem — ausgerechnet
+    /* Der nächste Zyklus beginnt sechs oder acht Push-Tage nach diesem
+       (mit oder ohne Deload, siehe wochenImZyklus()) — ausgerechnet
        und nicht "heute". Wird die Fortschreibung ein paar Tage zu früh oder
        zu spät angestoßen, stünde sonst ein Anfangsdatum in der Zeile, das mit
        der Welle nichts zu tun hat, und die Wochen liefen ab da schief. */
-    anker += PUSH_TAGE_JE_ZYKLUS;
+    anker += pushTageImZyklus(aktuell.zyklus, aktuell.tmKg);
 
     aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", wahlen, {
       abPushIndex: anker,
@@ -360,7 +366,7 @@ export async function bankstandFuer(
        sobald die Zahl da ist. Ihn als "kein Bank-Tag" zu zeigen wäre irre-
        führend, denn worauf sollte man dann warten. */
     return {
-      position: bankPosition(pushIndex, { pushIndex, zyklus: 1 }),
+      position: bankPosition(pushIndex, { pushIndex, zyklus: 1, tmKg: null }),
       tm: null,
       naechsterBankTag: null,
       vorgabe: {
@@ -373,7 +379,7 @@ export async function bankstandFuer(
     };
   }
 
-  const anker = (await zyklusanker(wahlen)) ?? { pushIndex, zyklus: tm.zyklus };
+  const anker = (await zyklusanker(wahlen)) ?? { pushIndex, zyklus: tm.zyklus, tmKg: tm.tmKg };
   const position = bankPosition(pushIndex, anker);
 
   /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,

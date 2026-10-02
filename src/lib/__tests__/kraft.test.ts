@@ -221,15 +221,15 @@ describe("bankZusatzPlan", () => {
 });
 
 describe("Testtag", () => {
-  const anker = { pushIndex: 8, zyklus: 2 };
+  const anker = { pushIndex: 8, zyklus: 2, tmKg: 100 };
   // Zyklus n beginnt bei Push-Index 8 + 8·(n − 2); Woche 4 liegt 6 Push-Tage später.
   const woche4 = (zyklus: number) => 8 + 8 * (zyklus - 2) + 6;
 
   it("liegt in jedem dritten Zyklus am TM-Tag der Deload-Woche", () => {
     expect([2, 3, 4, 5, 6, 7, 10, 13].filter(istTestZyklus)).toEqual([4, 7, 10, 13]);
-    expect(bankPosition(woche4(4), anker)).toEqual({ art: "test", zyklus: 4, woche: 4 });
-    expect(bankPosition(woche4(7), anker)).toEqual({ art: "test", zyklus: 7, woche: 4 });
-    expect(bankPosition(woche4(3), anker)).toEqual({ art: "tm", zyklus: 3, woche: 4 });
+    expect(bankPosition(woche4(4), anker)).toMatchObject({ art: "test", zyklus: 4, woche: 4 });
+    expect(bankPosition(woche4(7), anker)).toMatchObject({ art: "test", zyklus: 7, woche: 4 });
+    expect(bankPosition(woche4(3), anker)).toMatchObject({ art: "tm", zyklus: 3, woche: 4 });
     expect(bankPosition(woche4(5), anker).art).toBe("tm");
   });
 
@@ -240,7 +240,7 @@ describe("Testtag", () => {
 
   it("nimmt dem leichten Tag davor den Single", () => {
     const davor = bankPosition(woche4(4) - 1, anker);
-    expect(davor).toEqual({ art: "zusatz", zyklus: 4, woche: 3 });
+    expect(davor).toMatchObject({ art: "zusatz", zyklus: 4, woche: 3 });
     expect(vorTest(davor)).toBe(true);
     expect(vorTest(bankPosition(woche4(3) - 1, anker))).toBe(false);
     expect(bankZusatzPlan(95, false)).toHaveLength(3);
@@ -276,16 +276,16 @@ describe("bankPosition", () => {
      Push-Tag PLUS Zyklusnummer: gezählt wird ab dem Anfang des laufenden
      Zyklus, nicht ab dem Programmstart. Für diese Fälle bleibt es dasselbe —
      Zyklus 1 fängt beim Programmstart an. */
-  const ab = (pushIndex: number, zyklus = 1) => ({ pushIndex, zyklus });
+  const ab = (pushIndex: number, zyklus = 1) => ({ pushIndex, zyklus, tmKg: 100 });
 
   it("zählt ab dem Anfang des Zyklus, nicht ab dem Rotationsanker", () => {
     /* Sonst wäre die allererste Bankeinheit je nach Startdatum mitten im
        Zyklus gelandet — im schlechtesten Fall gleich Woche 3 mit 95 %. */
     const start = ab(7);
-    expect(bankPosition(7, start)).toEqual({ art: "tm", zyklus: 1, woche: 1 });
-    expect(bankPosition(9, start)).toEqual({ art: "tm", zyklus: 1, woche: 2 });
-    expect(bankPosition(13, start)).toEqual({ art: "tm", zyklus: 1, woche: 4 });
-    expect(bankPosition(15, start)).toEqual({ art: "tm", zyklus: 2, woche: 1 });
+    expect(bankPosition(7, start)).toMatchObject({ art: "tm", zyklus: 1, woche: 1 });
+    expect(bankPosition(9, start)).toMatchObject({ art: "tm", zyklus: 1, woche: 2 });
+    expect(bankPosition(13, start)).toMatchObject({ art: "tm", zyklus: 1, woche: 4 });
+    expect(bankPosition(15, start)).toMatchObject({ art: "tm", zyklus: 2, woche: 1 });
   });
 
   it("macht jede zweite Push-Einheit zum TM-Tag", () => {
@@ -297,20 +297,20 @@ describe("bankPosition", () => {
      den submaximalen Zusatz-Slot. Sie behält Zyklus und Woche des TM-Tags
      davor — sonst spränge die Woche mitten zwischen zwei Programmtagen um. */
   it("macht die Einheit dazwischen zur Zusatz-Einheit", () => {
-    expect(bankPosition(8, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 1 });
-    expect(bankPosition(10, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 2 });
-    expect(bankPosition(12, ab(7))).toEqual({ art: "zusatz", zyklus: 1, woche: 3 });
+    expect(bankPosition(8, ab(7))).toMatchObject({ art: "zusatz", zyklus: 1, woche: 1 });
+    expect(bankPosition(10, ab(7))).toMatchObject({ art: "zusatz", zyklus: 1, woche: 2 });
+    expect(bankPosition(12, ab(7))).toMatchObject({ art: "zusatz", zyklus: 1, woche: 3 });
   });
 
   /* 72,5 % lägen über jedem Satz der Deload-Woche (40/50/60 %). Die
      Zusatz-Einheit wäre dort die schwerere von beiden. */
   it("lässt die Zusatz-Einheit in der Deload-Woche ausfallen", () => {
     expect(bankPosition(13, ab(7)).art).toBe("tm");
-    expect(bankPosition(14, ab(7))).toEqual({ art: "keiner", zyklus: 1, woche: 4 });
+    expect(bankPosition(14, ab(7))).toMatchObject({ art: "keiner", zyklus: 1, woche: 4 });
   });
 
   it("meldet vor dem Programmstart keine Bankeinheit", () => {
-    expect(bankPosition(3, ab(7))).toEqual({ art: "keiner", zyklus: 1, woche: 1 });
+    expect(bankPosition(3, ab(7))).toMatchObject({ art: "keiner", zyklus: 1, woche: 1 });
   });
 });
 

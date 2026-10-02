@@ -249,6 +249,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     const anker: Zyklusanker = {
       pushIndex: pushIndexAbDatum(tm.gueltigAb, wahlen),
       zyklus: tm.zyklus,
+      tmKg: tm.tmKg,
     };
 
     vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, wahlen);
