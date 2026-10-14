@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { cacheLife, cacheTag } from "next/cache";
 import { refreshTokenLesen } from "./auth-store";
 import {
+  googleZugangAbgelaufen,
   listDataPoints,
   refreshAccessToken,
   type ListResult,
@@ -198,7 +199,7 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
        Anfrage fehlgeschlagen (400): invalid_grant — Token has been expired or
        revoked") stand bis zum 15.09.2026 so auf der Seite. Er ist richtig,
        aber er sagt nicht, was zu tun ist. */
-    if (text.includes("invalid_grant")) {
+    if (googleZugangAbgelaufen(e)) {
       throw new NichtVerbundenFehler(
         "Die Verbindung zu Google Health ist abgelaufen. Einmal neu verbinden, dann " +
           "laufen Schlaf, Ruhepuls, HRV und Gewicht wieder. Das passiert etwa jede " +

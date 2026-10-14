@@ -17,7 +17,7 @@ import {
   type Bankstand,
   type Trainingsmax,
 } from "./bank";
-import { saetzeFuerMehrere } from "./kraftverlauf";
+import { neustartsLesen, saetzeFuerMehrere } from "./kraftverlauf";
 import { heuteWien } from "./datum";
 import {
   datumFuerPushIndex,
@@ -41,6 +41,7 @@ import {
   type Zyklusanker,
 } from "./kraft";
 import { zielProjektion, type Zielstand } from "./bankziel";
+import { bankcoach, prognose140, type Bankcoach, type Prognose } from "./bankcoach";
 
 /**
  * Wie weit zurück der Bank-Tab liest.
@@ -96,6 +97,10 @@ export type Bankuebersicht = {
   naechsterTest: string | null;
   /** Geschätztes Maximum der letzten Wochen — Grundlage des ersten Testversuchs. */
   schaetzung: number | null;
+  /** Läuft es, steht es — und was tun? Null ohne Trainingsmax-Historie. */
+  coach: Bankcoach | null;
+  /** Wann 140 kg stünden, wenn es so weitergeht wie an den schweren Tagen. */
+  prognose: Prognose | null;
 };
 
 /** Wie weit der nächste Testtag gesucht wird: gut drei Zyklen. */
@@ -267,6 +272,25 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     ziel = zielProjektion(tm.tmKg, anker.zyklus, datumFuerPushIndex(anker.pushIndex, wahlen));
   }
 
+  /* Der Coach sieht nur die schweren Tage — siehe schwereBankTage(). Die
+     Historie hier reicht 24 Zyklen zurück, also weit über sein Fenster. */
+  let coach: Bankcoach | null = null;
+  let prognose: Prognose | null = null;
+  try {
+    const neustarts = await neustartsLesen();
+    coach = bankcoach({
+      saetze,
+      tmHistorie: historie,
+      tmKg: tm?.tmKg ?? null,
+      heuteIso: heute,
+      neustartAb: neustarts[BANK_UEBUNG],
+    });
+    prognose = prognose140(coach.urteil, heute);
+  } catch (e) {
+    // Ohne Coach steht der Rest des Tabs trotzdem.
+    console.error("Bank-Coach nicht berechenbar:", e);
+  }
+
   return {
     tm,
     historie,
@@ -278,5 +302,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     pr,
     naechsterTest,
     schaetzung,
+    coach,
+    prognose,
   };
 }

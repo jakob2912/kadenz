@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, Eyebrow, Skelett, de, kurzDatum } from "@/components/ui";
 import { ReihenChart } from "@/components/reihen-chart";
-import { saetzeFuer, FENSTER_TAGE } from "@/lib/kraftverlauf";
+import { saetzeFuer, trendGrundlage, FENSTER_TAGE } from "@/lib/kraftverlauf";
+import { trendSaetze } from "@/lib/bankcoach";
 import { besterSatz, e1rm, e1rmReihe, kraftTrend } from "@/lib/kraft";
 
 
@@ -64,7 +65,19 @@ async function Inhalt({ params }: { params: Promise<{ uebung: string }> }) {
   if (saetze.length === 0) notFound();
 
   const reihe = e1rmReihe(saetze);
-  const urteil = kraftTrend(reihe);
+
+  /* Das Diagramm zeigt alles, was geloggt ist. Das Urteil rechnet ab einem
+     gesetzten Neustart und beim Bankdrücken nur mit den schweren Tagen. */
+  let grundlage: Awaited<ReturnType<typeof trendGrundlage>> = { neustarts: {}, bankTmHistorie: [] };
+  try {
+    grundlage = await trendGrundlage();
+  } catch (e) {
+    console.error("Neustarts nicht lesbar:", e);
+  }
+  const urteil = kraftTrend(
+    e1rmReihe(trendSaetze(uebung, saetze, grundlage.bankTmHistorie)),
+    grundlage.neustarts[uebung]
+  );
   const best = besterSatz(saetze);
   const bestesMaximum = best ? e1rm(best) : null;
   const aktuell = reihe.length > 0 ? reihe[reihe.length - 1] : null;

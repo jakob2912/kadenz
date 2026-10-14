@@ -14,6 +14,7 @@ import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
 import { wochenwahlenLesen } from "./wochenplan";
+import { NEUSTART_SCHLUESSEL, neustartsAusText } from "./kraftverlauf";
 import {
   SESSIONS,
   mitHistorie,
@@ -477,6 +478,22 @@ export async function uebungUmbenennen(
         where: { exercise: alt },
         data: { exercise: neu },
       });
+
+      /* Ein gesetzter Neustart hängt am Namen wie die Sätze. Bliebe er unter
+         dem alten stehen, rechnete der Trend der umbenannten Übung wieder
+         über den Technikwechsel hinweg. */
+      const eintrag = await tx.einstellung.findUnique({
+        where: { schluessel: NEUSTART_SCHLUESSEL },
+      });
+      const neustarts = neustartsAusText(eintrag?.wert);
+      if (neustarts[alt]) {
+        neustarts[neu] = neustarts[alt];
+        delete neustarts[alt];
+        await tx.einstellung.update({
+          where: { schluessel: NEUSTART_SCHLUESSEL },
+          data: { wert: JSON.stringify(neustarts) },
+        });
+      }
 
       return { ok: true as const, saetzeUmgeschrieben: count };
     });

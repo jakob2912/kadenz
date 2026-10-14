@@ -16,6 +16,7 @@ import {
   bankZusatzPlan,
 } from "@/lib/kraft";
 import { ZIEL_DATUM, ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib/bankziel";
+import type { Bankcoach, Prognose } from "@/lib/bankcoach";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { ReihenChart } from "@/components/reihen-chart";
 import { Card, Eyebrow, Skelett, Tag, anzahl, de, kurzDatum, langDatum } from "@/components/ui";
@@ -106,6 +107,7 @@ async function Inhalt() {
 
       <div className="flex flex-col gap-3.5">
         <Pr pr={daten.pr} naechsterTest={daten.naechsterTest} schaetzung={daten.schaetzung} />
+        {daten.coach && <Coach coach={daten.coach} prognose={daten.prognose} />}
         {daten.ziel && <Ziel stand={daten.ziel} />}
         <Ablauf tmKg={daten.tm.tmKg} />
         <Verlauf einheiten={daten.einheiten} />
@@ -319,6 +321,39 @@ function Pr({
           </>
         )}
       </p>
+    </Card>
+  );
+}
+
+const LAGE_TEXT: Record<
+  Bankcoach["lage"],
+  { label: string; tone: "akzent" | "warnung" | "gut" | "schlecht" }
+> = {
+  laeuft: { label: "Läuft", tone: "gut" },
+  steht: { label: "Steht", tone: "warnung" },
+  faellt: { label: "Geht zurück", tone: "schlecht" },
+  unklar: { label: "Zu wenig Daten", tone: "akzent" },
+};
+
+/**
+ * Läuft es an den schweren Tagen — und was tun, wenn nicht. Darunter die
+ * Hochrechnung auf 140 kg aus dem gemessenen Tempo, als Gegenstück zur
+ * Treppe in der Zielkarte, die den Bestfall zeigt.
+ */
+function Coach({ coach, prognose }: { coach: Bankcoach; prognose: Prognose | null }) {
+  const lage = LAGE_TEXT[coach.lage];
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between gap-3">
+        <Eyebrow>Coach · schwere Tage</Eyebrow>
+        <Tag tone={lage.tone}>{lage.label}</Tag>
+      </div>
+      <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">{coach.vorschlag.text}</p>
+      {prognose && (
+        <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
+          {prognose.verwertbar ? prognose.text : prognose.grund}
+        </p>
+      )}
     </Card>
   );
 }

@@ -71,6 +71,18 @@ async function tokenRequest(body: Record<string, string>): Promise<Tokens> {
   return json as Tokens;
 }
 
+/**
+ * Nimmt Google den Refresh-Token nicht mehr an?
+ *
+ * invalid_grant heißt abgelaufen oder widerrufen. Bei Kadenz ist das der
+ * Wochenrhythmus: das OAuth-Projekt steht auf "Testing", und Google lässt
+ * Refresh-Tokens von Apps im Testmodus nach sieben Tagen verfallen. Abhilfe
+ * gibt es nur über einen neuen Login, nicht im Code.
+ */
+export function googleZugangAbgelaufen(e: unknown): boolean {
+  return e instanceof Error && e.message.includes("invalid_grant");
+}
+
 export function exchangeCode(code: string): Promise<Tokens> {
   return tokenRequest({
     code,

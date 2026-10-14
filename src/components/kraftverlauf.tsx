@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Card, Eyebrow, de } from "@/components/ui";
-import { saetzeProUebung, FENSTER_TAGE } from "@/lib/kraftverlauf";
+import { saetzeProUebung, trendGrundlage, FENSTER_TAGE } from "@/lib/kraftverlauf";
+import { trendSaetzeProUebung } from "@/lib/bankcoach";
 import { besterSatz, e1rm, rangliste, type Rang } from "@/lib/kraft";
 
 /**
@@ -40,7 +41,19 @@ export async function Kraftverlauf() {
     );
   }
 
-  const raenge = rangliste(proUebung);
+  /* Neustarts und Bank-Historie sind Beiwerk: fehlen sie, steht die Liste
+     wie bisher — nur ohne die Korrekturen. */
+  let grundlage: Awaited<ReturnType<typeof trendGrundlage>> = { neustarts: {}, bankTmHistorie: [] };
+  try {
+    grundlage = await trendGrundlage();
+  } catch (e) {
+    console.error("Neustarts nicht lesbar:", e);
+  }
+
+  const raenge = rangliste(
+    trendSaetzeProUebung(proUebung, grundlage.bankTmHistorie),
+    grundlage.neustarts
+  );
 
   if (raenge.length === 0) {
     return (

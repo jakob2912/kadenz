@@ -155,8 +155,10 @@ export type KraftUrteil =
       punkte: number;
       spanneTage: number;
       text: string;
+      /** Ab hier gewertet — gesetzt nach einem Technik- oder Gerätewechsel. */
+      neustartAb?: string;
     }
-  | { verwertbar: false; grund: string };
+  | { verwertbar: false; grund: string; neustartAb?: string };
 
 /**
  * Läuft der Fortschritt bei dieser Übung?
@@ -165,7 +167,29 @@ export type KraftUrteil =
  * ersten Punkt — aus demselben Grund wie in rate(): ein einzelner guter oder
  * schlechter Trainingstag am Rand der Reihe würde das ganze Urteil kippen.
  */
-export function kraftTrend(reihe: E1rmPunkt[]): KraftUrteil {
+export function kraftTrend(reihe: E1rmPunkt[], neustartAb?: string): KraftUrteil {
+  if (!neustartAb) return trendOhneNeustart(reihe);
+
+  /* Nach einem Technik- oder Gerätewechsel (einbeinig statt beidbeinig,
+     weniger Gewicht für saubere Form) misst die Reihe davor eine andere
+     Übung. Sie mitzurechnen hieße, den bewussten Schritt zurück als
+     Kraftverlust zu lesen — bei Leg Extension stand so ein "fällt −20 %" da,
+     das nie einer war. Gewertet wird deshalb erst ab dem Neustart, und das
+     Urteil sagt es dazu. */
+  const ab = reihe.filter((p) => p.datum >= neustartAb);
+  const urteil = trendOhneNeustart(ab);
+  const zusatz = ` Gewertet ab dem ${deutschesDatum(neustartAb)} — davor lief die Übung mit anderer Technik oder anderem Gerät.`;
+
+  return urteil.verwertbar
+    ? { ...urteil, text: urteil.text + zusatz, neustartAb }
+    : { ...urteil, grund: urteil.grund + zusatz, neustartAb };
+}
+
+function deutschesDatum(iso: string): string {
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+}
+
+function trendOhneNeustart(reihe: E1rmPunkt[]): KraftUrteil {
   if (reihe.length < MIN_PUNKTE) {
     return {
       verwertbar: false,
@@ -260,10 +284,13 @@ export type Rang = {
  * (125 kg) ein Fünfzigstel. In Kilogramm sortiert wäre die Liste nur eine
  * Rangfolge der schweren Übungen.
  */
-export function rangliste(proUebung: Record<string, GeloggterSatz[]>): Rang[] {
+export function rangliste(
+  proUebung: Record<string, GeloggterSatz[]>,
+  neustarts: Neustarts = {}
+): Rang[] {
   const raenge: Rang[] = Object.entries(proUebung).map(([uebung, saetze]) => ({
     uebung,
-    urteil: kraftTrend(e1rmReihe(saetze)),
+    urteil: kraftTrend(e1rmReihe(saetze), neustarts[uebung]),
   }));
 
   return raenge.sort((a, b) => {
@@ -274,6 +301,90 @@ export function rangliste(proUebung: Record<string, GeloggterSatz[]>): Rang[] {
     if (b.urteil.verwertbar) return 1;
     return a.uebung.localeCompare(b.uebung);
   });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Neustart nach Technik- oder Gerätewechsel
+// ─────────────────────────────────────────────────────────────
+
+/** Übungsname → ISO-Tag, ab dem der Trend zählt. */
+export type Neustarts = Record<string, string>;
+
+/**
+ * Ab diesem Einbruch schlägt Kadenz einen Neustart vor.
+ *
+ * Jakobs Regel: geht bei einer Übung Gewicht oder Wiederholungszahl deutlich
+ * zurück, war das eine Umstellung der Technik — im Aufbau wird er nicht
+ * schwächer. Acht Prozent liegen klar über der Schwankung von Einheit zu
+ * Einheit (eine Wiederholung sind bei Epley gut drei Prozent), und verglichen
+ * wird gegen das Beste der drei Einheiten davor, damit ein einzelner
+ * schwacher Tag davor die Schwelle nicht verschiebt.
+ */
+export const NEUSTART_EINBRUCH_PROZENT = 8;
+const NEUSTART_VERGLEICH_EINHEITEN = 3;
+
+export type NeustartVorschlag = {
+  uebung: string;
+  /** Der erste Tag auf dem neuen Niveau — der vorgeschlagene Neustart. */
+  datum: string;
+  vorherKg: number;
+  nachherKg: number;
+  prozent: number;
+  text: string;
+};
+
+/**
+ * Wo sieht es nach einer Umstellung aus?
+ *
+ * Nur ein Vorschlag, gesetzt wird nichts: ob ein Einbruch eine Umstellung war
+ * oder doch ein schlechter Tag, weiß nur Jakob. Bankdrücken ist
+ * ausgenommen — dort fallen die leichten Tage des 5/3/1 planmäßig ab, und das
+ * Programm hat eigene Regeln für einen Rückschritt.
+ *
+ * Je Übung der jüngste Einbruch nach einem bereits gesetzten Neustart.
+ */
+export function neustartVorschlaege(
+  proUebung: Record<string, GeloggterSatz[]>,
+  neustarts: Neustarts = {}
+): NeustartVorschlag[] {
+  const out: NeustartVorschlag[] = [];
+
+  for (const [uebung, saetze] of Object.entries(proUebung)) {
+    if (uebung === BANK_UEBUNG) continue;
+    const ab = neustarts[uebung];
+    const reihe = e1rmReihe(saetze).filter((p) => !ab || p.datum >= ab);
+
+    let treffer: NeustartVorschlag | null = null;
+    for (let i = NEUSTART_VERGLEICH_EINHEITEN; i < reihe.length; i++) {
+      const vorher = Math.max(
+        ...reihe.slice(i - NEUSTART_VERGLEICH_EINHEITEN, i).map((p) => p.e1rm)
+      );
+      const prozent = ((reihe[i].e1rm - vorher) / vorher) * 100;
+      if (prozent <= -NEUSTART_EINBRUCH_PROZENT) {
+        treffer = {
+          uebung,
+          datum: reihe[i].datum,
+          vorherKg: vorher,
+          nachherKg: reihe[i].e1rm,
+          prozent,
+          text:
+            `Am ${deutschesDatum(reihe[i].datum)} lag das geschätzte Maximum ` +
+            `${komma(Math.abs(prozent), 1)} % unter dem Besten der drei Einheiten davor ` +
+            `(${komma(reihe[i].e1rm, 1)} statt ${komma(vorher, 1)} kg). War das eine ` +
+            `Umstellung von Technik oder Gerät, gehört hier ein Neustart hin — sonst ` +
+            `liest der Trend den bewussten Schritt zurück als Kraftverlust.`,
+        };
+        /* Die nächsten Einheiten vergleichen noch gegen die Zeit vor dem
+           Einbruch und lägen ebenfalls tief. Vorgeschlagen wird aber der
+           erste Tag auf dem neuen Niveau, nicht der dritte — erst wenn das
+           Vergleichsfenster ganz danach liegt, zählt ein Einbruch neu. */
+        i += NEUSTART_VERGLEICH_EINHEITEN - 1;
+      }
+    }
+    if (treffer) out.push(treffer);
+  }
+
+  return out.sort((a, b) => a.prozent - b.prozent);
 }
 
 // ─────────────────────────────────────────────────────────────

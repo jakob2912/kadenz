@@ -18,6 +18,14 @@ Trainingsdaten und Vault-Notizen zusammenbringen.
 | `briefing_heute` | Wie die Nacht war, die Freigabe für heute und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer. Derselbe Text steht auf der Startseite |
 | `gewichtstrend` | Gewichtsreihe, 7-Tage-Schnitt, Trendurteil — inklusive der Aussage, wann der Trend **nicht** verwertbar ist |
 
+Ist die Google-Verbindung abgelaufen (`invalid_grant`, im Testmodus etwa
+wöchentlich), scheitern `gewichtstrend` und `briefing_heute` nicht mehr am
+Ganzen: `gewichtstrend` liefert den Phasenplan weiter und meldet unter
+`google.hinweis`, dass Kadenz neu mit Google verbunden werden muss;
+`briefing_heute` antwortet mit genau diesem Hinweis. Das Körpergewicht selbst
+liegt nur in Google Health, nicht in der Datenbank — ohne Verbindung gibt es
+also keine Reihe.
+
 ### Training
 
 | Werkzeug | Liefert |
@@ -25,7 +33,12 @@ Trainingsdaten und Vault-Notizen zusammenbringen.
 | `training_heute` | Anstehende Einheit laut Rotation, mit Startgewichten aus der echten Historie, Begründung für jede Änderung und dem Stand des Bankprogramms |
 | `trainingsverlauf` | Die letzten Einheiten aus der Datenbank, mit allen Sätzen |
 | `satz_eintragen` | Einen Satz nachtragen, falls im Gym etwas vergessen wurde |
-| `kraftfortschritt` | Geschätztes Maximum je Übung (Epley), Bestleistung und Urteil, ob es steigt. Ohne Übungsname die Rangliste aller Übungen — aufsteigend, was hängt steht oben |
+| `kraftfortschritt` | Geschätztes Maximum je Übung (Epley), Bestleistung und Urteil, ob es steigt. Ohne Übungsname die Rangliste aller Übungen — aufsteigend, was hängt steht oben. Wertet ab einem gesetzten Neustart, beim Bankdrücken nur die schweren Tage, und meldet als `neustartVorschlag` einen Einbruch von mindestens 8 % |
+| `uebung_reset_setzen` | Markiert einen Technik- oder Gerätewechsel: ab dem Tag rechnet das Trendurteil neu. `datum: null` nimmt ihn weg |
+
+Die Neustarts liegen als JSON unter dem Schlüssel `kraft_neustart` in der
+Tabelle `Einstellung` — keine Migration nötig. Sie gelten für den Namen, unter
+dem geloggt wird; `uebung_umbenennen` nimmt sie mit.
 
 ### Ernährung
 
@@ -73,6 +86,7 @@ Referenzgewichte vor. Beides läuft in einer Transaktion.
 |---|---|
 | `bank_plan_heute` | Zyklus, Programmwoche, Trainingsmax und die drei Sätze mit Gewicht |
 | `bank_trainingsmax` | Der aktuelle Trainingsmax samt Historie — jeder Zyklus mit Begründung |
+| `bank_coach` | Läuft, steht oder fällt das Bankdrücken (56 Tage, nur schwere Tage), ein Vorschlag nach 5/3/1-Regeln und die Hochrechnung auf 140 kg samt nötigem Tempo bis Ende 2027. Ändert nichts |
 | `bank_tm_setzen` | Setzt den Trainingsmax; zum Einstieg nötig, danach nur noch als Korrektur |
 
 Bank-Tag ist **jede zweite Push-Einheit**, also alle sechs Tage; ein Zyklus

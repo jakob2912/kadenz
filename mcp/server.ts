@@ -21,8 +21,28 @@ import {
   readiness,
   weeksToGoal,
 } from "../src/lib/coach";
-import { besterSatz, e1rm, e1rmReihe, kraftTrend, rangliste } from "../src/lib/kraft";
-import { saetzeFuer, saetzeProUebung } from "../src/lib/kraftverlauf";
+import {
+  BANK_UEBUNG,
+  besterSatz,
+  e1rm,
+  e1rmReihe,
+  kraftTrend,
+  neustartVorschlaege,
+  rangliste,
+} from "../src/lib/kraft";
+import {
+  neustartSetzen,
+  saetzeFuer,
+  saetzeProUebung,
+  trendGrundlage,
+} from "../src/lib/kraftverlauf";
+import {
+  bankcoach,
+  prognose140,
+  trendSaetze,
+  trendSaetzeProUebung,
+} from "../src/lib/bankcoach";
+import { zielProjektion } from "../src/lib/bankziel";
 import {
   aktuellerTrainingsmax,
   bankstandFuer,
@@ -71,7 +91,11 @@ import {
   datenbankKonfiguriert,
   fehlendeGoogleVariablen,
 } from "../src/lib/konfiguration";
-import { listDataPoints, refreshAccessToken } from "../src/lib/google-health";
+import {
+  googleZugangAbgelaufen,
+  listDataPoints,
+  refreshAccessToken,
+} from "../src/lib/google-health";
 import {
   buildDailySeries,
   deriveBaseline,
@@ -111,7 +135,7 @@ async function ladeGesundheit(tage = 30) {
 
   const fehlend = fehlendeGoogleVariablen();
   if (fehlend.length > 0) {
-    throw new Error(
+    throw new GoogleGetrenntFehler(
       `Google Health ist nicht eingerichtet — es fehlt: ${fehlend.join(", ")}. ` +
         "Der Server wird mit --env-file=.env.local gestartet; steht die Variable dort?"
     );
@@ -121,22 +145,51 @@ async function ladeGesundheit(tage = 30) {
   if (!refresh) {
     // Nicht mehr fest auf localhost: derselbe Server läuft auch gegen eine
     // deployte Instanz, und dann ginge der Hinweis ins Leere.
-    throw new Error(
+    throw new GoogleGetrenntFehler(
       `Kein Google-Refresh-Token in der Datenbank. Einmal über ${basisUrl()}/api/auth/google anmelden.`
     );
   }
 
-  const { access_token } = await refreshAccessToken(refresh);
+  let access_token: string;
+  try {
+    access_token = (await refreshAccessToken(refresh)).access_token;
+  } catch (e) {
+    /* invalid_grant: Google nimmt den gespeicherten Refresh-Token nicht mehr
+       an. Solange das OAuth-Projekt im Testmodus steht, passiert das etwa
+       jede Woche. Der Rohtext ("Token-Anfrage fehlgeschlagen (400):
+       invalid_grant — Token has been expired or revoked") ist richtig, sagt
+       aber nicht, was zu tun ist. Erneuert wird hier nichts — das geht nur
+       über den Login im Browser. */
+    if (googleZugangAbgelaufen(e)) {
+      throw new GoogleGetrenntFehler(
+        "Die Verbindung zu Google Health ist abgelaufen. Bitte Kadenz einmal neu mit " +
+          `Google verbinden: ${basisUrl()}/api/auth/google — danach laufen Gewicht, ` +
+          "Schlaf, Ruhepuls und HRV wieder. Das passiert etwa jede Woche, solange das " +
+          "Google-Projekt im Testmodus steht."
+      );
+    }
+    throw new GoogleGetrenntFehler(
+      `Google Health ist gerade nicht erreichbar: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
   const to = new Date();
   const from = new Date(to.getTime() - tage * 864e5);
   const range = { from, to };
 
-  const [sleep, hr, hrv, weight] = await Promise.all([
-    listDataPoints<ApiSleepPoint>(access_token, "sleep", range),
-    listDataPoints<ApiRestingHrPoint>(access_token, "restingHeartRate", range),
-    listDataPoints<ApiHrvPoint>(access_token, "hrv", range),
-    listDataPoints<ApiWeightPoint>(access_token, "weight", range),
-  ]);
+  let abrufe;
+  try {
+    abrufe = await Promise.all([
+      listDataPoints<ApiSleepPoint>(access_token, "sleep", range),
+      listDataPoints<ApiRestingHrPoint>(access_token, "restingHeartRate", range),
+      listDataPoints<ApiHrvPoint>(access_token, "hrv", range),
+      listDataPoints<ApiWeightPoint>(access_token, "weight", range),
+    ]);
+  } catch (e) {
+    throw new GoogleGetrenntFehler(
+      `Google Health hat die Abfrage abgelehnt: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+  const [sleep, hr, hrv, weight] = abrufe;
 
   const naechte = mapSleep(sleep.points);
   const { series } = buildDailySeries(
@@ -146,6 +199,24 @@ async function ladeGesundheit(tage = 30) {
   );
 
   return { series, baseline: deriveBaseline(series), gewicht: mapWeight(weight.points) };
+}
+
+/**
+ * Google ist nicht verbunden oder antwortet nicht. Eigener Typ, damit
+ * Werkzeuge mit einem Teil, der ohne Google auskommt (gewichtstrend: der
+ * Phasenplan; briefing_heute: der Hinweis), den Rest trotzdem liefern —
+ * statt den ganzen Aufruf scheitern zu lassen. Der Name übersteht das
+ * Bündeln, siehe istKonfigurationsFehler().
+ */
+class GoogleGetrenntFehler extends Error {
+  constructor(text: string) {
+    super(text);
+    this.name = "GoogleGetrenntFehler";
+  }
+}
+
+function istGoogleGetrennt(e: unknown): e is GoogleGetrenntFehler {
+  return e instanceof Error && e.name === "GoogleGetrenntFehler";
 }
 
 /** MCP erwartet Text-Inhalte; strukturierte Daten gehen als JSON durch. */
@@ -198,16 +269,30 @@ server.registerTool(
   },
   async ({ tage }) => {
     try {
-      const { gewicht } = await ladeGesundheit(tage ?? 30);
+      /* Das Körpergewicht liegt nur in Google Health, nicht in der eigenen
+         Datenbank (siehe schema.prisma). Ist Google getrennt, gibt es also
+         keine Reihe — der Phasenplan rechnet aber ohne Google, und der Teil
+         soll trotzdem dastehen. */
+      let gewicht: Awaited<ReturnType<typeof ladeGesundheit>>["gewicht"] = [];
+      let google: { verbunden: true } | { verbunden: false; hinweis: string } = {
+        verbunden: true,
+      };
+      try {
+        gewicht = (await ladeGesundheit(tage ?? 30)).gewicht;
+      } catch (e) {
+        if (!istGoogleGetrennt(e)) throw e;
+        google = { verbunden: false, hinweis: e.message };
+      }
       const aktuell = gewicht.at(-1) ?? null;
       const heute = heuteWien();
       const phase = aktuellePhase(heute);
       const soll = sollGewichtAm(heute);
 
       return antwort({
+        google,
         aktuell,
-        schnitt7: movingAverage(gewicht, 7),
-        trend: assessTrend(gewicht),
+        schnitt7: google.verbunden ? movingAverage(gewicht, 7) : null,
+        trend: google.verbunden ? assessTrend(gewicht) : null,
         plan: {
           phase: phase.phase.label,
           phaseNummer: `${phase.nummer} von ${phasenlauf().length}`,
@@ -235,7 +320,7 @@ server.registerTool(
           bisKg: Math.round(l.bisKg * 10) / 10,
           rateProWoche: l.phase.rateProWoche,
         })),
-        reihe: gewicht,
+        reihe: google.verbunden ? gewicht : null,
       });
     } catch (e) {
       return fehler(e);
@@ -693,12 +778,14 @@ server.registerTool(
   {
     title: "Kraftfortschritt",
     description:
-      "Geschätztes Maximum je Übung (Epley aus dem besten Satz je Trainingstag), Bestleistung und Urteil, ob es steigt. Ohne Übungsname die Rangliste aller Übungen, aufsteigend — was hängt, steht oben. Verglichen wird in Prozent pro vier Wochen, weil 2,5 kg je nach Übung ein Achtel oder ein Fünfzigstel sind. Das Urteil sagt ausdrücklich auch, wann es NICHT rechnet: unter vier Trainingstagen oder 21 Tagen Spanne wäre jede Zahl geraten.",
+      "Geschätztes Maximum je Übung (Epley aus dem besten Satz je Trainingstag), Bestleistung und Urteil, ob es steigt. Ohne Übungsname die Rangliste aller Übungen, aufsteigend — was hängt, steht oben. Verglichen wird in Prozent pro vier Wochen, weil 2,5 kg je nach Übung ein Achtel oder ein Fünfzigstel sind. Das Urteil sagt ausdrücklich auch, wann es NICHT rechnet: unter vier Trainingstagen oder 21 Tagen Spanne wäre jede Zahl geraten. Ist für eine Übung ein Neustart gesetzt (uebung_reset_setzen), zählt das Urteil erst ab dem Tag (`urteil.neustartAb`); `reihe` zeigt weiter alles. Beim Bankdrücken zählen nur die schweren Tage, nicht die leichten mit dem 90-%-Single. `neustartVorschlag` meldet einen Einbruch von mindestens 8 % gegen das Beste der drei Einheiten davor — nur ein Vorschlag, gesetzt wird er erst nach Jakobs Ja.",
     inputSchema: { uebung: z.string().min(1).optional() },
   },
   async ({ uebung }) => {
     try {
       datenbankPruefen();
+
+      const { neustarts, bankTmHistorie } = await trendGrundlage();
 
       if (uebung) {
         const saetze = await saetzeFuer(uebung);
@@ -706,23 +793,36 @@ server.registerTool(
           return antwort({ uebung, hinweis: "Keine geloggten Sätze in den letzten 120 Tagen." });
         }
         const best = besterSatz(saetze);
+        const vorschlag = neustartVorschlaege({ [uebung]: saetze }, neustarts)[0] ?? null;
         return antwort({
           uebung,
           saetze: saetze.length,
           bestleistung: best ? { kg: best.kg, wdh: best.reps, e1rm: e1rm(best) } : null,
           reihe: e1rmReihe(saetze),
-          urteil: kraftTrend(e1rmReihe(saetze)),
+          urteil: kraftTrend(
+            e1rmReihe(trendSaetze(uebung, saetze, bankTmHistorie)),
+            neustarts[uebung]
+          ),
+          neustartVorschlag: vorschlag,
+          hinweis:
+            uebung === BANK_UEBUNG
+              ? "Für Stillstand, Vorschlag und Hochrechnung auf 140 kg: bank_coach."
+              : undefined,
         });
       }
 
       const proUebung = await saetzeProUebung();
+      const vorschlaege = new Map(
+        neustartVorschlaege(proUebung, neustarts).map((v) => [v.uebung, v])
+      );
       return antwort(
-        rangliste(proUebung).map((rang) => {
+        rangliste(trendSaetzeProUebung(proUebung, bankTmHistorie), neustarts).map((rang) => {
           const best = besterSatz(proUebung[rang.uebung]);
           return {
             uebung: rang.uebung,
             bestleistung: best ? { kg: best.kg, wdh: best.reps, e1rm: e1rm(best) } : null,
             urteil: rang.urteil,
+            neustartVorschlag: vorschlaege.get(rang.uebung) ?? undefined,
           };
         })
       );
@@ -732,9 +832,80 @@ server.registerTool(
   }
 );
 
+server.registerTool(
+  "uebung_reset_setzen",
+  {
+    title: "Neustart nach Technikwechsel setzen",
+    description:
+      "Markiert einen Technik- oder Gerätewechsel bei einer Übung (etwa einbeinig statt beidbeinig, oder weniger Gewicht für saubere Form). Ab diesem Tag rechnet kraftfortschritt das Trendurteil neu und sagt das dazu; die Sätze davor bleiben in der Historie und im Diagramm. Gilt für den Namen, unter dem geloggt wird, nicht für Push oder Pull. `datum: null` nimmt den Neustart wieder weg. Erst nach Jakobs Ja setzen — ein Vorschlag aus kraftfortschritt ist kein Ja.",
+    inputSchema: {
+      uebung: z.string().min(1).describe("Übungsname genau wie geloggt, etwa \"Leg Extension\""),
+      datum: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .nullable()
+        .describe("Erster Tag mit der neuen Technik, JJJJ-MM-TT; null entfernt den Neustart"),
+    },
+  },
+  async ({ uebung, datum }) => {
+    try {
+      datenbankPruefen();
+      const r = await neustartSetzen(uebung, datum);
+      return r.ok
+        ? antwort({ uebung, neustartAb: datum, alleNeustarts: r.neustarts })
+        : fehler(new Error(r.fehler));
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
 // ─────────────────────────────────────────────────────────────
 // Bankdrücken 5/3/1
 // ─────────────────────────────────────────────────────────────
+
+server.registerTool(
+  "bank_coach",
+  {
+    title: "Bank-Coach",
+    description:
+      "Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
+  },
+  async () => {
+    try {
+      datenbankPruefen();
+      const heute = heuteWien();
+      const [saetze, tm, grundlage] = [
+        await saetzeFuer(BANK_UEBUNG),
+        await aktuellerTrainingsmax(),
+        await trendGrundlage(),
+      ];
+      const coach = bankcoach({
+        saetze,
+        tmHistorie: grundlage.bankTmHistorie,
+        tmKg: tm?.tmKg ?? null,
+        heuteIso: heute,
+        neustartAb: grundlage.neustarts[BANK_UEBUNG],
+      });
+      const programm = tm ? zielProjektion(tm.tmKg, tm.zyklus, tm.gueltigAb) : null;
+      return antwort({
+        ...coach,
+        prognose: prognose140(coach.urteil, heute),
+        programm: programm
+          ? {
+              fruehestensAm: programm.fruehestensAm,
+              zyklenNoetig: programm.zyklenNoetig,
+              imPlan: programm.imPlan,
+              hinweis:
+                "Bestfall des 5/3/1: jeder Zyklus +2,5 kg Trainingsmax, keiner bleibt stehen.",
+            }
+          : null,
+      });
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
 
 server.registerTool(
   "bank_plan_heute",
@@ -831,7 +1002,16 @@ server.registerTool(
   },
   async () => {
     try {
-      const { series, baseline } = await ladeGesundheit(30);
+      let gesundheit;
+      try {
+        gesundheit = await ladeGesundheit(30);
+      } catch (e) {
+        if (!istGoogleGetrennt(e)) throw e;
+        // Kein Fehler, sondern eine Auskunft: das Briefing gibt es heute
+        // nicht, und der Text sagt, warum und was zu tun ist.
+        return antwort({ google: { verbunden: false }, hinweis: e.message });
+      }
+      const { series, baseline } = gesundheit;
       const heute = series.at(-1);
       if (!heute || !baseline) {
         return antwort({ hinweis: "Noch keine vollständige Nacht mit Ruhepuls und HRV." });

@@ -8,7 +8,7 @@
 
 import { prisma } from "./db";
 import { heuteWien } from "./datum";
-import type { GeloggterSatz } from "./kraft";
+import type { GeloggterSatz, Neustarts } from "./kraft";
 
 /**
  * Wie weit zurück gelesen wird.
@@ -115,4 +115,122 @@ export async function saetzeFuerMehrere(
       sauber: s.sauber,
     }))
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Neustart nach Technik- oder Gerätewechsel
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Die Neustarts liegen als ein JSON-Eintrag in Einstellung, nicht als Spalte
+ * an Uebung.
+ *
+ * Eine Spalte hätte eine Migration gebraucht, und solange die nicht
+ * eingespielt ist, scheitert jede Katalogabfrage (findMany ohne select liest
+ * alle Spalten) — die Trainingsseite stünde leer. Dazu gilt ein Neustart für
+ * den Namen, unter dem geloggt wird (SetLog.exercise), nicht für eine
+ * Katalogzeile: getauschte Übungen verschwinden aus dem Katalog, ihre Sätze
+ * und damit ihr Trend bleiben.
+ */
+export const NEUSTART_SCHLUESSEL = "kraft_neustart";
+
+const ISO_TAG = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Liest die Ablage nachsichtig: ein kaputter Eintrag kostet nur die Neustarts. */
+export function neustartsAusText(wert: string | null | undefined): Neustarts {
+  if (!wert) return {};
+  try {
+    const roh: unknown = JSON.parse(wert);
+    if (typeof roh !== "object" || roh === null || Array.isArray(roh)) return {};
+    const out: Neustarts = {};
+    for (const [uebung, datum] of Object.entries(roh)) {
+      if (typeof datum === "string" && ISO_TAG.test(datum)) out[uebung] = datum;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export async function neustartsLesen(): Promise<Neustarts> {
+  const eintrag = await prisma.einstellung.findUnique({
+    where: { schluessel: NEUSTART_SCHLUESSEL },
+  });
+  return neustartsAusText(eintrag?.wert);
+}
+
+/**
+ * Den Neustart einer Übung setzen oder mit null entfernen.
+ *
+ * Geprüft wird, dass es unter dem Namen Sätze oder einen Katalogeintrag gibt:
+ * ein Tippfehler im Namen legte sonst einen Neustart an, der nie greift, und
+ * das Urteil der gemeinten Übung bliebe stumm beim alten "fällt".
+ */
+export async function neustartSetzen(
+  uebung: string,
+  datum: string | null
+): Promise<{ ok: true; neustarts: Neustarts } | { ok: false; fehler: string }> {
+  const name = uebung.trim();
+  if (!name) return { ok: false, fehler: "Der Übungsname darf nicht leer sein." };
+
+  if (datum !== null) {
+    if (!ISO_TAG.test(datum) || Number.isNaN(Date.parse(`${datum}T00:00:00Z`))) {
+      return { ok: false, fehler: `"${datum}" ist kein Datum im Format JJJJ-MM-TT.` };
+    }
+    if (datum > heuteWien()) {
+      return { ok: false, fehler: "Ein Neustart in der Zukunft wertet noch nichts — Datum prüfen." };
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const [satz, katalog] = await Promise.all([
+      tx.setLog.findFirst({ where: { exercise: name }, select: { id: true } }),
+      tx.uebung.findFirst({ where: { name }, select: { id: true } }),
+    ]);
+    if (!satz && !katalog) {
+      return {
+        ok: false as const,
+        fehler: `Unter "${name}" ist weder etwas geloggt noch steht es im Katalog. Schreibweise prüfen.`,
+      };
+    }
+
+    const eintrag = await tx.einstellung.findUnique({
+      where: { schluessel: NEUSTART_SCHLUESSEL },
+    });
+    const neustarts = neustartsAusText(eintrag?.wert);
+    if (datum === null) delete neustarts[name];
+    else neustarts[name] = datum;
+
+    const wert = JSON.stringify(neustarts);
+    await tx.einstellung.upsert({
+      where: { schluessel: NEUSTART_SCHLUESSEL },
+      update: { wert },
+      create: { schluessel: NEUSTART_SCHLUESSEL, wert },
+    });
+    return { ok: true as const, neustarts };
+  });
+}
+
+/**
+ * Was ein Trendurteil außer den Sätzen braucht: die Neustarts und, fürs
+ * Bankdrücken, die Trainingsmax-Historie (siehe trendSaetze() in
+ * bankcoach.ts). Direkt gelesen statt über bank.ts — das Modul schreibt
+ * beim Lesen Zyklen fort, und ein Kraftverlauf soll nichts schreiben.
+ */
+export async function trendGrundlage(): Promise<{
+  neustarts: Neustarts;
+  bankTmHistorie: { tmKg: number; gueltigAb: string }[];
+}> {
+  const neustarts = await neustartsLesen();
+  const zeilen = await prisma.bankTrainingsmax.findMany({
+    orderBy: { zyklus: "asc" },
+    select: { tmKg: true, gueltigAb: true },
+  });
+  return {
+    neustarts,
+    bankTmHistorie: zeilen.map((z) => ({
+      tmKg: z.tmKg,
+      gueltigAb: z.gueltigAb.toISOString().slice(0, 10),
+    })),
+  };
 }
