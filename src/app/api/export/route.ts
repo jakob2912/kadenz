@@ -26,11 +26,11 @@ export async function GET() {
     },
   });
 
-  /* Ein Text, der mit = + - @ beginnt, wäre für Excel eine Formel. Bei
-     Übungsnamen und Notizen aus der eigenen Hand harmlos, aber ein
-     vorangestelltes Hochkomma kostet nichts und macht es grundsätzlich. */
+  /* Ein Text, der mit = oder @ beginnt, oder mit + / - vor einer Zahl oder
+     Klammer, wäre für Excel eine Formel. Nur dann ein Hochkomma davor — eine
+     Notiz wie "- Schulter zwickt" bleibt so, wie sie geschrieben wurde. */
   const zelle = (v: string) => {
-    const sicher = /^[=+\-@]/.test(v) ? `'${v}` : v;
+    const sicher = /^(=|@|[+-][\d(])/.test(v) ? `'${v}` : v;
     return /[;"\n\r]/.test(sicher) ? `"${sicher.replace(/"/g, '""')}"` : sicher;
   };
   const zahl = (n: number) => String(n).replace(".", ",");

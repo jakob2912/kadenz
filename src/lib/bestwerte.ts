@@ -5,9 +5,12 @@
  * unterscheiden, weil jede eine andere Frage beantwortet:
  *
  *   - Gewicht: so schwer wie noch nie, egal wie oft.
- *   - Wiederholungen: bei diesem Gewicht (oder schwerer) noch nie so oft.
- *     Das ist beim 5/3/1 der eigentliche Antrieb — der AMRAP-Satz hat ein
- *     festes Gewicht, besser wird man dort nur in Wiederholungen.
+ *   - Wiederholungen: bei diesem Gewicht (oder schwerer) noch nie so oft —
+ *     aber nur jenseits von zehn Wiederholungen, wo das geschätzte Maximum
+ *     nicht mehr rechnet. Das ist der lange AMRAP-Satz beim 5/3/1. Darunter
+ *     wäre bei Jakobs Doppelprogression (5–8 Wiederholungen, dann +2,5 kg)
+ *     fast jede gute Einheit ein "Bestwert", und das Abzeichen sagte nichts
+ *     mehr.
  *   - Geschätztes Maximum (Epley): rechnet Gewicht und Wiederholungen
  *     zusammen. Fängt den Fall, dass mehr Gewicht mit weniger
  *     Wiederholungen insgesamt stärker war.
@@ -74,11 +77,15 @@ export function bestwertArt(
 
   // Die meisten Wiederholungen, die je bei mindestens diesem Gewicht standen.
   // Mehr Wiederholungen bei leichterem Gewicht zählen nicht dagegen.
-  const vergleich = bisher.wdhJeKg.filter(([kg]) => kg >= satz.kg - EPS).map(([, wdh]) => wdh);
-  if (vergleich.length > 0 && satz.reps > Math.max(...vergleich)) return "wdh";
-
   const wert = e1rm(satz);
   if (wert !== null && bisher.e1rm !== null && wert > bisher.e1rm + EPS) return "e1rm";
+
+  // Oberhalb der Schätzgrenze gibt es kein Maximum zu vergleichen — dort
+  // zählen die Wiederholungen selbst.
+  if (wert === null) {
+    const vergleich = bisher.wdhJeKg.filter(([kg]) => kg >= satz.kg - EPS).map(([, wdh]) => wdh);
+    if (vergleich.length > 0 && satz.reps > Math.max(...vergleich)) return "wdh";
+  }
 
   return null;
 }

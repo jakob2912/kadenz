@@ -12,14 +12,19 @@ describe("bestwertArt", () => {
     expect(bestwertArt({ kg: 82.5, reps: 1 }, bisher)).toBe("gewicht");
   });
 
-  it("mehr Wiederholungen bei gleichem Gewicht", () => {
-    expect(bestwertArt({ kg: 70, reps: 9 }, bisher)).toBe("wdh");
+  it("ein Wiederholung mehr im gewohnten Bereich ist kein Bestwert", () => {
+    // Doppelprogression: 70 × 9 nach 70 × 8 ist Fortschritt, aber das
+    // geschätzte Maximum (91) liegt unter 80 × 5 (93,3).
+    expect(bestwertArt({ kg: 70, reps: 9 }, bisher)).toBeNull();
   });
 
-  it("mehr Wiederholungen bei einem Gewicht dazwischen zählen gegen das schwerere", () => {
-    // Bei 75 kg gab es nie einen Satz; der Maßstab ist 80 × 5.
-    expect(bestwertArt({ kg: 75, reps: 6 }, bisher)).toBe("wdh");
-    expect(bestwertArt({ kg: 75, reps: 5 }, bisher)).toBeNull();
+  it("steigt das geschätzte Maximum, ist es einer", () => {
+    expect(bestwertArt({ kg: 80, reps: 6 }, bisher)).toBe("e1rm");
+  });
+
+  it("jenseits von zehn Wiederholungen zählen sie gegen das schwerere Gewicht", () => {
+    // Bei 65 kg gab es nie einen Satz; der Maßstab ist 70 × 8.
+    expect(bestwertArt({ kg: 65, reps: 11 }, bisher)).toBe("wdh");
   });
 
   it("ein langer AMRAP über zehn Wiederholungen ist ein Wiederholungs-Bestwert", () => {

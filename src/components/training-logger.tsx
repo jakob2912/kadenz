@@ -358,9 +358,11 @@ export function TrainingLogger({
     // Der Text enthält Übung und Satznummer, damit er sich zwischen zwei
     // Sätzen unterscheidet — gleicher Text wird von Screenreadern nicht
     // erneut vorgelesen.
-    const rekord = bestwertArt({ kg, reps }, bestwerte[exercise]) !== null;
+    const rekord = bestwertArt({ kg, reps }, bestwerte[exercise]);
     setAnsage(
-      `${exercise}, Satz ${setIndex + 1} gespeichert.${rekord ? " Neuer Bestwert!" : ""} Satzpause drei Minuten.`
+      `${exercise}, Satz ${setIndex + 1} gespeichert.${
+        rekord ? ` Bestwert: ${BESTWERT_TEXT[rekord]}.` : ""
+      } Satzpause drei Minuten.`
     );
 
     // Erst der Satz, dann die Ankündigung: Next arbeitet Server Actions
@@ -953,6 +955,12 @@ function Notiz({
     setStand("speichert");
     try {
       const r = await notizSpeichern(einheit, tag, inhalt);
+      if (!r.ok && r.fehler.startsWith("Zu diesem Tag gibt es keine Einheit")) {
+        // Kommt nie mehr an — den Entwurf nicht bei jedem Laden neu schicken.
+        try {
+          localStorage.removeItem(ablage);
+        } catch {}
+      }
       if (!r.ok) throw new Error(r.fehler);
       gespeichert.current = inhalt;
       try {
@@ -1026,7 +1034,9 @@ function Notiz({
         placeholder="Wie lief's? Etwa: Schulter zwickt, Bank war belegt"
         className="mt-1.5 w-full resize-none rounded-sm border border-transparent bg-surface-3 px-3 py-2.5 text-base leading-snug outline-none placeholder:text-fg-faint focus:border-accent"
       />
-      <p className="mt-1 min-h-4 text-[12px] text-fg-faint" role="status">
+      {/* Nur Ergebnis und Fehler werden angesagt, nicht jedes "Speichert…" —
+          sonst redet ein Screenreader nach jeder Tipp-Pause dazwischen. */}
+      <p className="mt-1 min-h-4 text-[12px] text-fg-faint" aria-live={stand === "speichert" ? "off" : "polite"}>
         {stand === "speichert"
           ? "Speichert…"
           : stand === "fehler"
