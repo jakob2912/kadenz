@@ -9,9 +9,11 @@ import { ZUGANG_COOKIE, erwartetesToken, gleich, zugangsPasswort } from "@/lib/z
  * (Server Actions, API) bekommt ein 401 — eine Umleitung auf HTML wäre für
  * einen fetch()-Aufrufer nur eine unverständliche Antwort.
  *
- * Ausgenommen sind die Cron-Routen unter /api/cron/ (Morgen- und
- * Abend-Nachricht; sie prüfen ihr eigenes CRON_SECRET, Vercel hat kein Cookie) und alles, was der Home-Bildschirm vor der Anmeldung
- * braucht: Manifest, Icons, Service Worker.
+ * Ohne Cookie erreichbar sind nur: die Anmeldeseite (lesend), das
+ * Anmeldeformular (/api/anmelden), die Cron-Routen per GET (sie prüfen ihr
+ * eigenes CRON_SECRET, Vercel hat kein Cookie) und — über den Matcher unten
+ * — alles, was der Home-Bildschirm vor der Anmeldung braucht: Manifest,
+ * Icons, Service Worker. Server Actions nie, siehe den Block unten.
  */
 export async function proxy(request: NextRequest) {
   const passwort = zugangsPasswort();

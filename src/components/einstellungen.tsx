@@ -62,10 +62,17 @@ async function standErmitteln(publicKey: string | null): Promise<Stand> {
 
   if (publicKey && Notification.permission === "granted") {
     const schluessel = alsBytes(publicKey);
-    if (!gleicherSchluessel(abo.options.applicationServerKey, schluessel)) {
+    const bisher = abo.options.applicationServerKey;
+    /* Nur bei einem nachweislich anderen Schlüssel abmelden. Liefert der
+       Browser gar keinen (null), ist das keine Abweichung — sonst würde ein
+       funktionierendes Abo bei jedem Öffnen der Einstellungen gekündigt. */
+    if (bisher && !gleicherSchluessel(bisher, schluessel)) {
       /* Neu abonnieren erst im Tipp: Safari nimmt subscribe() nur aus einer
-         Berührung an. Bis dahin zeigt die Seite ehrlich "aus". */
+         Berührung an. Bis dahin zeigt die Seite ehrlich "aus". Die alte Zeile
+         beim Server muss mit weg: mit falschem Schlüssel antwortet Apple mit
+         403, nicht mit 410, und sie würde sonst nie aufgeräumt. */
       await abo.unsubscribe();
+      await aboEntfernen(abo.endpoint);
       return { art: "aus" };
     }
     const json = abo.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
