@@ -51,7 +51,7 @@ export function istSpaet(wert: string): wert is Spaet {
  * Alle Wochenwahlen, aufsteigend.
  *
  * Ist die Datenbank nicht erreichbar, gilt der Standard: im Gym zählt, dass
- * ein Plan dasteht — dieselbe Haltung wie mitHistorie() in plan.ts.
+ * ein Plan dasteht — dieselbe Haltung wie historieLaden() in uebungen.ts.
  */
 export async function wochenwahlenLesen(): Promise<Wochenwahl[]> {
   if (!datenbankKonfiguriert()) return [];

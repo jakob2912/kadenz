@@ -2,7 +2,8 @@ import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
-import { bestwerteFuer, heutigeEinheit, laufendesTraining } from "@/lib/workouts";
+import { bestwerteFuer, heutigeEinheit, laufendesTraining } from "@/lib/training-lesen";
+import type { Bestwert } from "@/lib/bestwerte";
 import {
   heutigeSaetze,
   montagVon,
@@ -137,7 +138,7 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
 
   /* Bestwerte sind Beiwerk: fehlen sie, loggt es sich wie bisher, nur ohne
      Markierung. */
-  let bestwerte: Record<string, number> = {};
+  let bestwerte: Record<string, Bestwert> = {};
   try {
     bestwerte = await bestwerteFuer(plan.uebungen.map((u) => u.name));
   } catch (e) {
@@ -158,6 +159,7 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
       geloggt={laufend.geloggt}
       bestwerte={bestwerte}
       notiz={laufend.notiz}
+      tag={laufend.tag}
       wechsel={wechsel}
     />
   );

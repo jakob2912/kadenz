@@ -9,9 +9,9 @@ import { morgenNachricht, type MorgenLage } from "@/lib/benachrichtigung-texte";
 /**
  * Morgen-Nachricht — von Vercel Cron aufgerufen, siehe vercel.json.
  *
- * Der Zeitplan steht in UTC und Vercel kennt keine Zeitzonen: 05:15 UTC ist
- * im Winter 06:15, im Sommer 07:15 in Wien. Im Gratis-Tarif läuft der Job
- * zudem irgendwann innerhalb dieser Stunde, nicht auf die Minute.
+ * Der Zeitplan steht in UTC und Vercel kennt keine Zeitzonen. Im
+ * Gratis-Tarif läuft der Job irgendwann zwischen 05:00 und 05:59 UTC, nicht
+ * auf die Minute — in Wien also 6–7 Uhr im Winter, 7–8 Uhr im Sommer.
  */
 export async function GET(request: Request) {
   const abgewiesen = cronAbweisen(request);

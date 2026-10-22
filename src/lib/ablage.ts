@@ -12,6 +12,8 @@
  * der Speicher, nicht die Ablage.
  */
 
+import { wienerDatum } from "./datum";
+
 type Einheit = "push" | "pull";
 
 // ─────────────────────────────────────────────────────────────
@@ -62,8 +64,13 @@ export type OffenerSatz = {
 /** Länger hält der Server einen nachgereichten Satz ohnehin nicht für glaubhaft. */
 const HOECHSTALTER_MS = 18 * 3600_000;
 
-function schluessel(s: Pick<OffenerSatz, "kind" | "exercise" | "setIndex">): string {
-  return `${s.kind}|${s.exercise}|${s.setIndex}`;
+/**
+ * Mit dem Tag: ohne ihn überschrieb der erste Satz von heute einen offenen
+ * Satz von gestern Abend mit derselben Übung und Satznummer — der von gestern
+ * wäre nie angekommen.
+ */
+function schluessel(s: Pick<OffenerSatz, "kind" | "exercise" | "setIndex" | "erfasstAm">): string {
+  return `${wienerDatum(new Date(s.erfasstAm))}|${s.kind}|${s.exercise}|${s.setIndex}`;
 }
 
 function alleLesen(): Record<string, OffenerSatz> {

@@ -70,7 +70,8 @@ Nach dem Setzen einmal neu deployen.
 
 - **Cron-Jobs** laufen im Hobby-Tarif einmal am Tag und irgendwann innerhalb
   der eingetragenen Stunde. Die Zeiten in `vercel.json` stehen in UTC:
-  Morgen 05:15 UTC (6–7 Uhr in Wien), Abend 16:30 UTC (17:30–18:30).
+  Morgen 05:xx UTC (6–7 Uhr in Wien, Sommerzeit 7–8), Abend 16:xx UTC
+  (17–18 Uhr, Sommerzeit 18–19).
 - Die **Satzpausen-Nachricht** wartet in einer laufenden Funktion bis zum
   Pausenende. Das braucht Fluid Compute (bei Projekten seit 2025 Standard,
   auch gratis; Vercel → Settings → Functions). Ohne fällt nur diese eine

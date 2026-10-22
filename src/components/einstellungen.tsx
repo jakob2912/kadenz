@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   aboEntfernen,
@@ -11,7 +11,7 @@ import {
 } from "@/lib/push-actions";
 import type { Benachrichtigungen } from "@/lib/push";
 import { geraetLesen, geraetSetzen, type GeraeteEinstellung } from "@/lib/geraet";
-import { istInstalliert } from "@/components/pwa";
+import { istInstalliert, istIos } from "@/components/pwa";
 
 /** VAPID-Schlüssel kommen als URL-sicheres Base64, PushManager will Bytes. */
 function alsBytes(base64: string): Uint8Array<ArrayBuffer> {
@@ -30,22 +30,48 @@ type Stand =
   | { art: "aus" }
   | { art: "an"; endpoint: string };
 
+/** Gleicher Schlüssel? applicationServerKey kommt als ArrayBuffer zurück. */
+function gleicherSchluessel(a: ArrayBuffer | null, b: Uint8Array): boolean {
+  if (!a || a.byteLength !== b.byteLength) return false;
+  const x = new Uint8Array(a);
+  return x.every((v, i) => v === b[i]);
+}
+
 /**
- * Wie es um Push auf diesem Gerät steht.
+ * Wie es um Push auf diesem Gerät steht — und das Abo dabei abgleichen.
  *
  * Auf dem iPhone gibt es PushManager nur in der installierten App. Im
  * Safari-Tab fehlt er ganz — dann ist "installieren" die Antwort, nicht
  * "wird nicht unterstützt".
+ *
+ * Abgleich: der Browser kann ein Abo haben, das der Server nicht (mehr)
+ * kennt — nach einem 410 gelöscht, Datenbank neu, Schlüssel gewechselt. Die
+ * Seite zeigte dann "an", und es kam nie etwas. Deshalb wird ein bestehendes
+ * Abo bei jedem Öffnen erneut gemeldet (ein Upsert, harmlos), und eines mit
+ * altem Schlüssel abgemeldet, damit "einschalten" wieder angeboten wird.
  */
-async function standErmitteln(): Promise<Stand> {
-  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent);
+async function standErmitteln(publicKey: string | null): Promise<Stand> {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
-    return ios && !istInstalliert() ? { art: "nicht-installiert" } : { art: "nicht-unterstuetzt" };
+    return istIos() && !istInstalliert() ? { art: "nicht-installiert" } : { art: "nicht-unterstuetzt" };
   }
   if (Notification.permission === "denied") return { art: "abgelehnt" };
+
   const reg = await navigator.serviceWorker.ready;
   const abo = await reg.pushManager.getSubscription();
-  return abo ? { art: "an", endpoint: abo.endpoint } : { art: "aus" };
+  if (!abo) return { art: "aus" };
+
+  if (publicKey && Notification.permission === "granted") {
+    const schluessel = alsBytes(publicKey);
+    if (!gleicherSchluessel(abo.options.applicationServerKey, schluessel)) {
+      /* Neu abonnieren erst im Tipp: Safari nimmt subscribe() nur aus einer
+         Berührung an. Bis dahin zeigt die Seite ehrlich "aus". */
+      await abo.unsubscribe();
+      return { art: "aus" };
+    }
+    const json = abo.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
+    await aboSpeichern({ endpoint: json.endpoint, keys: json.keys });
+  }
+  return { art: "an", endpoint: abo.endpoint };
 }
 
 export function PushSchalter({
@@ -60,12 +86,20 @@ export function PushSchalter({
   const [arbeitet, setArbeitet] = useState(false);
   const [meldung, setMeldung] = useState<{ ton: "gut" | "fehler"; text: string } | null>(null);
   const [wahl, setWahl] = useState(einstellungen);
+  /* Der öffentliche Schlüssel wird beim Laden geholt, nicht erst im Tipp:
+     zwischen der Erlaubnis und subscribe() soll so wenig wie möglich liegen. */
+  const schluessel = useRef<string | null>(null);
 
   useEffect(() => {
     let aus = false;
-    void standErmitteln().then((s) => {
+    void (async () => {
+      const k = await pushSchluessel().catch(() => null);
+      schluessel.current = k?.ok ? k.publicKey : null;
+      const s = await standErmitteln(schluessel.current).catch(
+        (): Stand => ({ art: "aus" })
+      );
       if (!aus) setStand(s);
-    });
+    })();
     return () => {
       aus = true;
     };
@@ -84,13 +118,16 @@ export function PushSchalter({
         return;
       }
 
-      const schluessel = await pushSchluessel();
-      if (!schluessel.ok) throw new Error(schluessel.fehler);
+      if (!schluessel.current) {
+        const k = await pushSchluessel();
+        if (!k.ok) throw new Error(k.fehler);
+        schluessel.current = k.publicKey;
+      }
 
       const reg = await navigator.serviceWorker.ready;
       const abo = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: alsBytes(schluessel.publicKey),
+        applicationServerKey: alsBytes(schluessel.current),
       });
 
       const json = abo.toJSON() as { endpoint: string; keys: { p256dh: string; auth: string } };
@@ -117,9 +154,12 @@ export function PushSchalter({
     try {
       const reg = await navigator.serviceWorker.ready;
       await (await reg.pushManager.getSubscription())?.unsubscribe();
-      await aboEntfernen(stand.endpoint);
+      const r = await aboEntfernen(stand.endpoint);
+      if (!r.ok) throw new Error(r.fehler);
       setStand({ art: "aus" });
       router.refresh();
+    } catch (e) {
+      setMeldung({ ton: "fehler", text: e instanceof Error ? e.message : String(e) });
     } finally {
       setArbeitet(false);
     }
@@ -128,13 +168,18 @@ export function PushSchalter({
   async function testen() {
     setArbeitet(true);
     setMeldung(null);
-    const r = await testNachricht();
-    setMeldung(
-      r.ok
-        ? { ton: "gut", text: `Unterwegs an ${r.zugestellt === 1 ? "ein Gerät" : `${r.zugestellt} Geräte`}.` }
-        : { ton: "fehler", text: r.fehler }
-    );
-    setArbeitet(false);
+    try {
+      const r = await testNachricht();
+      setMeldung(
+        r.ok
+          ? { ton: "gut", text: `Unterwegs an ${r.zugestellt === 1 ? "ein Gerät" : `${r.zugestellt} Geräte`}.` }
+          : { ton: "fehler", text: r.fehler }
+      );
+    } catch (e) {
+      setMeldung({ ton: "fehler", text: e instanceof Error ? e.message : String(e) });
+    } finally {
+      setArbeitet(false);
+    }
   }
 
   async function umschalten(name: keyof Benachrichtigungen, an: boolean) {
@@ -205,13 +250,13 @@ export function PushSchalter({
           an={wahl.morgen}
           onChange={(an) => umschalten("morgen", an)}
           titel="Morgen-Briefing"
-          text="Gegen 6–7 Uhr: Regeneration, heutige Einheit, ob das Gewicht fehlt, und ob Google neu verbunden werden muss."
+          text="Zwischen 6 und 7 Uhr (Sommerzeit 7–8): Regeneration, heutige Einheit, ob das Gewicht fehlt, und ob Google neu verbunden werden muss."
         />
         <Schalter
           an={wahl.abend}
           onChange={(an) => umschalten("abend", an)}
           titel="Abend-Erinnerung"
-          text="Gegen 17:30–18:30, nur wenn eine geplante Einheit noch nicht begonnen ist oder ein Kalorienvorschlag wartet."
+          text="Zwischen 17 und 18 Uhr (Sommerzeit 18–19), nur wenn eine geplante Einheit noch nicht begonnen ist oder ein Kalorienvorschlag wartet."
         />
       </div>
 

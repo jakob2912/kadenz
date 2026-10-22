@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { heuteWien } from "@/lib/datum";
 
 /**
  * Alle Sätze als CSV — die eigenen Daten raus, ohne Supabase-Konsole.
@@ -21,19 +22,31 @@ export async function GET() {
       reps: true,
       loggedAt: true,
       sauber: true,
-      workout: { select: { date: true, kind: true } },
+      workout: { select: { date: true, kind: true, note: true } },
     },
   });
 
-  const zelle = (v: string) => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  /* Ein Text, der mit = + - @ beginnt, wäre für Excel eine Formel. Bei
+     Übungsnamen und Notizen aus der eigenen Hand harmlos, aber ein
+     vorangestelltes Hochkomma kostet nichts und macht es grundsätzlich. */
+  const zelle = (v: string) => {
+    const sicher = /^[=+\-@]/.test(v) ? `'${v}` : v;
+    return /[;"\n\r]/.test(sicher) ? `"${sicher.replace(/"/g, '""')}"` : sicher;
+  };
   const zahl = (n: number) => String(n).replace(".", ",");
   const uhr = (d: Date) =>
     d.toLocaleTimeString("de-AT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Vienna" });
 
+  const gezeigt = new Set<string>();
   const zeilen = [
-    "Datum;Einheit;Übung;Satz;kg;Wdh;Uhrzeit;Sauber",
-    ...saetze.map((s) =>
-      [
+    "Datum;Einheit;Übung;Satz;kg;Wdh;Uhrzeit;Sauber;Notiz zur Einheit",
+    ...saetze.map((s) => {
+      // Die Notiz je Einheit nur einmal, beim ersten Satz — sonst stünde sie
+      // bei jedem der sechzehn Sätze.
+      const einheit = `${s.workout.date.toISOString()}|${s.workout.kind}`;
+      const notiz = s.workout.note && !gezeigt.has(einheit) ? zelle(s.workout.note) : "";
+      gezeigt.add(einheit);
+      return [
         s.workout.date.toISOString().slice(0, 10),
         s.workout.kind,
         zelle(s.exercise),
@@ -42,11 +55,12 @@ export async function GET() {
         String(s.reps),
         uhr(s.loggedAt),
         s.sauber === null ? "" : s.sauber ? "ja" : "nein",
-      ].join(";")
-    ),
+        notiz,
+      ].join(";");
+    }),
   ];
 
-  const heute = new Date().toISOString().slice(0, 10);
+  const heute = heuteWien();
   return new Response("﻿" + zeilen.join("\r\n"), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

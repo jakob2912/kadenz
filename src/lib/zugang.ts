@@ -12,7 +12,7 @@
  * ein Deployment niemanden aus, bevor die Variable bei Vercel eingetragen ist.
  *
  * Im Cookie liegt nicht das Passwort, sondern ein daraus abgeleiteter
- * Schlüssel (PBKDF2, 100 000 Runden). Wer das Passwort ändert, meldet damit
+ * Schlüssel (PBKDF2, 600 000 Runden). Wer das Passwort ändert, meldet damit
  * alle Geräte ab. Die Runden sind der Punkt: aus einem gestohlenen Cookie
  * ließe sich ein schnell gehashtes Passwort offline durchprobieren, mit
  * PBKDF2 kostet jeder Versuch spürbar Zeit. Läuft über WebCrypto, damit
@@ -44,7 +44,9 @@ export async function zugangsToken(passwort: string): Promise<string> {
       // Fest statt zufällig: es gibt genau ein Passwort, und der Proxy muss
       // aus ihm ohne Datenbank denselben Wert ableiten können.
       salt: new TextEncoder().encode("kadenz-zugang-v2"),
-      iterations: 100_000,
+      // OWASP-Empfehlung für PBKDF2-SHA256. Kostet je Anmeldung rund eine
+      // Viertelsekunde; der Proxy rechnet es je Prozess nur einmal.
+      iterations: 600_000,
     },
     material,
     256
@@ -56,8 +58,41 @@ let gemerkt: { passwort: string; token: Promise<string> } | null = null;
 
 /** Der erwartete Cookie-Wert, je Prozess einmal abgeleitet. */
 export function erwartetesToken(passwort: string): Promise<string> {
-  if (gemerkt?.passwort !== passwort) gemerkt = { passwort, token: zugangsToken(passwort) };
+  if (gemerkt?.passwort !== passwort) {
+    const token = zugangsToken(passwort);
+    // Ein Fehlschlag soll nicht für die ganze Lebensdauer des Prozesses
+    // gemerkt bleiben — beim nächsten Aufruf wird neu abgeleitet.
+    token.catch(() => {
+      if (gemerkt?.token === token) gemerkt = null;
+    });
+    gemerkt = { passwort, token };
+  }
   return gemerkt.token;
+}
+
+/**
+ * Nur Pfade innerhalb von Kadenz als Ziel nach der Anmeldung. Ein
+ * ?weiter=https://… würde aus der Anmeldung sonst eine Umleitung auf
+ * beliebige Seiten machen.
+ *
+ * Aufgelöst wie der Browser es tut, statt am Text zu prüfen: "/\\evil.com"
+ * beginnt mit einem einzelnen Schrägstrich, Browser lesen den Backslash aber
+ * als zweiten. Und auch eine aufgelöste URL auf dem eigenen Host reicht
+ * nicht: "/.//evil.com" bleibt beim Auflösen zu Hause, hat aber den Pfad
+ * "//evil.com" — und den liest der Browser beim Umleiten wieder als fremden
+ * Host. Deshalb zusätzlich: der Pfad darf nicht mit zwei Schrägstrichen
+ * beginnen.
+ */
+export function sicheresZiel(weiter: unknown): string {
+  const roh = typeof weiter === "string" ? weiter : "/";
+  try {
+    const basis = "http://kadenz.invalid";
+    const url = new URL(roh, basis);
+    if (url.origin !== basis || url.pathname.startsWith("//")) return "/";
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return "/";
+  }
 }
 
 /** Vergleich in konstanter Zeit — die Antwortdauer verrät nichts über die Stelle des Fehlers. */

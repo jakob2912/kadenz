@@ -2,8 +2,6 @@
 
 import { prisma } from "./db";
 import { heuteWien, wienerDatum } from "./datum";
-import type { SetLog } from "./coach";
-import { e1rm } from "./kraft";
 
 /**
  * Persistenz der Trainingslogs. Alles hier sind Server Actions — sie laufen
@@ -22,6 +20,41 @@ import { e1rm } from "./kraft";
  */
 function heuteIso(): string {
   return heuteWien();
+}
+
+// ─────────────────────────────────────────────────────────────
+// Eingaben prüfen
+// ─────────────────────────────────────────────────────────────
+//
+// Server Actions sind öffentliche Endpunkte: TypeScript sagt nur, was der
+// eigene Logger schickt, nicht was ankommt. Ein kind "x" oder kg -5 landete
+// vorher ungeprüft in der Datenbank — und ein falscher Satz verdirbt nicht
+// nur sich selbst, sondern Progression, Bestwerte und Kraftverlauf danach.
+
+class Ungueltig extends Error {}
+
+function art(kind: unknown): "push" | "pull" {
+  if (kind !== "push" && kind !== "pull") throw new Ungueltig(`Unbekannte Einheit: ${String(kind)}`);
+  return kind;
+}
+
+function zahl(wert: unknown, name: string, von: number, bis: number, ganz = false): number {
+  if (typeof wert !== "number" || !Number.isFinite(wert) || wert < von || wert > bis) {
+    throw new Ungueltig(`${name} muss zwischen ${von} und ${bis} liegen.`);
+  }
+  if (ganz && !Number.isInteger(wert)) throw new Ungueltig(`${name} muss eine ganze Zahl sein.`);
+  return wert;
+}
+
+function text(wert: unknown, name: string, maxLaenge: number): string {
+  if (typeof wert !== "string" || wert.trim() === "" || wert.length > maxLaenge) {
+    throw new Ungueltig(`${name} fehlt oder ist zu lang.`);
+  }
+  return wert;
+}
+
+function fehler(e: unknown): { ok: false; fehler: string } {
+  return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
 }
 
 /**
@@ -68,6 +101,15 @@ export async function satzSpeichern(input: {
   erfasstAm?: number;
 }): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
+    input = {
+      kind: art(input.kind),
+      exercise: text(input.exercise, "Übung", 100),
+      setIndex: zahl(input.setIndex, "Satznummer", 0, 30, true),
+      // 0 kg ist erlaubt — Körpergewichtsübungen wie Crunch werden so geloggt.
+      kg: zahl(input.kg, "Gewicht", 0, 500),
+      reps: zahl(input.reps, "Wiederholungen", 1, 100, true),
+      erfasstAm: input.erfasstAm,
+    };
     const zeitpunkt = erfassungszeit(input.erfasstAm);
     const workout = await workoutHeute(input.kind, wienerDatum(zeitpunkt));
     await prisma.setLog.upsert({
@@ -125,199 +167,15 @@ function erfassungszeit(erfasstAm: number | undefined): Date {
   return new Date(jetzt);
 }
 
-/**
- * Letzte Ausführung je Übung — Grundlage für die ZULETZT-Spalte und die
- * Progression.
- *
- * Das heutige Training wird ausdrücklich ausgeschlossen. Ohne diesen Filter
- * gewinnt die gerade laufende Einheit das `orderBy: loggedAt desc`, und dann
- * frisst sich die Seite selbst auf: nach dem Abhaken von Satz 1 einer Übung
- * mit zwei Sätzen liefert die Historie nur noch diesen einen Satz, beim
- * nächsten Server-Rendern verschwindet die zweite Satzzeile, und der Zähler
- * fällt von 16 auf 15. Im Gym wäre nach einem Tabwechsel die Hälfte weg.
- *
- * "Zuletzt" meint die letzte ABGESCHLOSSENE Einheit — genau das, wogegen man
- * sich heute vergleicht.
- */
-export async function letzteSaetze(exercise: string): Promise<SetLog[]> {
-  return (await letzteSaetzeFuer([exercise])).get(exercise) ?? [];
-}
-
-/**
- * Dasselbe für eine ganze Einheit — in EINER Abfrage.
- *
- * Der Grund ist der Verbindungspool. Vorher rief mitHistorie() letzteSaetze()
- * je Übung auf, und jeder Aufruf brauchte zwei Abfragen: erst die jüngste
- * Einheit finden, dann deren Sätze holen. Bei zehn Push-Übungen sind das
- * zwanzig. Das Promise.all darum sah nach Nebenläufigkeit aus, war aber
- * keine: der Pool in db.ts steht bewusst auf max 1, also liefen alle zwanzig
- * nacheinander gegen Supabase. Zusammen mit Katalog, Bankstand und
- * laufendesTraining wurde daraus die Wartezeit, die man beim Tippen auf
- * "Training" gesehen hat.
- *
- * Statt zwei Abfragen je Übung eine für alle: der Index
- * @@index([exercise, loggedAt]) trägt sie, und die Zuordnung "welche Einheit
- * war die letzte" fällt beim Durchgehen der nach loggedAt absteigend
- * sortierten Zeilen von selbst ab — die erste Zeile je Übung gehört
- * definitionsgemäß zur jüngsten Einheit.
- *
- * Das heutige Training bleibt ausgeschlossen, aus demselben Grund wie oben.
- */
-export async function letzteSaetzeFuer(
-  uebungen: string[]
-): Promise<Map<string, SetLog[]>> {
-  /* Der setIndex wird zum Sortieren gebraucht, gehört aber nicht ins
-     Ergebnis: SetLog ist der Typ, mit dem progression() und die
-     ZULETZT-Spalte rechnen, und der kennt nur Gewicht und Wiederholungen. */
-  type Zeile = SetLog & { setIndex: number };
-  const gesammelt = new Map<string, Zeile[]>();
-
-  const ergebnis = new Map<string, SetLog[]>();
-  if (uebungen.length === 0) return ergebnis;
-
-  const heute = new Date(`${heuteIso()}T00:00:00Z`);
-
-  const zeilen = await prisma.setLog.findMany({
-    where: { exercise: { in: uebungen }, workout: { date: { lt: heute } } },
-    orderBy: [{ loggedAt: "desc" }, { setIndex: "asc" }],
-    select: {
-      exercise: true,
-      workoutId: true,
-      kg: true,
-      reps: true,
-      setIndex: true,
-      sauber: true,
-    },
-  });
-
-  /* Je Übung zählt ausschließlich die jüngste Einheit. Welche das ist, sagt
-     die erste Zeile, die für diese Übung auftaucht — danach werden nur noch
-     Zeilen mit derselben workoutId angenommen. Ohne diese Klammer stünden in
-     der ZULETZT-Spalte Sätze aus mehreren Trainings untereinander. */
-  const jüngsteEinheit = new Map<string, string>();
-
-  for (const zeile of zeilen) {
-    const bekannt = jüngsteEinheit.get(zeile.exercise);
-    if (bekannt === undefined) {
-      jüngsteEinheit.set(zeile.exercise, zeile.workoutId);
-    } else if (bekannt !== zeile.workoutId) {
-      continue;
-    }
-
-    const satz: Zeile = {
-      kg: zeile.kg,
-      reps: zeile.reps,
-      setIndex: zeile.setIndex,
-      sauber: zeile.sauber,
-    };
-    const liste = gesammelt.get(zeile.exercise);
-    if (liste) liste.push(satz);
-    else gesammelt.set(zeile.exercise, [satz]);
-  }
-
-  /* Die Sätze innerhalb einer Einheit gehören in ihrer Reihenfolge sortiert.
-     Das orderBy oben sortiert primär nach loggedAt — bei nachgetragenen
-     Sätzen (satz_eintragen aus Claude Desktop) läuft das auseinander. */
-  for (const [uebung, liste] of gesammelt) {
-    liste.sort((a, b) => a.setIndex - b.setIndex);
-    /* Die Markierung kommt ausdrücklich mit. progression() rechnet zwar nur
-       mit Gewicht und Wiederholungen, aber dieselben Sätze stehen als ZULETZT
-       auf dem Schirm — und ein unsauberer Satz, gegen den man sich heute
-       vergleicht, soll als solcher erkennbar bleiben. */
-    ergebnis.set(
-      uebung,
-      liste.map(({ kg, reps, sauber }) => ({ kg, reps, sauber }))
-    );
-  }
-
-  return ergebnis;
-}
-
-export type LaufendesTraining = {
-  startedAtMs: number;
-  /** Zeitpunkt des Abschlusses, oder null solange die Einheit läuft. */
-  finishedAtMs: number | null;
-  beendet: boolean;
-  /**
-   * Was heute schon abgehakt ist, je Übungsname und Satznummer.
-   *
-   * Der Logger hielt das bis zum 25.08.2026 ausschließlich im React-State.
-   * Beim Neuladen oder nach einem Tabwechsel stand die Einheit damit wieder
-   * bei "0 von 17", obwohl sämtliche Sätze längst in der Datenbank lagen —
-   * und weil daran auch der Abschluss hing, war eine fertige Einheit nie
-   * fertig.
-   */
-  geloggt: GeloggterSatz[];
-  notiz: string | null;
-};
-
-export type GeloggterSatz = {
-  exercise: string;
-  setIndex: number;
-  kg: number;
-  reps: number;
-};
-
-/**
- * Läuft heute schon eine Einheit?
- *
- * Davon hängt ab, ob die Trainingsseite den Startbildschirm oder den Logger
- * zeigt — und vor allem, ab wann die Laufzeit zählt. Vorher begann sie beim
- * Laden der Seite: wer mittags kurz nachsieht, was ansteht, und abends
- * trainiert, bekam mehrere Stunden Laufzeit angezeigt, die nichts gemessen
- * haben.
- */
-export async function laufendesTraining(
-  kind: "push" | "pull"
-): Promise<LaufendesTraining | null> {
-  const date = new Date(`${heuteIso()}T00:00:00Z`);
-  const workout = await prisma.workout.findFirst({
-    where: { date, kind },
-    include: {
-      sets: {
-        orderBy: [{ exercise: "asc" }, { setIndex: "asc" }],
-        select: { exercise: true, setIndex: true, kg: true, reps: true },
-      },
-    },
-  });
-  if (!workout) return null;
-
-  return {
-    startedAtMs: workout.startedAt.getTime(),
-    finishedAtMs: workout.finishedAt?.getTime() ?? null,
-    beendet: workout.finishedAt !== null,
-    geloggt: workout.sets,
-    notiz: workout.note,
-  };
-}
-
-/**
- * Welche Einheit heute schon läuft oder gelaufen ist — bei zweien die zuletzt
- * begonnene.
- *
- * Seit sich jede Einheit an jedem Tag wählen lässt, sagt der Kalender nicht
- * mehr sicher, was heute trainiert wird. Wer "trotzdem Pull" gestartet hat
- * und die Seite später über die Navigation öffnet, soll seinen Logger sehen
- * und nicht den Push-Plan.
- */
-export async function heutigeEinheit(): Promise<"push" | "pull" | null> {
-  const workout = await prisma.workout.findFirst({
-    where: { date: new Date(`${heuteIso()}T00:00:00Z`) },
-    orderBy: { startedAt: "desc" },
-    select: { kind: true },
-  });
-  return workout?.kind === "push" || workout?.kind === "pull" ? workout.kind : null;
-}
-
 /** Einheit beginnen. Idempotent — ein zweiter Aufruf setzt die Uhr nicht zurück. */
 export async function trainingStarten(
   kind: "push" | "pull"
 ): Promise<{ ok: true; startedAtMs: number } | { ok: false; fehler: string }> {
   try {
-    const workout = await workoutHeute(kind);
+    const workout = await workoutHeute(art(kind));
     return { ok: true, startedAtMs: workout.startedAt.getTime() };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return fehler(e);
   }
 }
 
@@ -343,8 +201,9 @@ export async function trainingBeenden(
   erfasstAm?: number
 ): Promise<{ ok: true; finishedAtMs: number } | { ok: false; fehler: string }> {
   try {
+    if (note !== undefined) note = text(note, "Notiz", 1000);
     const zeitpunkt = erfassungszeit(erfasstAm);
-    const workout = await workoutHeute(kind, wienerDatum(zeitpunkt));
+    const workout = await workoutHeute(art(kind), wienerDatum(zeitpunkt));
     if (workout.finishedAt !== null) {
       return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
     }
@@ -356,65 +215,38 @@ export async function trainingBeenden(
 
     return { ok: true, finishedAtMs: beendet.finishedAt!.getTime() };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return fehler(e);
   }
 }
 
 /**
- * Bisheriger Bestwert je Übung, als geschätztes Maximum (Epley).
- *
- * Für die Bestwert-Markierung im Logger: hebt ein Satz heute mehr als je
- * zuvor, sieht man es im Moment des Abhakens, nicht erst Tage später im
- * Kraftverlauf. Das heutige Training zählt nicht mit — sonst wäre der eben
- * gehobene Satz sein eigener Maßstab.
- *
- * Ausdrücklich unsaubere Sätze (sauber = false) zählen nicht: ein Bestwert,
- * den die Technik nicht getragen hat, ist kein Maßstab. Gleiche Regel wie in
- * besterSatz() in kraft.ts.
- */
-export async function bestwerteFuer(uebungen: string[]): Promise<Record<string, number>> {
-  if (uebungen.length === 0) return {};
-
-  const zeilen = await prisma.setLog.findMany({
-    where: {
-      exercise: { in: uebungen },
-      workout: { date: { lt: new Date(`${heuteIso()}T00:00:00Z`) } },
-      // Nicht NOT { sauber: false }: in SQL ergibt NOT (NULL = false) wieder
-      // NULL, und damit fielen ausgerechnet die nicht beurteilten Sätze — der
-      // Normalfall — aus der Abfrage.
-      OR: [{ sauber: null }, { sauber: true }],
-    },
-    select: { exercise: true, kg: true, reps: true },
-  });
-
-  const best: Record<string, number> = {};
-  for (const z of zeilen) {
-    const wert = e1rm(z);
-    if (wert !== null && wert > (best[z.exercise] ?? 0)) best[z.exercise] = wert;
-  }
-  return best;
-}
-
-/**
- * Notiz zur heutigen Einheit — "Schulter zwickt", "Bank war belegt".
+ * Notiz zu einer Einheit — "Schulter zwickt", "Bank war belegt".
  *
  * Workout.note gab es seit dem ersten Tag, nur keine Stelle, an der man sie
  * schreiben konnte. Im Verlauf je Einheit steht sie über den Sätzen; genau
  * dort sucht man drei Wochen später, warum eine Einheit schwächer war.
+ *
+ * Der Tag kommt vom Logger, nicht von der Uhr: wer um 23:30 trainiert und
+ * die Notiz um 00:05 schreibt, meint die Einheit von gestern. Und es wird nur
+ * aktualisiert, nie angelegt — eine Notiz soll keine leere Einheit erzeugen,
+ * deren Laufzeit dann ab Mitternacht zählt.
  */
 export async function notizSpeichern(
   kind: "push" | "pull",
+  tagIso: string,
   notiz: string
 ): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
-    const text = notiz.trim().slice(0, 1000);
-    const workout = await workoutHeute(kind);
-    await prisma.workout.update({
-      where: { id: workout.id },
-      data: { note: text === "" ? null : text },
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tagIso))) throw new Ungueltig("Ungültiger Tag.");
+    if (typeof notiz !== "string") throw new Ungueltig("Notiz fehlt.");
+    const inhalt = notiz.trim().slice(0, 1000);
+    const r = await prisma.workout.updateMany({
+      where: { date: new Date(`${tagIso}T00:00:00Z`), kind: art(kind) },
+      data: { note: inhalt === "" ? null : inhalt },
     });
+    if (r.count === 0) throw new Ungueltig("Zu diesem Tag gibt es keine Einheit.");
     return { ok: true };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return fehler(e);
   }
 }

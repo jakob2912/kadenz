@@ -23,12 +23,26 @@ export type Einheitsbericht = {
  */
 const LAENGSTE_DAUER_MIN = 240;
 
-export async function letzteEinheiten(tage = 84): Promise<Einheitsbericht[]> {
-  const ab = new Date(Date.now() - tage * 864e5);
-
+/**
+ * Alle Tage mit mindestens einem Satz, zwei Jahre zurück — für Kalender und
+ * Serie. Eigene, schlanke Abfrage (nur das Datum): die Serie hing vorher an
+ * den zwölf Wochen, deren Einheiten samt Sätzen geladen wurden, und eine
+ * Serie von zwanzig Wochen stand dann als zwölf da.
+ */
+export async function trainingstage(): Promise<string[]> {
   const zeilen = await prisma.workout.findMany({
-    where: { date: { gte: ab }, sets: { some: {} } },
+    where: { date: { gte: new Date(Date.now() - 730 * 864e5) }, sets: { some: {} } },
+    select: { date: true },
+  });
+  return zeilen.map((z) => z.date.toISOString().slice(0, 10));
+}
+
+/** Die jüngsten Einheiten mit Sätzen — nur so viele, wie angezeigt werden. */
+export async function letzteEinheiten(anzahl = 12): Promise<Einheitsbericht[]> {
+  const zeilen = await prisma.workout.findMany({
+    where: { sets: { some: {} } },
     orderBy: [{ date: "desc" }, { startedAt: "desc" }],
+    take: anzahl,
     select: {
       id: true,
       date: true,

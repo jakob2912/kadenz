@@ -65,7 +65,9 @@ export function tonVorbereiten(): void {
     /* Nicht nur "suspended": nach Sperren und Entsperren steht ein
        AudioContext auf iOS auf "interrupted" und bleibt stumm, bis er
        fortgesetzt wird. */
-    if (audio.state !== "running") void audio.resume();
+    // Außerhalb einer Berührung kann iOS das Fortsetzen ablehnen — dann eben
+    // beim nächsten Tipp, nicht als unbehandelter Fehler.
+    if (audio.state !== "running") audio.resume().catch(() => {});
   } catch {
     audio = null;
   }
@@ -89,7 +91,7 @@ export function pauseVorbeiSignal(): void {
 
   if (!geraetLesen("ton") || !audio) return;
   try {
-    if (audio.state !== "running") void audio.resume();
+    if (audio.state !== "running") audio.resume().catch(() => {});
     const start = audio.currentTime + 0.02;
     for (const [versatz, frequenz] of [
       [0, 880],
@@ -107,4 +109,21 @@ export function pauseVorbeiSignal(): void {
       osc.stop(start + versatz + 0.2);
     }
   } catch {}
+}
+
+/**
+ * Das Push-Abo dieses Geräts, falls es eins hat.
+ *
+ * Die Satzpause-Nachricht geht nur an das Gerät, auf dem trainiert wird —
+ * dafür muss der Logger seinen eigenen Endpoint kennen.
+ */
+export async function eigenesPushAbo(): Promise<string | null> {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const abo = await reg?.pushManager.getSubscription();
+    return abo?.endpoint ?? null;
+  } catch {
+    return null;
+  }
 }

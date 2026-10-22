@@ -40,8 +40,9 @@ type Vapid = { publicKey: string; privateKey: string };
  *
  * Wer sie trotzdem von außen setzen will (VAPID_PUBLIC_KEY und
  * VAPID_PRIVATE_KEY), hat Vorrang. Ein Wechsel des Paars macht alle
- * bestehenden Abos ungültig; sie melden sich beim nächsten Öffnen der
- * Einstellungen neu an.
+ * bestehenden Abos ungültig; jedes Gerät meldet sich beim nächsten Öffnen der
+ * Einstellungen mit dem neuen Schlüssel neu an (aboAbgleichen in
+ * components/einstellungen.tsx).
  *
  * Das Anlegen ist gegen zwei gleichzeitige Aufrufe gesichert: createMany mit
  * skipDuplicates schreibt nur, wenn noch nichts da ist, und gelesen wird
@@ -53,6 +54,11 @@ export async function vapidSchluessel(): Promise<Vapid> {
     privateKey: process.env.VAPID_PRIVATE_KEY?.trim(),
   };
   if (ausUmgebung.publicKey && ausUmgebung.privateKey) return ausUmgebung as Vapid;
+  if (ausUmgebung.publicKey || ausUmgebung.privateKey) {
+    // Nur eine von beiden gesetzt — still auf die Datenbank auszuweichen hieße,
+    // dass die gesetzte Variable scheinbar wirkt und es nicht tut.
+    console.error("Nur eine der Variablen VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY ist gesetzt — beide oder keine.");
+  }
 
   const vorhanden = await prisma.einstellung.findUnique({ where: { schluessel: VAPID_SCHLUESSEL } });
   if (vorhanden) return JSON.parse(vorhanden.wert) as Vapid;
@@ -101,8 +107,18 @@ export type Versand = { zugestellt: number; entfernt: number; fehler: string[] }
  * nach dem Training wieder Netz hat, ist schlimmer als keins. Für die
  * Morgen-Nachricht reicht die Stunde ebenso.
  */
-export async function anAlleSenden(nachricht: Nachricht, ttlSekunden = 3600): Promise<Versand> {
-  const abos = await prisma.pushAbo.findMany();
+export async function anAlleSenden(
+  nachricht: Nachricht,
+  ttlSekunden = 3600,
+  /**
+   * Nur an dieses eine Gerät. Für die Satzpause: das iPhone im Gym soll sie
+   * bekommen, nicht zusätzlich der Laptop daheim bei jedem Satz.
+   */
+  nurEndpoint?: string
+): Promise<Versand> {
+  const abos = await prisma.pushAbo.findMany(
+    nurEndpoint ? { where: { endpoint: nurEndpoint } } : undefined
+  );
   const ergebnis: Versand = { zugestellt: 0, entfernt: 0, fehler: [] };
   if (abos.length === 0) return ergebnis;
 

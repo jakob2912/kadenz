@@ -1,6 +1,6 @@
 import { connection } from "next/server";
-import { Card, Eyebrow, anzahl, de, heuteWien, kurzDatum } from "@/components/ui";
-import { letzteEinheiten, type Einheitsbericht } from "@/lib/einheiten-daten";
+import { Card, Eyebrow, anzahl, heuteWien, kurzDatum } from "@/components/ui";
+import { letzteEinheiten, trainingstage, type Einheitsbericht } from "@/lib/einheiten-daten";
 import { EINHEITEN_PRO_WOCHE, kalender, montagVon, serie } from "@/lib/einheiten";
 
 const WOCHEN = 12;
@@ -16,15 +16,15 @@ export async function Einheitenverlauf() {
   await connection();
 
   let einheiten: Einheitsbericht[];
+  let tage: string[];
   try {
-    einheiten = await letzteEinheiten(WOCHEN * 7);
+    [einheiten, tage] = await Promise.all([letzteEinheiten(12), trainingstage()]);
   } catch (e) {
     console.error("Einheiten nicht lesbar:", e);
     return null;
   }
 
   const heute = heuteWien();
-  const tage = einheiten.map((e) => e.datum);
   const raster = kalender(tage, heute, WOCHEN);
   const inSerie = serie(tage, heute);
   const dieseWoche = tage.filter((t) => montagVon(t) === montagVon(heute)).length;
@@ -106,11 +106,11 @@ export async function Einheitenverlauf() {
         <Eyebrow>Letzte Einheiten</Eyebrow>
         {einheiten.length === 0 ? (
           <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-            Noch keine Einheit in den letzten {WOCHEN} Wochen.
+            Noch keine Einheit geloggt.
           </p>
         ) : (
           <ul className="mt-2 flex flex-col divide-y divide-hair-soft">
-            {einheiten.slice(0, 12).map((e) => (
+            {einheiten.map((e) => (
               <li key={e.id}>
                 <details className="group py-2.5">
                   <summary className="flex min-h-[40px] cursor-pointer list-none items-center gap-3">
@@ -138,7 +138,7 @@ export async function Einheitenverlauf() {
                       <div key={u.name} className="flex items-baseline justify-between gap-3 text-[12px]">
                         <span className="min-w-0 truncate text-fg-dim">{u.name}</span>
                         <span className="shrink-0 tabular-nums text-fg-faint">
-                          {u.saetze.map((s) => `${de(s.kg, s.kg % 1 === 0 ? 0 : 1)}×${s.reps}`).join("  ")}
+                          {u.saetze.map((s) => `${kgText(s.kg)}×${s.reps}`).join("  ")}
                         </span>
                       </div>
                     ))}
@@ -151,4 +151,9 @@ export async function Einheitenverlauf() {
       </Card>
     </div>
   );
+}
+
+/** 80 → "80", 82,5 → "82,5", 81,25 → "81,25" — so viele Stellen wie nötig. */
+function kgText(kg: number): string {
+  return String(Math.round(kg * 100) / 100).replace(".", ",");
 }

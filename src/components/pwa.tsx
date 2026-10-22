@@ -31,7 +31,7 @@ export function istInstalliert(): boolean {
   );
 }
 
-function istIos(): boolean {
+export function istIos(): boolean {
   return (
     /iPad|iPhone|iPod/.test(navigator.userAgent) ||
     // iPadOS meldet sich als Mac, hat aber Touch.

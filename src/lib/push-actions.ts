@@ -50,6 +50,21 @@ export async function aboSpeichern(abo: {
   } catch {
     return { ok: false, fehler: "Ungültiger Endpoint." };
   }
+  // Die Schlüssel des Geräts: p256dh ist ein unkomprimierter P-256-Punkt
+  // (65 Byte, Base64url 87 Zeichen), auth 16 Byte (22 Zeichen). Ein kaputtes
+  // Abo bliebe sonst dauerhaft in der Liste und schlüge bei jedem Versand fehl.
+  const base64url = /^[A-Za-z0-9_-]+={0,2}$/;
+  if (
+    !base64url.test(abo.keys?.p256dh ?? "") ||
+    !base64url.test(abo.keys?.auth ?? "") ||
+    abo.keys.p256dh.length < 80 ||
+    abo.keys.p256dh.length > 100 ||
+    abo.keys.auth.length < 20 ||
+    abo.keys.auth.length > 30
+  ) {
+    return { ok: false, fehler: "Ungültige Schlüssel im Abo." };
+  }
+
   const bekannt = [
     "web.push.apple.com",
     "fcm.googleapis.com",
@@ -152,21 +167,34 @@ const LAENGSTE_PAUSE_MS = 280_000;
  * 2025, auch im Gratis-Tarif); ohne endet die Funktion nach 10 Sekunden, und
  * die Nachricht fällt still aus. Der Timer in der App läuft davon unberührt.
  */
-export async function satzpauseAnkuendigen(endeMs: number | null): Promise<Ergebnis> {
+export async function satzpauseAnkuendigen(
+  endeMs: number | null,
+  /**
+   * Das Push-Abo des Geräts, auf dem trainiert wird. Fehlt es (Gerät ohne
+   * Push), gibt es keine Nachricht — an alle anderen Geräte soll sie nicht.
+   */
+  endpoint?: string | null
+): Promise<Ergebnis> {
   try {
-    if (endeMs === null) {
+    const restMs = endeMs === null ? 0 : endeMs - Date.now();
+
+    /* Jede Ankündigung, die nicht geplant wird, räumt die vorige weg. Sonst
+       käme nach einem "+30 s" über die Grenze hinaus die alte Nachricht zum
+       alten Ende, obwohl die App noch eine halbe Minute Pause zeigt. */
+    const abraeumen = async () => {
       await prisma.einstellung.deleteMany({ where: { schluessel: PAUSE_SCHLUESSEL } });
-      return { ok: true };
+      return { ok: true } as const;
+    };
+
+    if (endeMs === null || !endpoint || restMs <= 0 || restMs > LAENGSTE_PAUSE_MS) {
+      return await abraeumen();
     }
 
-    const restMs = endeMs - Date.now();
-    if (restMs <= 0 || restMs > LAENGSTE_PAUSE_MS) return { ok: true };
-
-    const [einstellungen, abos] = await Promise.all([
+    const [einstellungen, abo] = await Promise.all([
       benachrichtigungenLesen(),
-      prisma.pushAbo.count(),
+      prisma.pushAbo.findUnique({ where: { endpoint }, select: { endpoint: true } }),
     ]);
-    if (!einstellungen.satzpause || abos === 0) return { ok: true };
+    if (!einstellungen.satzpause || !abo) return await abraeumen();
 
     const kennung = crypto.randomUUID();
     const wert = JSON.stringify({ kennung, ende: endeMs });
@@ -179,14 +207,16 @@ export async function satzpauseAnkuendigen(endeMs: number | null): Promise<Ergeb
     after(async () => {
       await new Promise((r) => setTimeout(r, Math.max(0, endeMs - Date.now())));
 
-      const aktuell = await prisma.einstellung.findUnique({
-        where: { schluessel: PAUSE_SCHLUESSEL },
+      /* Lesen und Austragen in EINEM Schritt: gelöscht wird nur die eigene
+         Ankündigung (gleicher Wert samt Kennung). Kommt "Weiter" oder
+         "+30 s" dazwischen, steht dort ein anderer Wert, count ist 0, und
+         die Nachricht entfällt. Getrennt gelesen und gelöscht, ging sie in
+         genau diesem Fenster trotzdem raus. */
+      const { count } = await prisma.einstellung.deleteMany({
+        where: { schluessel: PAUSE_SCHLUESSEL, wert },
       });
-      if (!aktuell || JSON.parse(aktuell.wert).kennung !== kennung) return;
+      if (count === 0) return;
 
-      await prisma.einstellung.deleteMany({
-        where: { schluessel: PAUSE_SCHLUESSEL, wert: aktuell.wert },
-      });
       await anAlleSenden(
         {
           title: "Satzpause vorbei",
@@ -195,7 +225,8 @@ export async function satzpauseAnkuendigen(endeMs: number | null): Promise<Ergeb
           tag: "satzpause",
         },
         // Eine Minute: danach ist die Nachricht keine Hilfe mehr, sondern Lärm.
-        60
+        60,
+        endpoint
       );
     });
 

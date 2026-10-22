@@ -4,7 +4,7 @@ import { loadDashboard } from "@/lib/health-service";
 import { aktuellePhase } from "@/lib/gewichtsplan";
 import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
 import { rotationMitPlan } from "@/lib/wochenplan";
-import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
+import { heutigeEinheit, laufendesTraining } from "@/lib/training-lesen";
 import { SESSIONS, type Rotation } from "@/lib/plan";
 import Link from "next/link";
 import { wienerStunde } from "@/lib/datum";

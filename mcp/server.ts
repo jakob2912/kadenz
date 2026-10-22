@@ -76,7 +76,8 @@ import {
   uebungenUmsortieren,
   type Einheit,
 } from "../src/lib/uebungen";
-import { heutigeEinheit, satzSpeichern } from "../src/lib/workouts";
+import { satzSpeichern } from "../src/lib/workouts";
+import { heutigeEinheit } from "../src/lib/training-lesen";
 import {
   aktuellesZiel,
   ernaehrungsplanLesen,

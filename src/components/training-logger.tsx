@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useOffline } from "next/offline";
 import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
@@ -10,10 +10,11 @@ import {
   satzSpeichern,
   trainingBeenden,
   trainingStarten,
-  type GeloggterSatz,
 } from "@/lib/workouts";
+import type { GeloggterSatz } from "@/lib/training-lesen";
+import { BESTWERT_TEXT, bestwertArt, staerke, type Bestwert, type BestwertArt } from "@/lib/bestwerte";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
-import { geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
+import { eigenesPushAbo, geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
 import { satzpauseAnkuendigen } from "@/lib/push-actions";
 import {
   ausgangAblegen,
@@ -24,7 +25,6 @@ import {
   type OffenerSatz,
 } from "@/lib/ablage";
 import { wienerDatum } from "@/lib/datum";
-import { e1rm } from "@/lib/kraft";
 import { aufwaermen, beladung, beladungText } from "@/lib/hantel";
 
 const PAUSE_SEKUNDEN = 180;
@@ -58,10 +58,14 @@ const uhr = () => Date.now();
  */
 function senden(satz: OffenerSatz, melden: (fehler: string | null) => void) {
   ausgangAblegen(satz);
-  void satzSpeichern(satz).then((r) => {
-    if (r.ok) ausgangErledigt(satz);
-    melden(r.ok ? null : r.fehler);
-  });
+  satzSpeichern(satz)
+    .then((r) => {
+      if (r.ok) ausgangErledigt(satz);
+      melden(r.ok ? null : r.fehler);
+    })
+    // Abgelaufene Anmeldung (401 vom Proxy) oder ein Wurf der Aktion: der
+    // Satz bleibt im Ausgang, und die Meldung sagt es, statt still zu bleiben.
+    .catch((e: unknown) => melden(e instanceof Error ? e.message : "Server nicht erreichbar"));
 }
 
 /** Der Zustand eines abgehakten Satzes im Logger. */
@@ -106,19 +110,21 @@ export function TrainingLogger({
   geloggt = [],
   bestwerte = {},
   notiz = null,
+  tag = null,
   wechsel,
 }: {
   uebungen: PlannedExercise[];
   session: Einheitskopf;
   /**
-   * Bisher bestes geschätztes Maximum je Übung, ohne heute — siehe
-   * bestwerteFuer() in workouts.ts. Fehlt eine Übung, gibt es für sie keinen
-   * Bestwert: der erste Satz einer neuen Übung ist kein Rekord, sondern der
-   * Anfang.
+   * Bisherige Bestwerte je Übung, ohne heute — siehe bestwerteFuer() in
+   * training-lesen.ts. Fehlt eine Übung, gibt es für sie keinen Bestwert: der
+   * erste Satz einer neuen Übung ist kein Rekord, sondern der Anfang.
    */
-  bestwerte?: Record<string, number>;
+  bestwerte?: Record<string, Bestwert>;
   /** Die Notiz zur Einheit, falls heute schon eine geschrieben wurde. */
   notiz?: string | null;
+  /** Kalendertag der Einheit aus der Datenbank; null, wenn sie nicht lesbar war. */
+  tag?: string | null;
   /**
    * Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des
    * Seitenaufrufs. `null`, wenn die Datenbank ihn gerade nicht hergibt: dann
@@ -159,6 +165,14 @@ export function TrainingLogger({
   const start = useRef(startedAtMs);
   const reduce = useReducedMotion();
   const offline = useOffline();
+  /* Das Push-Abo dieses Geräts — die Satzpause-Nachricht geht nur hierhin.
+     Als Ref, weil es nur beim Abhaken gelesen wird und nichts rendert. */
+  const pushAbo = useRef<string | null>(null);
+  useEffect(() => {
+    void eigenesPushAbo().then((e) => {
+      pushAbo.current = e;
+    });
+  }, []);
 
   useBildschirmAn(fertigSeit === null);
 
@@ -276,26 +290,29 @@ export function TrainingLogger({
 
   /* Bestwerte von heute, aus den abgehakten Sätzen abgeleitet statt als
      eigener State: korrigiert man einen Satz nach unten, verschwindet die
-     Markierung von selbst wieder. */
-  const rekorde = new Map<string, number>();
+     Markierung von selbst wieder.
+
+     Je Übung höchstens eine Markierung, am stärksten Rekord-Satz des Tages.
+     Sonst trügen bei einem guten Tag beide Sätze das Abzeichen, obwohl der
+     zweite den ersten gar nicht übertroffen hat. */
+  const rekorde = new Map<string, BestwertArt>();
+  const rekordUebungen: { name: string; art: BestwertArt; satz: Logged }[] = [];
   uebungen.forEach((ex, i) => {
-    const bisher = bestwerte[ex.name];
-    if (bisher === undefined) return;
+    let bester: { key: string; art: BestwertArt; satz: Logged } | null = null;
     heutigeSaetze(ex).forEach((_, si) => {
-      const satz = logged[`${i}-${si}`];
-      const wert = satz ? e1rm(satz) : null;
-      if (wert !== null && wert > bisher + 0.01) rekorde.set(`${i}-${si}`, wert);
+      const key = `${i}-${si}`;
+      const satz = logged[key];
+      const art = satz ? bestwertArt(satz, bestwerte[ex.name]) : null;
+      if (satz && art && (!bester || staerke(satz) > staerke(bester.satz))) {
+        bester = { key, art, satz };
+      }
     });
+    if (bester) {
+      const { key, art, satz } = bester;
+      rekorde.set(key, art);
+      rekordUebungen.push({ name: ex.name, art, satz });
+    }
   });
-  const rekordUebungen = uebungen
-    .map((ex, i) => {
-      let max = 0;
-      rekorde.forEach((wert, key) => {
-        if (key.startsWith(`${i}-`)) max = Math.max(max, wert);
-      });
-      return max > 0 ? { name: ex.name, wert: max, vorher: bestwerte[ex.name] } : null;
-    })
-    .filter((r) => r !== null);
 
   /* Der Abschluss gehört in die Datenbank, nicht nur in diesen State. Sonst
      ist die Einheit nach dem nächsten Seitenaufruf wieder offen, und die
@@ -338,21 +355,21 @@ export function TrainingLogger({
     setPauseDauer(PAUSE_SEKUNDEN * 1000);
     pauseSchreiben({ ende: t + PAUSE_SEKUNDEN * 1000, dauer: PAUSE_SEKUNDEN * 1000, einheit: session.key });
     tonVorbereiten();
-    // Für den gesperrten Bildschirm: der Server schickt am Ende eine
-    // Push-Nachricht, falls sie eingeschaltet ist. Scheitert das, läuft der
-    // Timer hier trotzdem — die Nachricht ist Zugabe, nicht Grundlage.
-    void satzpauseAnkuendigen(t + PAUSE_SEKUNDEN * 1000);
     // Der Text enthält Übung und Satznummer, damit er sich zwischen zwei
     // Sätzen unterscheidet — gleicher Text wird von Screenreadern nicht
     // erneut vorgelesen.
-    const wert = e1rm({ kg, reps });
-    const bisher = bestwerte[exercise];
-    const rekord = wert !== null && bisher !== undefined && wert > bisher + 0.01;
+    const rekord = bestwertArt({ kg, reps }, bestwerte[exercise]) !== null;
     setAnsage(
       `${exercise}, Satz ${setIndex + 1} gespeichert.${rekord ? " Neuer Bestwert!" : ""} Satzpause drei Minuten.`
     );
 
+    // Erst der Satz, dann die Ankündigung: Next arbeitet Server Actions
+    // nacheinander ab, und der Satz soll nicht auf die Pausen-Nachricht warten.
     senden({ kind: session.key, exercise, setIndex, kg, reps, erfasstAm: t }, setSpeicherFehler);
+    // Für den gesperrten Bildschirm: der Server schickt am Ende eine
+    // Push-Nachricht, falls sie eingeschaltet ist. Scheitert das, läuft der
+    // Timer hier trotzdem — die Nachricht ist Zugabe, nicht Grundlage.
+    satzpauseAnkuendigen(t + PAUSE_SEKUNDEN * 1000, pushAbo.current).catch(() => {});
   }
 
   /**
@@ -450,7 +467,7 @@ export function TrainingLogger({
                   setPauseEnde(neu);
                   setPauseDauer(pauseDauer + 30_000);
                   pauseSchreiben({ ende: neu, dauer: pauseDauer + 30_000, einheit: session.key });
-                  void satzpauseAnkuendigen(neu);
+                  satzpauseAnkuendigen(neu, pushAbo.current).catch(() => {});
                 }}
               >
                 +30 s
@@ -461,7 +478,7 @@ export function TrainingLogger({
                   setPauseEnde(null);
                   setPauseVorbei(false);
                   pauseSchreiben(null);
-                  void satzpauseAnkuendigen(null);
+                  satzpauseAnkuendigen(null).catch(() => {});
                 }}
               >
                 Weiter
@@ -568,7 +585,7 @@ export function TrainingLogger({
                 <SatzZeile
                   key={si}
                   langhantel={langhantel(ex)}
-                  rekord={rekorde.has(`${i}-${si}`)}
+                  rekord={rekorde.get(`${i}-${si}`) ?? null}
                   nummer={si + 1}
                   prev={ex.prev[si]}
                   zielKg={satz.kg}
@@ -609,6 +626,15 @@ export function TrainingLogger({
             Haken, verschwindet sie, sobald sich der Plan nachträglich ändert —
             eine abgeschlossene Einheit sähe dann wieder offen aus, obwohl sie
             längst beendet wurde. */}
+        {/* Die Notiz steht immer da, nicht erst nach dem letzten Haken: gerade
+            wenn eine Übung ausfällt (Gerät belegt), will man das festhalten —
+            und dann kommt der letzte Haken nie. */}
+        {tag && (
+          <Card>
+            <Notiz einheit={session.key} tag={tag} anfang={notiz} />
+          </Card>
+        )}
+
         {(alleSaetzeFertig || fertigSeit !== null) && (
           <Card className="border-ready/30">
             <Eyebrow>Einheit abgeschlossen</Eyebrow>
@@ -632,13 +658,13 @@ export function TrainingLogger({
               <ul className="mt-3.5 flex flex-col gap-1.5">
                 {rekordUebungen.map((r) => (
                   <li key={r.name} className="text-[13px] leading-relaxed text-fg-dim">
-                    <b className="font-semibold text-accent">{r.name}</b> — geschätztes Maximum{" "}
-                    {de(r.wert, 1)} kg, bisher {de(r.vorher, 1)} kg
+                    <b className="font-semibold text-accent">{r.name}</b> —{" "}
+                    {de(r.satz.kg, r.satz.kg % 1 === 0 ? 0 : 1)} kg × {r.satz.reps},{" "}
+                    {BESTWERT_TEXT[r.art]}
                   </li>
                 ))}
               </ul>
             )}
-            <Notiz einheit={session.key} anfang={notiz} />
             <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
               Jeder Satz ist einzeln gespeichert, sobald du ihn abgehakt hast. Korrigieren
               geht weiterhin: Tipp auf den Haken oder ins Feld.
@@ -669,15 +695,15 @@ function SatzZeile({
   logged,
   hervorgehoben,
   langhantel = false,
-  rekord = false,
+  rekord = null,
   onLog,
   onKorrigieren,
 }: {
   nummer: number;
   /** Langhantelübung: dann steht unter dem Satz, welche Scheiben drauf gehören. */
   langhantel?: boolean;
-  /** Schwerer als alles bisher (geschätztes Maximum) — siehe rekorde im Logger. */
-  rekord?: boolean;
+  /** Bestwert-Art dieses Satzes, falls es der Rekord-Satz des Tages ist. */
+  rekord?: BestwertArt | null;
   prev?: string;
   zielKg: number;
   zielReps: number;
@@ -795,7 +821,7 @@ function SatzZeile({
         </svg>
       </button>
 
-      {(langhantel || rekord) && (
+      {(langhantel || rekord !== null) && (
         <ScheibenZeile
           kg={fertig ? logged!.kg : Number((kg || String(zielKg)).replace(",", ".")) || 0}
           langhantel={langhantel}
@@ -838,20 +864,27 @@ function ScheibenZeile({
 }: {
   kg: number;
   langhantel: boolean;
-  rekord: boolean;
+  rekord: BestwertArt | null;
 }) {
   const b = langhantel ? beladung(kg) : null;
+  /* 13 px auf fg-dim statt 11 px blass: genau diese Zeile liest man auf
+     Armlänge, während man die Scheiben vom Ständer nimmt. */
   return (
-    <p className="col-span-5 -mt-0.5 flex items-center justify-between gap-2 pb-1 pl-[34px] text-[11px] leading-relaxed text-fg-faint">
+    <p className="col-span-5 -mt-0.5 flex items-center justify-between gap-2 pb-1.5 pl-[34px] text-[13px] leading-relaxed text-fg-dim">
       <span>
         {b && (
           <>
-            je Seite <b className="font-semibold text-fg-dim">{beladungText(b)}</b>
+            je Seite <b className="font-semibold text-fg">{beladungText(b)}</b>
             {b.rest > 0 && <> (+{de(b.rest, 2)} kg gehen nicht auf)</>}
           </>
         )}
       </span>
-      {rekord && <Tag tone="akzent">Bestwert</Tag>}
+      {rekord && (
+        <span className="flex flex-col items-end gap-0.5">
+          <Tag tone="akzent">Bestwert</Tag>
+          <span className="text-[11px] text-fg-faint">{BESTWERT_TEXT[rekord]}</span>
+        </span>
+      )}
     </p>
   );
 }
@@ -867,7 +900,7 @@ function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
   if (saetze.length === 0) return null;
   return (
     <details className="group mt-3 rounded-sm bg-surface-2/60 px-3 py-2">
-      <summary className="flex min-h-[32px] cursor-pointer list-none items-center justify-between text-[12px] font-semibold text-fg-dim">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-[13px] font-semibold text-fg-dim">
         Aufwärmen bis {de(arbeitsKg, 1)} kg
         <span aria-hidden className="text-fg-faint transition group-open:rotate-90">›</span>
       </summary>
@@ -875,11 +908,11 @@ function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
         {saetze.map((s, i) => {
           const b = beladung(s.kg);
           return (
-            <li key={i} className="flex items-baseline justify-between gap-3 text-[12px] tabular-nums">
+            <li key={i} className="flex items-baseline justify-between gap-3 text-[14px] tabular-nums">
               <span className="text-fg">
                 {de(s.kg, 1)} kg × {s.wdh}
               </span>
-              <span className="text-fg-faint">{b ? beladungText(b) : ""}</span>
+              <span className="text-fg-dim">{b ? beladungText(b) : ""}</span>
             </li>
           );
         })}
@@ -889,50 +922,116 @@ function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
 }
 
 /**
- * Freitext zur Einheit, gespeichert beim Verlassen des Felds.
+ * Freitext zur Einheit, gespeichert während man tippt.
  *
- * Kein Speichern-Knopf: nach dem letzten Satz tippt man zwei Worte und
- * steckt das Handy weg. Ein Knopf, den man dabei vergisst, wäre eine Notiz,
- * die es nie gab.
+ * Kein Speichern-Knopf und nicht nur beim Verlassen des Felds: auf dem iPhone
+ * kommt das Verlassen nicht zuverlässig an, wenn man den Bildschirm sperrt
+ * oder die App wechselt — genau das, was man nach zwei getippten Worten tut.
+ * Deshalb speichert die Notiz kurz nach der letzten Eingabe, sofort beim
+ * Wegwechseln, und liegt bis zum Ja des Servers als Entwurf im localStorage.
+ * Beendet iOS die App ohne Netz, geht der Entwurf beim nächsten Öffnen raus.
  */
-function Notiz({ einheit, anfang }: { einheit: "push" | "pull"; anfang: string | null }) {
+function Notiz({
+  einheit,
+  tag,
+  anfang,
+}: {
+  einheit: "push" | "pull";
+  tag: string;
+  anfang: string | null;
+}) {
+  const id = useId();
+  const ablage = `kadenz_notiz_${tag}_${einheit}`;
   const [text, setText] = useState(anfang ?? "");
-  const [gespeichert, setGespeichert] = useState(anfang ?? "");
-  const [stand, setStand] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
+  const [stand, setStand] = useState<"ruhe" | "speichert" | "gespeichert" | "fehler">("ruhe");
+  const gespeichert = useRef(anfang ?? "");
+  const aktuell = useRef(text);
 
   async function sichern() {
-    if (text.trim() === gespeichert.trim()) return;
+    const inhalt = aktuell.current;
+    if (inhalt.trim() === gespeichert.current.trim()) return;
     setStand("speichert");
-    const r = await notizSpeichern(einheit, text);
-    if (r.ok) {
-      setGespeichert(text);
-      setStand("ruhe");
-    } else {
+    try {
+      const r = await notizSpeichern(einheit, tag, inhalt);
+      if (!r.ok) throw new Error(r.fehler);
+      gespeichert.current = inhalt;
+      try {
+        if (localStorage.getItem(ablage) === inhalt) localStorage.removeItem(ablage);
+      } catch {}
+      setStand("gespeichert");
+    } catch {
       setStand("fehler");
     }
   }
 
+  /* Ein Entwurf vom letzten Mal, der nie beim Server ankam, hat Vorrang vor
+     dem Stand der Datenbank — er ist jünger. */
+  useEffect(() => {
+    let entwurf: string | null = null;
+    try {
+      entwurf = localStorage.getItem(ablage);
+    } catch {}
+    if (entwurf === null || entwurf === gespeichert.current) return;
+    const t = setTimeout(() => {
+      aktuell.current = entwurf;
+      setText(entwurf);
+      void sichern();
+    }, 0);
+    return () => clearTimeout(t);
+    // Einmal beim Laden — sichern() liest ohnehin über Refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ablage]);
+
+  // Kurz nach der letzten Eingabe speichern.
+  useEffect(() => {
+    if (text.trim() === gespeichert.current.trim()) return;
+    const t = setTimeout(() => void sichern(), 800);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text]);
+
+  // Beim Wegwechseln sofort — der Timer oben läuft im Hintergrund nicht mehr.
+  useEffect(() => {
+    const weg = () => {
+      if (document.visibilityState === "hidden") void sichern();
+    };
+    document.addEventListener("visibilitychange", weg);
+    window.addEventListener("pagehide", weg);
+    return () => {
+      document.removeEventListener("visibilitychange", weg);
+      window.removeEventListener("pagehide", weg);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
-    <div className="mt-3.5">
-      <label htmlFor="einheit-notiz" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
-        Notiz
+    <div>
+      <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
+        Notiz zur Einheit
       </label>
       <textarea
-        id="einheit-notiz"
+        id={id}
         value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={sichern}
+        onChange={(e) => {
+          aktuell.current = e.target.value;
+          setText(e.target.value);
+          setStand("ruhe");
+          try {
+            localStorage.setItem(ablage, e.target.value);
+          } catch {}
+        }}
+        onBlur={() => void sichern()}
         rows={2}
         maxLength={1000}
         placeholder="Wie lief's? Etwa: Schulter zwickt, Bank war belegt"
         className="mt-1.5 w-full resize-none rounded-sm border border-transparent bg-surface-3 px-3 py-2.5 text-base leading-snug outline-none placeholder:text-fg-faint focus:border-accent"
       />
-      <p className="mt-1 h-4 text-[11px] text-fg-faint" role="status">
+      <p className="mt-1 min-h-4 text-[12px] text-fg-faint" role="status">
         {stand === "speichert"
           ? "Speichert…"
           : stand === "fehler"
-            ? "Nicht gespeichert — beim nächsten Verlassen des Felds erneut."
-            : text.trim() !== "" && text.trim() === gespeichert.trim()
+            ? "Noch nicht gespeichert — bleibt auf dem Handy und geht beim nächsten Versuch raus."
+            : stand === "gespeichert"
               ? "Gespeichert."
               : ""}
       </p>
