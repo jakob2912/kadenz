@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
+import { useOffline } from "next/offline";
 import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
 import { useRouter } from "next/navigation";
 import {
@@ -11,11 +12,36 @@ import {
   type GeloggterSatz,
 } from "@/lib/workouts";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
+import { geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
 
 const PAUSE_SEKUNDEN = 180;
 
 /** Wie lange "Pause vorbei" in der Kopfleiste stehen bleibt. */
 const VORBEI_SEKUNDEN = 12;
+
+/**
+ * Wo das Ende der laufenden Satzpause liegt, damit es ein Neuladen übersteht.
+ *
+ * iOS beendet eine PWA im Hintergrund gern ganz. Wer das Handy in der Pause
+ * weglegt und zurückkommt, bekommt die Seite frisch geladen — ohne diesen
+ * Eintrag wäre die Pause dann einfach weg.
+ */
+const PAUSE_ABLAGE = "kadenz_satzpause";
+
+/**
+ * Ein Ende, das länger als das hier zurückliegt, meldet sich nicht mehr mit
+ * Ton: wer nach zehn Minuten zurückkommt, braucht kein Piepen, das sagt,
+ * dass die Pause vor sieben Minuten vorbei war.
+ */
+const SIGNAL_NACHLAUF_MS = 5000;
+
+/**
+ * Date.now() hinter einem Namen. abhaken() läuft ausschließlich im Tipp-
+ * Handler, der React-Compiler kann das aber nicht sehen, weil die Funktion
+ * als Prop an SatzZeile weitergereicht wird — und meldet einen unreinen
+ * Aufruf beim Rendern, den es nicht gibt.
+ */
+const uhr = () => Date.now();
 
 /** Der Zustand eines abgehakten Satzes im Logger. */
 type Logged = { kg: number; reps: number };
@@ -84,12 +110,25 @@ export function TrainingLogger({
   const [fertigSeit, setFertigSeit] = useState<number | null>(finishedAtMs);
   const [zuletzt, setZuletzt] = useState<string | null>(null);
   const [speicherFehler, setSpeicherFehler] = useState<string | null>(null);
-  const [pause, setPause] = useState<number | null>(null);
+  /* Die Pause ist ein Zeitpunkt, kein Zähler. Vorher zählte ein setTimeout
+     jede Sekunde eins herunter — und iOS hält Zeitgeber einer Seite an,
+     sobald der Bildschirm aus ist. Wer das Handy in der Pause weglegte, fand
+     beim Aufnehmen noch 2:40 vor, obwohl drei Minuten vorbei waren. Jetzt
+     steht das Ende fest, und angezeigt wird der Abstand dazu. */
+  const [pauseEnde, setPauseEnde] = useState<number | null>(null);
+  /* Die ganze Länge der laufenden Pause, samt "+30 s". Der Ring zeigt den
+     Anteil daran — gegen die festen drei Minuten gerechnet stand er nach
+     einem "+30 s" eine halbe Minute lang voll, als liefe nichts. */
+  const [pauseDauer, setPauseDauer] = useState(PAUSE_SEKUNDEN * 1000);
+  const [jetzt, setJetzt] = useState(0);
   const [pauseVorbei, setPauseVorbei] = useState(false);
   const [ansage, setAnsage] = useState("");
   const [laufzeit, setLaufzeit] = useState(0);
   const start = useRef(startedAtMs);
   const reduce = useReducedMotion();
+  const offline = useOffline();
+
+  useBildschirmAn(fertigSeit === null);
 
   useEffect(() => {
     /* Der Rückfall auf "jetzt" steht hier und nicht im Server-Render: Date.now()
@@ -112,28 +151,77 @@ export function TrainingLogger({
     return () => clearInterval(id);
   }, [fertigSeit]);
 
-  useEffect(() => {
-    if (pause === null) return;
+  /* Eine Pause, die vor dem Neuladen lief, wieder aufnehmen.
 
-    /* Das Ende der Pause fällt in den Timeout und nicht in den Rumpf des
-       Effekts. Vorher zählte der Countdown bis 0 herunter, und der nächste
-       Effektlauf räumte diese 0 sofort wieder weg: ein Renderdurchgang, der
-       im Gym als kurz aufblitzende "0:00" sichtbar war, und für React ein
-       setState mitten im Effekt. Jetzt geht die letzte Sekunde direkt auf
-       "vorbei" — dieselbe Dauer, ein Renderdurchgang weniger. */
+     Gelesen wird sofort im Effekt — der Effekt darunter schreibt beim ersten
+     Lauf "keine Pause" zurück und hätte den Eintrag sonst gelöscht, bevor ihn
+     jemand liest. Gesetzt wird erst im Timeout: localStorage gibt es nur im
+     Browser, und ein setState direkt im Effekt rendert sofort ein zweites Mal. */
+  useEffect(() => {
+    let gespeichert: { ende: number; dauer?: number; einheit: string } | null = null;
+    try {
+      gespeichert = JSON.parse(localStorage.getItem(PAUSE_ABLAGE) ?? "null");
+    } catch {}
+    if (gespeichert?.einheit !== session.key) return;
+
+    const ende = gespeichert.ende;
+    const dauer = gespeichert.dauer ?? PAUSE_SEKUNDEN * 1000;
     const id = setTimeout(() => {
-      if (pause <= 1) {
+      if (ende <= Date.now()) return;
+      setJetzt(Date.now());
+      setPauseDauer(dauer);
+      setPauseEnde(ende);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [session.key]);
+
+  /* Das Pausenende mitschreiben, damit es ein Neuladen übersteht. */
+  useEffect(() => {
+    try {
+      if (pauseEnde === null) localStorage.removeItem(PAUSE_ABLAGE);
+      else
+        localStorage.setItem(
+          PAUSE_ABLAGE,
+          JSON.stringify({ ende: pauseEnde, dauer: pauseDauer, einheit: session.key })
+        );
+    } catch {}
+  }, [pauseEnde, pauseDauer, session.key]);
+
+  useEffect(() => {
+    if (pauseEnde === null) return;
+
+    function ticken() {
+      const t = Date.now();
+      if (t >= pauseEnde!) {
         // Abgelaufen, nicht abgebrochen: nur dann ist die Meldung fällig.
-        setPause(null);
+        setPauseEnde(null);
         setPauseVorbei(true);
         setAnsage("Satzpause vorbei.");
+        if (t - pauseEnde! < SIGNAL_NACHLAUF_MS) pauseVorbeiSignal();
         return;
       }
-      setPause(pause - 1);
-    }, 1000);
+      setJetzt(t);
+    }
 
-    return () => clearTimeout(id);
-  }, [pause]);
+    /* Viertelsekunde statt Sekunde: bei einem Intervall von genau 1000 ms
+       springt die Anzeige je nach Phase zur vollen Sekunde gelegentlich
+       zwei Sekunden auf einmal. */
+    const id = setInterval(ticken, 250);
+    /* Beim Zurückkommen aus dem Hintergrund sofort nachrechnen, statt bis
+       zum nächsten Intervall die alte Zahl stehen zu lassen. */
+    const sichtbar = () => {
+      if (document.visibilityState === "visible") ticken();
+    };
+    document.addEventListener("visibilitychange", sichtbar);
+
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", sichtbar);
+    };
+  }, [pauseEnde]);
+
+  const pause =
+    pauseEnde === null ? null : Math.max(0, Math.ceil((pauseEnde - jetzt) / 1000));
 
   /* Ohne diese Meldung ging der Wechsel von Countdown auf Laufzeit still
      vonstatten. Im Gym schaut man während der Pause nicht auf das Display —
@@ -185,7 +273,11 @@ export function TrainingLogger({
     );
     setZuletzt(key);
     setPauseVorbei(false);
-    setPause(PAUSE_SEKUNDEN);
+    const t = uhr();
+    setJetzt(t);
+    setPauseEnde(t + PAUSE_SEKUNDEN * 1000);
+    setPauseDauer(PAUSE_SEKUNDEN * 1000);
+    tonVorbereiten();
     // Der Text enthält Übung und Satznummer, damit er sich zwischen zwei
     // Sätzen unterscheidet — gleicher Text wird von Screenreadern nicht
     // erneut vorgelesen.
@@ -238,7 +330,13 @@ export function TrainingLogger({
                     }`}
       >
         <Ring
-          fortschritt={kopfTon === "pause" ? pause! / PAUSE_SEKUNDEN : kopfTon === "vorbei" ? 1 : 0}
+          fortschritt={
+            kopfTon === "pause"
+              ? Math.min(1, (pause! * 1000) / pauseDauer)
+              : kopfTon === "vorbei"
+                ? 1
+                : 0
+          }
           farbe={kopfTon === "pause" ? "var(--color-ready)" : "var(--color-accent)"}
         />
         <div className="min-w-0 flex-1">
@@ -276,11 +374,18 @@ export function TrainingLogger({
               exit={reduce ? undefined : { opacity: 0, x: 8 }}
               className="flex shrink-0 gap-2"
             >
-              <Klein onClick={() => setPause((p) => (p ?? 0) + 30)}>+30 s</Klein>
+              <Klein
+                onClick={() => {
+                  setPauseEnde((e) => (e ?? Date.now()) + 30_000);
+                  setPauseDauer((d) => d + 30_000);
+                }}
+              >
+                +30 s
+              </Klein>
               <Klein
                 beschriftung="Satzpause beenden und weitermachen"
                 onClick={() => {
-                  setPause(null);
+                  setPauseEnde(null);
                   setPauseVorbei(false);
                 }}
               >
@@ -312,6 +417,15 @@ export function TrainingLogger({
           <Kennzahl label="Sätze" wert={String(saetzeFertig)} einheit={`/${saetzeGesamt}`} />
           <Kennzahl label="Pause" wert="3:00" />
         </div>
+        {offline && (
+          <p
+            role="status"
+            className="mt-4 rounded-sm border border-caution/30 bg-caution/10 px-3.5 py-2.5 text-xs leading-relaxed text-caution"
+          >
+            Kein Netz. Abgehakte Sätze bleiben hier und gehen raus, sobald wieder Empfang
+            da ist — die Seite bis dahin nicht neu laden.
+          </p>
+        )}
         {speicherFehler && (
           <p className="mt-4 rounded-sm border border-strain/30 bg-strain/10 px-3.5 py-2.5 text-xs leading-relaxed text-strain">
             Satz konnte nicht gespeichert werden: {speicherFehler} — er bleibt hier stehen,
@@ -860,4 +974,45 @@ export function TrainingStart({
       </Card>
     </div>
   );
+}
+
+/**
+ * Hält den Bildschirm an, solange die Einheit läuft — wenn es in den
+ * Einstellungen so gewählt ist.
+ *
+ * Standard ist aus: ein Bildschirm, der eine Stunde lang leuchtet, kostet
+ * spürbar Akku, und mit der Push-Nachricht am Pausenende braucht es ihn
+ * nicht. Wer lieber auf die Uhr schaut als auf eine Nachricht, schaltet es
+ * ein. Safari hebt die Sperre auf, sobald die App in den Hintergrund geht,
+ * daher wird sie beim Zurückkommen neu angefordert.
+ */
+function useBildschirmAn(laeuft: boolean) {
+  useEffect(() => {
+    if (!laeuft || !geraetLesen("wachhalten") || !("wakeLock" in navigator)) return;
+
+    let sperre: WakeLockSentinel | null = null;
+    let aus = false;
+
+    async function anfordern() {
+      try {
+        const neu = await navigator.wakeLock.request("screen");
+        if (aus) void neu.release();
+        else sperre = neu;
+      } catch {
+        // Akku-Sparmodus oder nicht sichtbar — dann eben nicht.
+      }
+    }
+
+    const sichtbar = () => {
+      if (document.visibilityState === "visible") void anfordern();
+    };
+
+    void anfordern();
+    document.addEventListener("visibilitychange", sichtbar);
+    return () => {
+      aus = true;
+      document.removeEventListener("visibilitychange", sichtbar);
+      void sperre?.release();
+    };
+  }, [laeuft]);
 }

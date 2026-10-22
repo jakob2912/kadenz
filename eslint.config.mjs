@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Von `prisma generate` erzeugt, nicht von Hand geschrieben — ohne diese
+    // Zeile meldete `npm run lint` rund 950 Probleme, alle aus dem Client.
+    "src/generated/**",
+    ".next-build/**",
   ]),
 ]);
 

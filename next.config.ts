@@ -46,6 +46,41 @@ const nextConfig: NextConfig = {
    * pauschal für eine ganze Seite.
    */
   cacheComponents: true,
+
+  experimental: {
+    /**
+     * Funkloch im Gym.
+     *
+     * Bisher scheiterte satzSpeichern() ohne Netz sofort, und der Logger
+     * zeigte "Satz konnte nicht gespeichert werden … trag ihn später nach" —
+     * nachtragen hieß: sich merken, welcher Satz, und ihn nach dem Training
+     * über den MCP-Server einspielen. Mit diesem Schalter hält Next eine
+     * Server Action, die am Netz scheitert, zurück und schickt sie selbst
+     * nach, sobald wieder Verbindung da ist. Der Logger zeigt in der Zeit
+     * einen Hinweis (useOffline in training-logger.tsx).
+     *
+     * Grenze: das gilt nur, solange die Seite offen bleibt. Wird sie ohne
+     * Netz neu geladen, sind zurückgehaltene Sätze weg — der Hinweis sagt
+     * deshalb ausdrücklich, die Seite nicht neu zu laden.
+     */
+    useOffline: true,
+  },
+
+  /**
+   * Der Service Worker darf nie aus einem Cache kommen: eine hängengebliebene
+   * alte Version würde sich selbst immer weiter ausliefern.
+   */
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

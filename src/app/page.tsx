@@ -6,6 +6,7 @@ import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
 import { rotationMitPlan } from "@/lib/wochenplan";
 import { wienerStunde } from "@/lib/datum";
 import { GewichtEingabe } from "@/components/gewicht-eingabe";
+import { InstallHinweis } from "@/components/pwa";
 import {
   Card,
   Eyebrow,
@@ -115,6 +116,8 @@ async function Dashboard() {
           {gruss()}, Jakob
         </h1>
       </header>
+
+      <InstallHinweis className="mt-6" />
 
       <div className="mt-7 grid items-start gap-4 md:grid-cols-[1.05fr_0.95fr]">
         <div className="flex flex-col gap-3.5">
