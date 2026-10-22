@@ -4,5 +4,9 @@
   "regions": [
     "fra1"
   ],
-  "buildCommand": "bash scripts/build.sh"
+  "buildCommand": "bash scripts/build.sh",
+  "crons": [
+    { "path": "/api/cron/morgen", "schedule": "15 5 * * *" },
+    { "path": "/api/cron/abend", "schedule": "30 16 * * *" }
+  ]
 }

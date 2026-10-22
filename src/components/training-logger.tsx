@@ -6,6 +6,7 @@ import { useOffline } from "next/offline";
 import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
 import { useRouter } from "next/navigation";
 import {
+  notizSpeichern,
   satzSpeichern,
   trainingBeenden,
   trainingStarten,
@@ -13,20 +14,23 @@ import {
 } from "@/lib/workouts";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
 import { geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
+import { satzpauseAnkuendigen } from "@/lib/push-actions";
+import {
+  ausgangAblegen,
+  ausgangErledigt,
+  ausgangOffen,
+  pauseLesen,
+  pauseSchreiben,
+  type OffenerSatz,
+} from "@/lib/ablage";
+import { wienerDatum } from "@/lib/datum";
+import { e1rm } from "@/lib/kraft";
+import { aufwaermen, beladung, beladungText } from "@/lib/hantel";
 
 const PAUSE_SEKUNDEN = 180;
 
 /** Wie lange "Pause vorbei" in der Kopfleiste stehen bleibt. */
 const VORBEI_SEKUNDEN = 12;
-
-/**
- * Wo das Ende der laufenden Satzpause liegt, damit es ein Neuladen übersteht.
- *
- * iOS beendet eine PWA im Hintergrund gern ganz. Wer das Handy in der Pause
- * weglegt und zurückkommt, bekommt die Seite frisch geladen — ohne diesen
- * Eintrag wäre die Pause dann einfach weg.
- */
-const PAUSE_ABLAGE = "kadenz_satzpause";
 
 /**
  * Ein Ende, das länger als das hier zurückliegt, meldet sich nicht mehr mit
@@ -42,6 +46,23 @@ const SIGNAL_NACHLAUF_MS = 5000;
  * Aufruf beim Rendern, den es nicht gibt.
  */
 const uhr = () => Date.now();
+
+/**
+ * Einen Satz zum Server schicken — über den Ausgang im localStorage.
+ *
+ * Erst ablegen, dann senden, und erst nach dem Ja des Servers austragen.
+ * Dazwischen hält Next die Anfrage ohne Netz zurück (useOffline) — aber nur
+ * im Speicher. Beendet iOS die App in dieser Zeit, liegt der Satz noch im
+ * Ausgang und geht beim nächsten Öffnen raus. Doppelt senden schadet nicht,
+ * satzSpeichern ist ein Upsert.
+ */
+function senden(satz: OffenerSatz, melden: (fehler: string | null) => void) {
+  ausgangAblegen(satz);
+  void satzSpeichern(satz).then((r) => {
+    if (r.ok) ausgangErledigt(satz);
+    melden(r.ok ? null : r.fehler);
+  });
+}
 
 /** Der Zustand eines abgehakten Satzes im Logger. */
 type Logged = { kg: number; reps: number };
@@ -83,10 +104,21 @@ export function TrainingLogger({
   startedAtMs,
   finishedAtMs = null,
   geloggt = [],
+  bestwerte = {},
+  notiz = null,
   wechsel,
 }: {
   uebungen: PlannedExercise[];
   session: Einheitskopf;
+  /**
+   * Bisher bestes geschätztes Maximum je Übung, ohne heute — siehe
+   * bestwerteFuer() in workouts.ts. Fehlt eine Übung, gibt es für sie keinen
+   * Bestwert: der erste Satz einer neuen Übung ist kein Rekord, sondern der
+   * Anfang.
+   */
+  bestwerte?: Record<string, number>;
+  /** Die Notiz zur Einheit, falls heute schon eine geschrieben wurde. */
+  notiz?: string | null;
   /**
    * Beginn der Einheit aus der Datenbank — nicht der Zeitpunkt des
    * Seitenaufrufs. `null`, wenn die Datenbank ihn gerade nicht hergibt: dann
@@ -151,41 +183,44 @@ export function TrainingLogger({
     return () => clearInterval(id);
   }, [fertigSeit]);
 
-  /* Eine Pause, die vor dem Neuladen lief, wieder aufnehmen.
-
-     Gelesen wird sofort im Effekt — der Effekt darunter schreibt beim ersten
-     Lauf "keine Pause" zurück und hätte den Eintrag sonst gelöscht, bevor ihn
-     jemand liest. Gesetzt wird erst im Timeout: localStorage gibt es nur im
-     Browser, und ein setState direkt im Effekt rendert sofort ein zweites Mal. */
+  /* Nach einem Neuladen wieder aufnehmen, was nur im Browser lag: die
+     laufende Satzpause und Sätze, die ohne Netz abgehakt wurden und nie beim
+     Server ankamen (lib/ablage.ts). Gesetzt wird im Timeout statt direkt im
+     Effekt — localStorage gibt es erst im Browser, und ein setState mitten
+     im Effekt rendert sofort ein zweites Mal. */
   useEffect(() => {
-    let gespeichert: { ende: number; dauer?: number; einheit: string } | null = null;
-    try {
-      gespeichert = JSON.parse(localStorage.getItem(PAUSE_ABLAGE) ?? "null");
-    } catch {}
-    if (gespeichert?.einheit !== session.key) return;
-
-    const ende = gespeichert.ende;
-    const dauer = gespeichert.dauer ?? PAUSE_SEKUNDEN * 1000;
     const id = setTimeout(() => {
-      if (ende <= Date.now()) return;
-      setJetzt(Date.now());
-      setPauseDauer(dauer);
-      setPauseEnde(ende);
+      const t = Date.now();
+
+      const gespeichert = pauseLesen(session.key);
+      if (gespeichert && gespeichert.ende > t) {
+        setJetzt(t);
+        setPauseDauer(gespeichert.dauer);
+        setPauseEnde(gespeichert.ende);
+      } else if (gespeichert) {
+        pauseSchreiben(null);
+        // Während des Neuladens abgelaufen: das ist trotzdem eine Auskunft.
+        if (t - gespeichert.ende < 60_000) setPauseVorbei(true);
+      }
+
+      const offen = ausgangOffen(t);
+      const heute = wienerDatum(new Date(t));
+      const platz = new Map(uebungen.map((ex, i) => [ex.name, i]));
+      const zurueck: Record<string, Logged> = {};
+      for (const satz of offen) {
+        const i = platz.get(satz.exercise);
+        if (satz.kind === session.key && i !== undefined && wienerDatum(new Date(satz.erfasstAm)) === heute) {
+          zurueck[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps };
+        }
+        senden(satz, setSpeicherFehler);
+      }
+      if (Object.keys(zurueck).length > 0) setLogged((prev) => ({ ...prev, ...zurueck }));
     }, 0);
     return () => clearTimeout(id);
+    // uebungen ist absichtlich nicht dabei: der Ausgang soll genau einmal beim
+    // Laden geleert werden, nicht bei jedem neuen Plan-Objekt vom Server.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.key]);
-
-  /* Das Pausenende mitschreiben, damit es ein Neuladen übersteht. */
-  useEffect(() => {
-    try {
-      if (pauseEnde === null) localStorage.removeItem(PAUSE_ABLAGE);
-      else
-        localStorage.setItem(
-          PAUSE_ABLAGE,
-          JSON.stringify({ ende: pauseEnde, dauer: pauseDauer, einheit: session.key })
-        );
-    } catch {}
-  }, [pauseEnde, pauseDauer, session.key]);
 
   useEffect(() => {
     if (pauseEnde === null) return;
@@ -194,6 +229,7 @@ export function TrainingLogger({
       const t = Date.now();
       if (t >= pauseEnde!) {
         // Abgelaufen, nicht abgebrochen: nur dann ist die Meldung fällig.
+        pauseSchreiben(null);
         setPauseEnde(null);
         setPauseVorbei(true);
         setAnsage("Satzpause vorbei.");
@@ -238,6 +274,29 @@ export function TrainingLogger({
   const volumen = Object.values(logged).reduce((v, s) => v + s.kg * s.reps, 0);
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
 
+  /* Bestwerte von heute, aus den abgehakten Sätzen abgeleitet statt als
+     eigener State: korrigiert man einen Satz nach unten, verschwindet die
+     Markierung von selbst wieder. */
+  const rekorde = new Map<string, number>();
+  uebungen.forEach((ex, i) => {
+    const bisher = bestwerte[ex.name];
+    if (bisher === undefined) return;
+    heutigeSaetze(ex).forEach((_, si) => {
+      const satz = logged[`${i}-${si}`];
+      const wert = satz ? e1rm(satz) : null;
+      if (wert !== null && wert > bisher + 0.01) rekorde.set(`${i}-${si}`, wert);
+    });
+  });
+  const rekordUebungen = uebungen
+    .map((ex, i) => {
+      let max = 0;
+      rekorde.forEach((wert, key) => {
+        if (key.startsWith(`${i}-`)) max = Math.max(max, wert);
+      });
+      return max > 0 ? { name: ex.name, wert: max, vorher: bestwerte[ex.name] } : null;
+    })
+    .filter((r) => r !== null);
+
   /* Der Abschluss gehört in die Datenbank, nicht nur in diesen State. Sonst
      ist die Einheit nach dem nächsten Seitenaufruf wieder offen, und die
      Laufzeit zählt weiter — genau das war der Fall, in dem Trainings nie
@@ -249,7 +308,7 @@ export function TrainingLogger({
     if (!alleSaetzeFertig || fertigSeit !== null) return;
 
     let abgebrochen = false;
-    void trainingBeenden(session.key).then((r) => {
+    void trainingBeenden(session.key, undefined, Date.now()).then((r) => {
       if (!abgebrochen && r.ok) setFertigSeit(r.finishedAtMs);
     });
 
@@ -277,15 +336,23 @@ export function TrainingLogger({
     setJetzt(t);
     setPauseEnde(t + PAUSE_SEKUNDEN * 1000);
     setPauseDauer(PAUSE_SEKUNDEN * 1000);
+    pauseSchreiben({ ende: t + PAUSE_SEKUNDEN * 1000, dauer: PAUSE_SEKUNDEN * 1000, einheit: session.key });
     tonVorbereiten();
+    // Für den gesperrten Bildschirm: der Server schickt am Ende eine
+    // Push-Nachricht, falls sie eingeschaltet ist. Scheitert das, läuft der
+    // Timer hier trotzdem — die Nachricht ist Zugabe, nicht Grundlage.
+    void satzpauseAnkuendigen(t + PAUSE_SEKUNDEN * 1000);
     // Der Text enthält Übung und Satznummer, damit er sich zwischen zwei
     // Sätzen unterscheidet — gleicher Text wird von Screenreadern nicht
     // erneut vorgelesen.
-    setAnsage(`${exercise}, Satz ${setIndex + 1} gespeichert. Satzpause drei Minuten.`);
+    const wert = e1rm({ kg, reps });
+    const bisher = bestwerte[exercise];
+    const rekord = wert !== null && bisher !== undefined && wert > bisher + 0.01;
+    setAnsage(
+      `${exercise}, Satz ${setIndex + 1} gespeichert.${rekord ? " Neuer Bestwert!" : ""} Satzpause drei Minuten.`
+    );
 
-    void satzSpeichern({ kind: session.key, exercise, setIndex, kg, reps }).then((r) => {
-      setSpeicherFehler(r.ok ? null : r.fehler);
-    });
+    senden({ kind: session.key, exercise, setIndex, kg, reps, erfasstAm: t }, setSpeicherFehler);
   }
 
   /**
@@ -311,7 +378,10 @@ export function TrainingLogger({
   const kopfTon = pause !== null ? "pause" : pauseVorbei ? "vorbei" : "ruhe";
 
   return (
-    <div className="mx-auto max-w-[520px] md:max-w-none">
+    /* Jede Berührung hält den Tonkanal offen. Nach einem Neuladen oder nach
+       dem Entsperren ist er sonst zu, und eine wiederhergestellte Pause
+       endete ohne Ton, bis der nächste Satz abgehakt wird. */
+    <div className="mx-auto max-w-[520px] md:max-w-none" onPointerDown={tonVorbereiten}>
       {/* Kopfleiste wie in Lift Off: zeigt normalerweise die Laufzeit und
           übernimmt während der Satzpause den Countdown.
 
@@ -376,8 +446,11 @@ export function TrainingLogger({
             >
               <Klein
                 onClick={() => {
-                  setPauseEnde((e) => (e ?? Date.now()) + 30_000);
-                  setPauseDauer((d) => d + 30_000);
+                  const neu = (pauseEnde ?? uhr()) + 30_000;
+                  setPauseEnde(neu);
+                  setPauseDauer(pauseDauer + 30_000);
+                  pauseSchreiben({ ende: neu, dauer: pauseDauer + 30_000, einheit: session.key });
+                  void satzpauseAnkuendigen(neu);
                 }}
               >
                 +30 s
@@ -387,6 +460,8 @@ export function TrainingLogger({
                 onClick={() => {
                   setPauseEnde(null);
                   setPauseVorbei(false);
+                  pauseSchreiben(null);
+                  void satzpauseAnkuendigen(null);
                 }}
               >
                 Weiter
@@ -422,14 +497,14 @@ export function TrainingLogger({
             role="status"
             className="mt-4 rounded-sm border border-caution/30 bg-caution/10 px-3.5 py-2.5 text-xs leading-relaxed text-caution"
           >
-            Kein Netz. Abgehakte Sätze bleiben hier und gehen raus, sobald wieder Empfang
-            da ist — die Seite bis dahin nicht neu laden.
+            Kein Netz. Abgehakte Sätze bleiben auf dem Handy und gehen raus, sobald wieder
+            Empfang da ist — auch wenn die App zwischendurch geschlossen wird.
           </p>
         )}
         {speicherFehler && (
           <p className="mt-4 rounded-sm border border-strain/30 bg-strain/10 px-3.5 py-2.5 text-xs leading-relaxed text-strain">
-            Satz konnte nicht gespeichert werden: {speicherFehler} — er bleibt hier stehen,
-            trag ihn später nach.
+            Satz konnte nicht gespeichert werden: {speicherFehler} — er bleibt auf dem Handy
+            und wird beim nächsten Öffnen der Trainingsseite erneut gesendet.
           </p>
         )}
       </header>
@@ -485,9 +560,15 @@ export function TrainingLogger({
                 ))}
               </div>
 
+              {langhantel(ex) && saetze.length > 0 && (
+                <Aufwaermen arbeitsKg={saetze[0].kg} />
+              )}
+
               {saetze.map((satz, si) => (
                 <SatzZeile
                   key={si}
+                  langhantel={langhantel(ex)}
+                  rekord={rekorde.has(`${i}-${si}`)}
                   nummer={si + 1}
                   prev={ex.prev[si]}
                   zielKg={satz.kg}
@@ -543,7 +624,21 @@ export function TrainingLogger({
                 einheit=" kg"
               />
               <Kennzahl label="Dauer" wert={mmss(laufzeit)} />
+              {rekordUebungen.length > 0 && (
+                <Kennzahl label="Bestwerte" wert={String(rekordUebungen.length)} />
+              )}
             </div>
+            {rekordUebungen.length > 0 && (
+              <ul className="mt-3.5 flex flex-col gap-1.5">
+                {rekordUebungen.map((r) => (
+                  <li key={r.name} className="text-[13px] leading-relaxed text-fg-dim">
+                    <b className="font-semibold text-accent">{r.name}</b> — geschätztes Maximum{" "}
+                    {de(r.wert, 1)} kg, bisher {de(r.vorher, 1)} kg
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Notiz einheit={session.key} anfang={notiz} />
             <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
               Jeder Satz ist einzeln gespeichert, sobald du ihn abgehakt hast. Korrigieren
               geht weiterhin: Tipp auf den Haken oder ins Feld.
@@ -573,10 +668,16 @@ function SatzZeile({
   vorgegeben = false,
   logged,
   hervorgehoben,
+  langhantel = false,
+  rekord = false,
   onLog,
   onKorrigieren,
 }: {
   nummer: number;
+  /** Langhantelübung: dann steht unter dem Satz, welche Scheiben drauf gehören. */
+  langhantel?: boolean;
+  /** Schwerer als alles bisher (geschätztes Maximum) — siehe rekorde im Logger. */
+  rekord?: boolean;
   prev?: string;
   zielKg: number;
   zielReps: number;
@@ -694,6 +795,14 @@ function SatzZeile({
         </svg>
       </button>
 
+      {(langhantel || rekord) && (
+        <ScheibenZeile
+          kg={fertig ? logged!.kg : Number((kg || String(zielKg)).replace(",", ".")) || 0}
+          langhantel={langhantel}
+          rekord={rekord}
+        />
+      )}
+
       {repsUngueltig && (
         // Direkt unter der Zeile statt als Sammelmeldung oben: im Gym sieht
         // man sonst nicht, welcher der 16 Sätze gemeint ist.
@@ -701,6 +810,132 @@ function SatzZeile({
           Wiederholungen müssen größer als 0 sein.
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * Ist das eine Langhantelübung? Beim 5/3/1-Bankdrücken immer, sonst wenn die
+ * Notiz im Katalog es sagt ("Langhantel, Flachbank"). Maschinen und Kurzhanteln
+ * brauchen keinen Scheibenrechner.
+ */
+function langhantel(ex: PlannedExercise): boolean {
+  return ex.programmSaetze.length > 0 || /langhantel/i.test(ex.note ?? "");
+}
+
+/**
+ * Die Zeile unter einem Satz: Scheiben je Seite, und ob es ein Bestwert ist.
+ *
+ * Steht unter dem Satz statt in einem eigenen Rechner: das Gewicht kommt
+ * beim 5/3/1 aus dem Programm und ist für jeden Satz ein anderes. Ein Rechner,
+ * in den man es erst eintippt, wäre wieder die Kopfrechnung, die er
+ * abnehmen soll.
+ */
+function ScheibenZeile({
+  kg,
+  langhantel,
+  rekord,
+}: {
+  kg: number;
+  langhantel: boolean;
+  rekord: boolean;
+}) {
+  const b = langhantel ? beladung(kg) : null;
+  return (
+    <p className="col-span-5 -mt-0.5 flex items-center justify-between gap-2 pb-1 pl-[34px] text-[11px] leading-relaxed text-fg-faint">
+      <span>
+        {b && (
+          <>
+            je Seite <b className="font-semibold text-fg-dim">{beladungText(b)}</b>
+            {b.rest > 0 && <> (+{de(b.rest, 2)} kg gehen nicht auf)</>}
+          </>
+        )}
+      </span>
+      {rekord && <Tag tone="akzent">Bestwert</Tag>}
+    </p>
+  );
+}
+
+/**
+ * Die Aufwärmtreppe vor dem ersten Arbeitssatz, eingeklappt.
+ *
+ * Nicht abhakbar und nicht gespeichert: Aufwärmsätze sind keine Messung, und
+ * sie mitzuloggen hieße, dass sie in Volumen und Kraftverlauf auftauchen.
+ */
+function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
+  const saetze = aufwaermen(arbeitsKg);
+  if (saetze.length === 0) return null;
+  return (
+    <details className="group mt-3 rounded-sm bg-surface-2/60 px-3 py-2">
+      <summary className="flex min-h-[32px] cursor-pointer list-none items-center justify-between text-[12px] font-semibold text-fg-dim">
+        Aufwärmen bis {de(arbeitsKg, 1)} kg
+        <span aria-hidden className="text-fg-faint transition group-open:rotate-90">›</span>
+      </summary>
+      <ol className="mt-1.5 flex flex-col gap-1 pb-1">
+        {saetze.map((s, i) => {
+          const b = beladung(s.kg);
+          return (
+            <li key={i} className="flex items-baseline justify-between gap-3 text-[12px] tabular-nums">
+              <span className="text-fg">
+                {de(s.kg, 1)} kg × {s.wdh}
+              </span>
+              <span className="text-fg-faint">{b ? beladungText(b) : ""}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </details>
+  );
+}
+
+/**
+ * Freitext zur Einheit, gespeichert beim Verlassen des Felds.
+ *
+ * Kein Speichern-Knopf: nach dem letzten Satz tippt man zwei Worte und
+ * steckt das Handy weg. Ein Knopf, den man dabei vergisst, wäre eine Notiz,
+ * die es nie gab.
+ */
+function Notiz({ einheit, anfang }: { einheit: "push" | "pull"; anfang: string | null }) {
+  const [text, setText] = useState(anfang ?? "");
+  const [gespeichert, setGespeichert] = useState(anfang ?? "");
+  const [stand, setStand] = useState<"ruhe" | "speichert" | "fehler">("ruhe");
+
+  async function sichern() {
+    if (text.trim() === gespeichert.trim()) return;
+    setStand("speichert");
+    const r = await notizSpeichern(einheit, text);
+    if (r.ok) {
+      setGespeichert(text);
+      setStand("ruhe");
+    } else {
+      setStand("fehler");
+    }
+  }
+
+  return (
+    <div className="mt-3.5">
+      <label htmlFor="einheit-notiz" className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
+        Notiz
+      </label>
+      <textarea
+        id="einheit-notiz"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={sichern}
+        rows={2}
+        maxLength={1000}
+        placeholder="Wie lief's? Etwa: Schulter zwickt, Bank war belegt"
+        className="mt-1.5 w-full resize-none rounded-sm border border-transparent bg-surface-3 px-3 py-2.5 text-base leading-snug outline-none placeholder:text-fg-faint focus:border-accent"
+      />
+      <p className="mt-1 h-4 text-[11px] text-fg-faint" role="status">
+        {stand === "speichert"
+          ? "Speichert…"
+          : stand === "fehler"
+            ? "Nicht gespeichert — beim nächsten Verlassen des Felds erneut."
+            : text.trim() !== "" && text.trim() === gespeichert.trim()
+              ? "Gespeichert."
+              : ""}
+      </p>
     </div>
   );
 }
@@ -994,6 +1229,9 @@ function useBildschirmAn(laeuft: boolean) {
     let aus = false;
 
     async function anfordern() {
+      // Hält die Sperre noch, keine zweite anfordern — die erste liefe sonst
+      // ungesehen weiter und würde beim Aufräumen nicht freigegeben.
+      if (sperre && !sperre.released) return;
       try {
         const neu = await navigator.wakeLock.request("screen");
         if (aus) void neu.release();

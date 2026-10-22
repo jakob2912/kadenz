@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { ZUGANG_COOKIE, gleich, zugangsPasswort, zugangsToken } from "@/lib/zugang";
+import { ZUGANG_COOKIE, erwartetesToken, gleich, zugangsPasswort } from "@/lib/zugang";
 
 /**
  * Zugangsschutz vor jeder Seite und jeder Server Action — siehe lib/zugang.ts.
@@ -9,8 +9,8 @@ import { ZUGANG_COOKIE, gleich, zugangsPasswort, zugangsToken } from "@/lib/zuga
  * (Server Actions, API) bekommt ein 401 — eine Umleitung auf HTML wäre für
  * einen fetch()-Aufrufer nur eine unverständliche Antwort.
  *
- * Ausgenommen sind die Cron-Routen (die prüfen ihr eigenes CRON_SECRET, Vercel
- * hat kein Cookie) und alles, was der Home-Bildschirm vor der Anmeldung
+ * Ausgenommen sind die Cron-Routen unter /api/cron/ (Morgen- und
+ * Abend-Nachricht; sie prüfen ihr eigenes CRON_SECRET, Vercel hat kein Cookie) und alles, was der Home-Bildschirm vor der Anmeldung
  * braucht: Manifest, Icons, Service Worker.
  */
 export async function proxy(request: NextRequest) {
@@ -21,7 +21,7 @@ export async function proxy(request: NextRequest) {
   if (pfad === "/anmelden" || pfad.startsWith("/api/cron/")) return NextResponse.next();
 
   const cookie = request.cookies.get(ZUGANG_COOKIE)?.value;
-  if (cookie && gleich(cookie, await zugangsToken(passwort))) return NextResponse.next();
+  if (cookie && gleich(cookie, await erwartetesToken(passwort))) return NextResponse.next();
 
   const istSeitenaufruf =
     request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/html");

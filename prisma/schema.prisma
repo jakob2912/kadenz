@@ -368,3 +368,28 @@ model BankTrainingsmax {
 
   @@index([gesetztAm])
 }
+
+// ─────────────────────────────────────────────────────────────
+// Benachrichtigungen
+// ─────────────────────────────────────────────────────────────
+
+/// Ein Gerät, das Push-Nachrichten bekommt.
+///
+/// Je Gerät eine Zeile, nicht eine für "Jakob": das iPhone und der Laptop
+/// haben je ein eigenes Abo, und jedes davon kann unabhängig ablaufen. Der
+/// Endpoint ist die Adresse beim Push-Dienst (Apple, Google, Mozilla) und
+/// zugleich eindeutig — derselbe Browser meldet sich nach einem Neuladen mit
+/// demselben Endpoint wieder, das wird dann ein Upsert statt einer Dublette.
+///
+/// Antwortet der Push-Dienst mit 404 oder 410, ist das Abo tot (App gelöscht,
+/// Berechtigung entzogen) und die Zeile wird gelöscht — siehe lib/push.ts.
+model PushAbo {
+  endpoint String @id
+  p256dh   String
+  auth     String
+  /// Kurzbeschreibung aus dem User-Agent ("iPhone", "Mac"), nur zum Anzeigen.
+  geraet   String?
+  angelegt DateTime @default(now())
+  /// Letzte Nachricht, die der Push-Dienst angenommen hat.
+  zuletztZugestellt DateTime?
+}

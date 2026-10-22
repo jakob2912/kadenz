@@ -40,7 +40,17 @@ self.addEventListener("install", () => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      // Navigation Preload: der Browser startet die Seitenanfrage, während
+      // der Worker noch hochfährt. Ohne das wartet auf iOS jeder Kaltstart der
+      // App erst auf den Worker und dann auf das Netz.
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable();
+      }
+      await self.clients.claim();
+    })()
+  );
 });
 
 self.addEventListener("fetch", (event) => {
@@ -48,9 +58,17 @@ self.addEventListener("fetch", (event) => {
   if (req.mode !== "navigate") return;
 
   event.respondWith(
-    fetch(req).catch(
-      () => new Response(OFFLINE_HTML, { headers: { "Content-Type": "text/html; charset=utf-8" } })
-    )
+    (async () => {
+      try {
+        const vorab = await event.preloadResponse;
+        if (vorab) return vorab;
+        return await fetch(req);
+      } catch {
+        return new Response(OFFLINE_HTML, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+    })()
   );
 });
 
@@ -82,17 +100,24 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
-      const fenster = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      const fenster = await self.clients.matchAll({ type: "window" });
       // Ein offenes Kadenz-Fenster nach vorne holen statt ein zweites zu öffnen —
       // sonst liefe die Satzpause in einem Fenster weiter, das man nicht sieht.
-      for (const f of fenster) {
-        if (new URL(f.url).origin === self.location.origin) {
-          await f.focus();
-          if (f.url !== ziel && "navigate" in f) await f.navigate(ziel);
-          return;
+      // Steht es schon auf der Zielseite (Satzpause → Training), bleibt es dort:
+      // ein Neuladen würde die laufende Einheit nur unnötig neu aufbauen.
+      const f = fenster.find((c) => new URL(c.url).origin === self.location.origin);
+      if (!f) {
+        await self.clients.openWindow(ziel);
+        return;
+      }
+      await f.focus();
+      if (new URL(f.url).pathname !== new URL(ziel).pathname) {
+        try {
+          await f.navigate(ziel);
+        } catch {
+          // Nicht von diesem Worker kontrolliert — dann reicht das Fokussieren.
         }
       }
-      await self.clients.openWindow(ziel);
     })()
   );
 });

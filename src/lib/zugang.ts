@@ -11,10 +11,13 @@
  * KADENZ_PASSWORT. Ist sie nicht gesetzt, bleibt alles wie bisher — so sperrt
  * ein Deployment niemanden aus, bevor die Variable bei Vercel eingetragen ist.
  *
- * Im Cookie liegt nicht das Passwort, sondern ein HMAC daraus. Wer das
- * Passwort ändert, meldet damit alle Geräte ab; ein gestohlenes Cookie verrät
- * das Passwort nicht. Läuft über WebCrypto, damit derselbe Code im Proxy und
- * in der Server Action rechnet.
+ * Im Cookie liegt nicht das Passwort, sondern ein daraus abgeleiteter
+ * Schlüssel (PBKDF2, 100 000 Runden). Wer das Passwort ändert, meldet damit
+ * alle Geräte ab. Die Runden sind der Punkt: aus einem gestohlenen Cookie
+ * ließe sich ein schnell gehashtes Passwort offline durchprobieren, mit
+ * PBKDF2 kostet jeder Versuch spürbar Zeit. Läuft über WebCrypto, damit
+ * derselbe Code im Proxy und in der Server Action rechnet; der Proxy merkt
+ * sich das Ergebnis, statt es bei jeder Anfrage neu abzuleiten.
  */
 
 export const ZUGANG_COOKIE = "kadenz_zugang";
@@ -27,15 +30,34 @@ export function zugangsPasswort(): string | null {
 }
 
 export async function zugangsToken(passwort: string): Promise<string> {
-  const schluessel = await crypto.subtle.importKey(
+  const material = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(passwort),
-    { name: "HMAC", hash: "SHA-256" },
+    "PBKDF2",
     false,
-    ["sign"]
+    ["deriveBits"]
   );
-  const sig = await crypto.subtle.sign("HMAC", schluessel, new TextEncoder().encode("kadenz-zugang-v1"));
-  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+  const bits = await crypto.subtle.deriveBits(
+    {
+      name: "PBKDF2",
+      hash: "SHA-256",
+      // Fest statt zufällig: es gibt genau ein Passwort, und der Proxy muss
+      // aus ihm ohne Datenbank denselben Wert ableiten können.
+      salt: new TextEncoder().encode("kadenz-zugang-v2"),
+      iterations: 100_000,
+    },
+    material,
+    256
+  );
+  return Array.from(new Uint8Array(bits), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+let gemerkt: { passwort: string; token: Promise<string> } | null = null;
+
+/** Der erwartete Cookie-Wert, je Prozess einmal abgeleitet. */
+export function erwartetesToken(passwort: string): Promise<string> {
+  if (gemerkt?.passwort !== passwort) gemerkt = { passwort, token: zugangsToken(passwort) };
+  return gemerkt.token;
 }
 
 /** Vergleich in konstanter Zeit — die Antwortdauer verrät nichts über die Stelle des Fehlers. */

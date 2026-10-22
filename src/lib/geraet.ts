@@ -62,7 +62,10 @@ export function tonVorbereiten(): void {
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return;
     audio ??= new Ctor();
-    if (audio.state === "suspended") void audio.resume();
+    /* Nicht nur "suspended": nach Sperren und Entsperren steht ein
+       AudioContext auf iOS auf "interrupted" und bleibt stumm, bis er
+       fortgesetzt wird. */
+    if (audio.state !== "running") void audio.resume();
   } catch {
     audio = null;
   }
@@ -74,6 +77,10 @@ export function tonVorbereiten(): void {
  * Vibration kennt nur Android — Safari hat navigator.vibrate nicht. Auf dem
  * iPhone übernimmt bei gesperrtem Bildschirm die Push-Nachricht; dieses
  * Signal ist für den Fall, dass Kadenz offen vor einem liegt.
+ *
+ * Steht der Stummschalter des iPhone auf lautlos, bleibt Web-Audio still —
+ * absichtlich nicht umgangen: die Alternative (audioSession "playback")
+ * hielte jedes Mal die Musik im Kopfhörer an.
  */
 export function pauseVorbeiSignal(): void {
   try {
@@ -82,6 +89,7 @@ export function pauseVorbeiSignal(): void {
 
   if (!geraetLesen("ton") || !audio) return;
   try {
+    if (audio.state !== "running") void audio.resume();
     const start = audio.currentTime + 0.02;
     for (const [versatz, frequenz] of [
       [0, 880],

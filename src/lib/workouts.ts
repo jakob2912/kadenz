@@ -1,8 +1,9 @@
 "use server";
 
 import { prisma } from "./db";
-import { heuteWien } from "./datum";
+import { heuteWien, wienerDatum } from "./datum";
 import type { SetLog } from "./coach";
+import { e1rm } from "./kraft";
 
 /**
  * Persistenz der Trainingslogs. Alles hier sind Server Actions — sie laufen
@@ -27,8 +28,8 @@ function heuteIso(): string {
  * Holt das Training des Tages oder legt es an. Idempotent, damit mehrfaches
  * Abhaken nicht mehrere Sitzungen erzeugt.
  */
-async function workoutHeute(kind: "push" | "pull") {
-  const date = new Date(`${heuteIso()}T00:00:00Z`);
+async function workoutHeute(kind: "push" | "pull", tagIso: string = heuteIso()) {
+  const date = new Date(`${tagIso}T00:00:00Z`);
 
   /* Ein einziger atomarer Aufruf statt findFirst-dann-create. Bei zwei
      gleichzeitigen Aufrufen — zweiter Tab, PWA neben Safari, MCP-Server
@@ -56,9 +57,19 @@ export async function satzSpeichern(input: {
   setIndex: number;
   kg: number;
   reps: number;
+  /**
+   * Wann der Satz im Browser abgehakt wurde, in Millisekunden.
+   *
+   * Ohne Netz hält der Logger einen Satz zurück und schickt ihn nach — unter
+   * Umständen erst nach dem Training, schlimmstenfalls nach Mitternacht.
+   * Ohne diese Angabe stand dann die Ankunftszeit als loggedAt da, und ein
+   * Satz von 23:40 landete im Training des nächsten Tages.
+   */
+  erfasstAm?: number;
 }): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
-    const workout = await workoutHeute(input.kind);
+    const zeitpunkt = erfassungszeit(input.erfasstAm);
+    const workout = await workoutHeute(input.kind, wienerDatum(zeitpunkt));
     await prisma.setLog.upsert({
       where: {
         workoutId_exercise_setIndex: {
@@ -73,7 +84,7 @@ export async function satzSpeichern(input: {
       update: {
         kg: input.kg,
         reps: input.reps,
-        loggedAt: new Date(),
+        loggedAt: zeitpunkt,
       },
       create: {
         workoutId: workout.id,
@@ -81,6 +92,7 @@ export async function satzSpeichern(input: {
         setIndex: input.setIndex,
         kg: input.kg,
         reps: input.reps,
+        loggedAt: zeitpunkt,
       },
     });
     return { ok: true };
@@ -89,6 +101,28 @@ export async function satzSpeichern(input: {
     // war — die Oberfläche behält ihn und zeigt den Fehler an.
     return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
   }
+}
+
+/**
+ * Der Zeitpunkt, den ein Satz bekommt — die Angabe des Browsers, wenn sie
+ * glaubhaft ist, sonst jetzt.
+ *
+ * Glaubhaft heißt: höchstens 18 Stunden alt und nicht in der Zukunft (eine
+ * Minute Spielraum für eine falsch gehende Handyuhr). Länger hält kein
+ * Funkloch einen Satz zurück; was älter ist, ist eine verstellte Uhr, und die
+ * soll keinen Satz in eine fremde Woche schreiben.
+ */
+function erfassungszeit(erfasstAm: number | undefined): Date {
+  const jetzt = Date.now();
+  if (
+    typeof erfasstAm === "number" &&
+    Number.isFinite(erfasstAm) &&
+    erfasstAm <= jetzt + 60_000 &&
+    erfasstAm >= jetzt - 18 * 3600_000
+  ) {
+    return new Date(Math.min(erfasstAm, jetzt));
+  }
+  return new Date(jetzt);
 }
 
 /**
@@ -214,6 +248,7 @@ export type LaufendesTraining = {
    * fertig.
    */
   geloggt: GeloggterSatz[];
+  notiz: string | null;
 };
 
 export type GeloggterSatz = {
@@ -252,6 +287,7 @@ export async function laufendesTraining(
     finishedAtMs: workout.finishedAt?.getTime() ?? null,
     beendet: workout.finishedAt !== null,
     geloggt: workout.sets,
+    notiz: workout.note,
   };
 }
 
@@ -302,20 +338,82 @@ export async function trainingStarten(
  */
 export async function trainingBeenden(
   kind: "push" | "pull",
-  note?: string
+  note?: string,
+  /** Wann im Browser beendet wurde — aus demselben Grund wie bei satzSpeichern. */
+  erfasstAm?: number
 ): Promise<{ ok: true; finishedAtMs: number } | { ok: false; fehler: string }> {
   try {
-    const workout = await workoutHeute(kind);
+    const zeitpunkt = erfassungszeit(erfasstAm);
+    const workout = await workoutHeute(kind, wienerDatum(zeitpunkt));
     if (workout.finishedAt !== null) {
       return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
     }
 
     const beendet = await prisma.workout.update({
       where: { id: workout.id },
-      data: { finishedAt: new Date(), note },
+      data: { finishedAt: zeitpunkt, note },
     });
 
     return { ok: true, finishedAtMs: beendet.finishedAt!.getTime() };
+  } catch (e) {
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+  }
+}
+
+/**
+ * Bisheriger Bestwert je Übung, als geschätztes Maximum (Epley).
+ *
+ * Für die Bestwert-Markierung im Logger: hebt ein Satz heute mehr als je
+ * zuvor, sieht man es im Moment des Abhakens, nicht erst Tage später im
+ * Kraftverlauf. Das heutige Training zählt nicht mit — sonst wäre der eben
+ * gehobene Satz sein eigener Maßstab.
+ *
+ * Ausdrücklich unsaubere Sätze (sauber = false) zählen nicht: ein Bestwert,
+ * den die Technik nicht getragen hat, ist kein Maßstab. Gleiche Regel wie in
+ * besterSatz() in kraft.ts.
+ */
+export async function bestwerteFuer(uebungen: string[]): Promise<Record<string, number>> {
+  if (uebungen.length === 0) return {};
+
+  const zeilen = await prisma.setLog.findMany({
+    where: {
+      exercise: { in: uebungen },
+      workout: { date: { lt: new Date(`${heuteIso()}T00:00:00Z`) } },
+      // Nicht NOT { sauber: false }: in SQL ergibt NOT (NULL = false) wieder
+      // NULL, und damit fielen ausgerechnet die nicht beurteilten Sätze — der
+      // Normalfall — aus der Abfrage.
+      OR: [{ sauber: null }, { sauber: true }],
+    },
+    select: { exercise: true, kg: true, reps: true },
+  });
+
+  const best: Record<string, number> = {};
+  for (const z of zeilen) {
+    const wert = e1rm(z);
+    if (wert !== null && wert > (best[z.exercise] ?? 0)) best[z.exercise] = wert;
+  }
+  return best;
+}
+
+/**
+ * Notiz zur heutigen Einheit — "Schulter zwickt", "Bank war belegt".
+ *
+ * Workout.note gab es seit dem ersten Tag, nur keine Stelle, an der man sie
+ * schreiben konnte. Im Verlauf je Einheit steht sie über den Sätzen; genau
+ * dort sucht man drei Wochen später, warum eine Einheit schwächer war.
+ */
+export async function notizSpeichern(
+  kind: "push" | "pull",
+  notiz: string
+): Promise<{ ok: true } | { ok: false; fehler: string }> {
+  try {
+    const text = notiz.trim().slice(0, 1000);
+    const workout = await workoutHeute(kind);
+    await prisma.workout.update({
+      where: { id: workout.id },
+      data: { note: text === "" ? null : text },
+    });
+    return { ok: true };
   } catch (e) {
     return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
   }

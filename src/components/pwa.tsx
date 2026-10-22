@@ -80,7 +80,8 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
         Als App installieren
       </p>
       <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-        In Safari unten auf <b className="font-semibold text-fg">Teilen</b> tippen, dann{" "}
+        In Safari auf <b className="font-semibold text-fg">Teilen</b> tippen (seit iOS 26
+        hinter <b className="font-semibold text-fg">•••</b>), dann{" "}
         <b className="font-semibold text-fg">„Zum Home-Bildschirm“</b>. Danach startet Kadenz
         ohne Browser-Leiste wie eine App — und nur so kann es dir Nachrichten schicken
         (Satzpause vorbei, Morgen-Briefing).
