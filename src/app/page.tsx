@@ -4,6 +4,9 @@ import { loadDashboard } from "@/lib/health-service";
 import { aktuellePhase } from "@/lib/gewichtsplan";
 import { SCHULSTART, briefing, phaseFor, type Briefing } from "@/lib/coach";
 import { rotationMitPlan } from "@/lib/wochenplan";
+import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
+import { SESSIONS, type Rotation } from "@/lib/plan";
+import Link from "next/link";
 import { wienerStunde } from "@/lib/datum";
 import { GewichtEingabe } from "@/components/gewicht-eingabe";
 import { InstallHinweis } from "@/components/pwa";
@@ -65,10 +68,31 @@ async function Dashboard() {
   await connection();
 
   const data = await loadDashboard(30);
-  const trainingHeute = (await rotationMitPlan(new Date())).art === "training";
+  const rotation = await rotationMitPlan(new Date());
+  const trainingHeute = rotation.art === "training";
+  /* Ob heute schon eine Einheit läuft oder lief — dann sagt die Karte das,
+     statt zu einer Einheit aufzufordern, die längst erledigt ist. Beiwerk:
+     ist die Datenbank kurz weg, steht die Karte eben ohne diesen Zusatz. */
+  let schonHeute: { art: "push" | "pull"; beendet: boolean } | null = null;
+  try {
+    const art = await heutigeEinheit();
+    if (art) schonHeute = { art, beendet: (await laufendesTraining(art))?.beendet ?? false };
+  } catch (e) {
+    console.error("Trainingsstatus nicht lesbar:", e);
+  }
 
   if (!data.verbunden) {
-    return <NichtVerbunden titel="Erst mit Google Health verbinden" grund={data.grund} />;
+    /* Training hängt nicht an Google — die Karte bleibt auch dann, wenn die
+       Verbindung abgelaufen ist. Sonst stünde morgens nach dem wöchentlichen
+       Ablauf gar nichts mehr darüber da, was heute ansteht. */
+    return (
+      <>
+        <NichtVerbunden titel="Erst mit Google Health verbinden" grund={data.grund} />
+        <div className="mx-auto mt-6 max-w-[520px]">
+          <HeuteTraining rotation={rotation} schonHeute={schonHeute} />
+        </div>
+      </>
+    );
   }
 
   const { heute, baseline, gewicht } = data;
@@ -225,6 +249,8 @@ async function Dashboard() {
         </div>
 
         <div className="flex flex-col gap-3.5">
+          <HeuteTraining rotation={rotation} schonHeute={schonHeute} />
+
           <GewichtEingabe
             aktuell={gewicht.aktuell?.kg ?? null}
             /* Das Alter wird am Server berechnet und fertig übergeben. Würde
@@ -378,5 +404,60 @@ function Tagesbriefing({ briefing }: { briefing: Briefing }) {
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * Was heute im Gym ansteht, mit dem Weg dorthin.
+ *
+ * Die Startseite beantwortete bisher "wie bin ich erholt", aber nicht "was
+ * mache ich heute" — dafür musste man erst auf Training tippen. Die Frage
+ * stellt man sich morgens als erste; die Antwort gehört deshalb hierher,
+ * neben die Freigabe aus der Regeneration.
+ */
+function HeuteTraining({
+  rotation,
+  schonHeute,
+}: {
+  rotation: Rotation;
+  schonHeute: { art: "push" | "pull"; beendet: boolean } | null;
+}) {
+  const name = (e: "push" | "pull") => SESSIONS[e].focus.split(" · ")[0];
+
+  let titel: string;
+  let text: string;
+  let knopf: string;
+
+  if (schonHeute) {
+    titel = schonHeute.beendet
+      ? `${name(schonHeute.art)} erledigt`
+      : `${name(schonHeute.art)} läuft`;
+    text = SESSIONS[schonHeute.art].title;
+    knopf = schonHeute.beendet ? "Ansehen" : "Weiterloggen";
+  } else if (rotation.art === "training") {
+    titel = `Heute ${name(rotation.einheit)}`;
+    text = SESSIONS[rotation.einheit].title;
+    knopf = "Training öffnen";
+  } else {
+    titel = "Heute Rest Day";
+    text = `Als Nächstes ${name(rotation.naechste)} — ${SESSIONS[rotation.naechste].title}.`;
+    knopf = "Plan ansehen";
+  }
+
+  return (
+    <Link
+      href="/training"
+      className="group flex items-center gap-4 rounded-lg border border-hair bg-gradient-to-b from-surface-2 to-surface p-5
+                 transition active:scale-[0.99] md:hover:border-accent/35"
+    >
+      <span className="min-w-0 flex-1">
+        <Eyebrow>Training</Eyebrow>
+        <b className="mt-1.5 block text-[17px] font-semibold tracking-[-0.015em]">{titel}</b>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-fg-dim">{text}</span>
+      </span>
+      <span className="shrink-0 rounded-md bg-accent/10 px-3 py-2 text-[13px] font-semibold text-accent">
+        {knopf} ›
+      </span>
+    </Link>
   );
 }
