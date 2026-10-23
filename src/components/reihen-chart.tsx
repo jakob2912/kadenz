@@ -225,13 +225,15 @@ export function ReihenChart({
     </p>
   );
 
-  const ohnePunkt = (d: string) => kurzDatum(d).replace(/\.$/, "");
+  const ohnePunkt = (d: string) =>
+    mitJahr ? `${kurzDatum(d)} ${d.slice(0, 4)}` : kurzDatum(d).replace(/\.$/, "");
+  const amTag = (d: string) => (mitJahr ? `${kurzDatum(d)} ${d.slice(0, 4)}` : kurzDatum(d));
   const beschreibung =
-    `${bezeichnung} von ${de(erste.wert, stellen)} ${einheit} am ${kurzDatum(erste.datum)} ` +
+    `${bezeichnung} von ${de(erste.wert, stellen)} ${einheit} am ${amTag(erste.datum)} ` +
     `auf ${de(letzte.wert, stellen)} ${einheit} am ${ohnePunkt(letzte.datum)}.` +
     (sollReihe.length > 1
       ? ` Gestrichelt daneben ${sollBezeichnung}: ${de(sollReihe[0].wert, stellen)} ${einheit} ` +
-        `am ${kurzDatum(sollReihe[0].datum)} auf ` +
+        `am ${amTag(sollReihe[0].datum)} auf ` +
         `${de(sollReihe[sollReihe.length - 1].wert, stellen)} ${einheit} am ` +
         `${ohnePunkt(sollReihe[sollReihe.length - 1].datum)}.`
       : "");

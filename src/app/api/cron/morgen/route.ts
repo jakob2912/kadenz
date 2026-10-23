@@ -30,8 +30,8 @@ export async function GET(request: Request) {
     abzeichenZahl().catch(() => undefined),
   ]);
 
-  /* Werte aus der eigenen Ablage heißen: Google ist abgelaufen. Das gehört
-     in die Morgen-Nachricht, sonst merkt Jakob es erst am Abend. */
+  /* Werte aus der eigenen Ablage heißen: Google liefert gerade nichts. Das
+     gehört in die Morgen-Nachricht, sonst merkt Jakob es erst am Abend. */
   const lage: MorgenLage = daten.verbunden && !daten.abgelaufen
     ? {
         verbunden: true,
@@ -44,7 +44,9 @@ export async function GET(request: Request) {
             : null,
         gewogenHeute: daten.gewicht.aktuell?.date === heute,
       }
-    : { verbunden: false, grund: daten.verbunden ? daten.abgelaufen!.grund : daten.grund };
+    : daten.verbunden
+      ? { verbunden: false, ...daten.abgelaufen! }
+      : { verbunden: false, grund: daten.grund, neuVerbinden: daten.neuVerbinden };
 
   const plan =
     rotation.art === "training"

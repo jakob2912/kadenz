@@ -17,7 +17,8 @@ import type { Nachricht } from "./push";
 type Einheit = "push" | "pull";
 
 export type MorgenLage =
-  | { verbunden: false; grund: string }
+  /** neuVerbinden false: Google ist gestört, ein neuer Login hilft nicht. */
+  | { verbunden: false; grund: string; neuVerbinden?: boolean }
   | {
       verbunden: true;
       /** Null, wenn die Nacht keine vollständige Messung hat. */
@@ -46,6 +47,15 @@ export function morgenNachricht(lage: MorgenLage, plan: Plan): Nachricht {
     plan.art === "training"
       ? `Heute ${einheitText(plan.einheit)}.`
       : `Heute Rest Day, als Nächstes ${SESSIONS[plan.naechste].focus.split(" · ")[0]}.`;
+
+  if (!lage.verbunden && lage.neuVerbinden === false) {
+    return {
+      title: "Google Health antwortet nicht",
+      body: `${heute} Die Nacht kommt nach, sobald Google wieder liefert — verbinden musst du nichts.`,
+      url: "/",
+      tag: "morgen",
+    };
+  }
 
   if (!lage.verbunden) {
     return {
