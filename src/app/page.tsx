@@ -166,6 +166,7 @@ async function Dashboard() {
           heuteIso,
           trainingHeute,
           stunde: wienerStunde(),
+          ausAblage: data.abgelaufen !== undefined,
         })
       : null;
 
@@ -174,7 +175,7 @@ async function Dashboard() {
       {kopf}
 
       <InstallHinweis className="mt-6" />
-      {data.abgelaufen && <AbgelaufenHinweis className="mt-6" />}
+      {data.abgelaufen && <AbgelaufenHinweis lage={data.abgelaufen} className="mt-6" />}
 
       {/* Die eine Karte, die morgens zählt: wie erholt, was heute ansteht,
           und der Knopf dorthin. Vorher verteilte sich das auf drei Karten

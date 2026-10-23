@@ -418,9 +418,14 @@ model Tageswert {
   aktualisiert  DateTime @updatedAt
 }
 
-/// Ein Gewicht je Tag aus Google Health — Abschrift, wie Tageswert.
+/// Ein Gewicht je Tag — Abschrift aus Google Health oder in Kadenz
+/// eingetragen, während Google nichts annahm.
 model Gewichtsmessung {
   datum        DateTime @id @db.Date
   kg           Float
+  /// "google": Abschrift, verschwindet, wenn Google den Tag nicht mehr
+  /// liefert (gelöschte Fehlmessung). "kadenz": nur hier eingetragen, zählt
+  /// zusätzlich zu dem, was Google liefert.
+  quelle       String   @default("google")
   aktualisiert DateTime @updatedAt
 }

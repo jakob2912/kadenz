@@ -50,7 +50,9 @@ export function morgenNachricht(lage: MorgenLage, plan: Plan): Nachricht {
   if (!lage.verbunden) {
     return {
       title: "Google Health neu verbinden",
-      body: `${heute} Schlaf, HRV und Gewicht fehlen, bis Kadenz wieder verbunden ist — ein Tipp auf die Startseite.`,
+      // Das Gewicht fehlt nicht mehr: es lässt sich auch ohne Google eintragen
+      // und liegt dann in Kadenz' eigener Ablage.
+      body: `${heute} Neue Nächte (Schlaf, HRV) kommen erst nach dem Verbinden — ein Tipp auf die Startseite.`,
       url: "/",
       tag: "morgen",
     };

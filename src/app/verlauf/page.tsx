@@ -12,6 +12,7 @@ import {
   de,
   heuteWien,
   kurzDatum,
+  langDatum,
   minToHm,
 } from "@/components/ui";
 import { ReihenChart } from "@/components/reihen-chart";
@@ -22,6 +23,7 @@ import { NaechteChart } from "@/components/naechte-chart";
 import { gewichteLesen, gewichteVereinen, tageswerteLesen } from "@/lib/gesundheit-ablage";
 import { VerlaufUmschalter } from "@/components/verlauf-umschalter";
 import {
+  START,
   ENDZIEL_KG,
   aktuellePhase,
   phasenlauf,
@@ -107,7 +109,8 @@ async function Gewichtsteil() {
   let jahrNaechte = tagesreihe;
   try {
     const [g, n] = await Promise.all([gewichteLesen(365), tageswerteLesen(365)]);
-    jahrGewicht = gewichteVereinen(g, gewicht.reihe);
+    // Die frische Reihe zuerst: sie gewinnt, wo beide einen Tag haben.
+    jahrGewicht = gewichteVereinen(gewicht.reihe, g);
     const frisch = new Map(tagesreihe.map((t) => [t.date, t]));
     jahrNaechte = [...n.filter((t) => !frisch.has(t.date)), ...tagesreihe].sort((a, b) =>
       a.date.localeCompare(b.date)
@@ -134,7 +137,7 @@ async function Gewichtsteil() {
         </p>
       </header>
 
-      {data.abgelaufen && <AbgelaufenHinweis className="mt-5" />}
+      {data.abgelaufen && <AbgelaufenHinweis lage={data.abgelaufen} className="mt-5" />}
 
       <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
         <Card>
@@ -146,7 +149,7 @@ async function Gewichtsteil() {
             <span className="text-[11px] text-fg-faint">
               {jahrGewicht.length === 0
                 ? "keine Messung"
-                : `${jahrGewicht.length} Messungen · ab ${kurzDatum(jahrGewicht[0].date)}`}
+                : `${jahrGewicht.length} Messungen seit ${langDatum(jahrGewicht[0].date)}`}
             </span>
           </div>
           {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
@@ -230,7 +233,14 @@ async function Gewichtsteil() {
 
       <NaechteChart naechte={jahrNaechte} />
 
-      <Zielkurve reihe={jahrGewicht.map((r) => ({ datum: r.date, wert: r.kg }))} heuteIso={heuteIso} />
+      {/* Ab dem Anker des Plans: ein Jahr Messungen davor hätte die Achse
+          bis Herbst 2025 gestreckt und den Plan auf zwei Drittel gestaucht. */}
+      <Zielkurve
+        reihe={jahrGewicht
+          .filter((r) => r.date >= START.datum)
+          .map((r) => ({ datum: r.date, wert: r.kg }))}
+        heuteIso={heuteIso}
+      />
     </>
   );
 }

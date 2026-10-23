@@ -44,7 +44,7 @@ export async function GET(request: Request) {
             : null,
         gewogenHeute: daten.gewicht.aktuell?.date === heute,
       }
-    : { verbunden: false, grund: daten.verbunden ? daten.abgelaufen! : daten.grund };
+    : { verbunden: false, grund: daten.verbunden ? daten.abgelaufen!.grund : daten.grund };
 
   const plan =
     rotation.art === "training"

@@ -17,12 +17,17 @@ CREATE TABLE "Tageswert" (
     CONSTRAINT "Tageswert_pkey" PRIMARY KEY ("datum")
 );
 
+-- quelle: "google" (Abschrift) oder "kadenz" (nur hier eingetragen, weil
+-- Google den Wert nicht annahm). Nur so lässt sich eine in Google gelöschte
+-- Fehlmessung von einem Eintrag unterscheiden, den es dort nie gab.
 CREATE TABLE "Gewichtsmessung" (
     "datum" DATE NOT NULL,
     "kg" DOUBLE PRECISION NOT NULL,
+    "quelle" TEXT NOT NULL DEFAULT 'google',
     "aktualisiert" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "Gewichtsmessung_pkey" PRIMARY KEY ("datum")
+    CONSTRAINT "Gewichtsmessung_pkey" PRIMARY KEY ("datum"),
+    CONSTRAINT "Gewichtsmessung_quelle_check" CHECK ("quelle" IN ('google', 'kadenz'))
 );
 
 ALTER TABLE "Tageswert" ENABLE ROW LEVEL SECURITY;

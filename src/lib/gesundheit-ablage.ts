@@ -26,20 +26,27 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
  * Was ein Abruf geliefert hat, in die Tabellen schreiben — ein Statement je
  * Tabelle statt einer Zeile je Tag.
  *
- * Der älteste Tag des Fensters bleibt draußen: das Fenster beginnt mitten in
- * dessen Nacht, und ein HRV-Schnitt aus der halben Nacht würde den richtigen
- * Wert aus einem früheren, längeren Abruf überschreiben.
+ * Die beiden ältesten Tage des Fensters bleiben draußen: das Fenster
+ * beginnt zu irgendeiner Uhrzeit, ein Abend-Abruf schneidet die HRV der
+ * folgenden Nacht an, und ein Schnitt aus der halben Nacht würde den
+ * richtigen Wert aus einem früheren, längeren Abruf überschreiben.
  *
  * Geschrieben wird nur, was sich geändert hat (IS DISTINCT FROM), damit
  * `aktualisiert` sagt, wann ein Wert wirklich neu kam.
+ *
+ * Gewichte, die Google im Fenster nicht mehr liefert, verschwinden auch hier
+ * — sonst käme eine dort gelöschte Fehlmessung über die Ablage zurück. Nur
+ * Abschriften, nicht was in Kadenz eingetragen wurde, als Google nichts
+ * annahm.
  */
 export async function ablegen(
   tage: DailyReadiness[],
   gewichte: WeightEntry[],
   fensterBeginn: string
 ): Promise<void> {
-  const t = tage.filter((d) => d.date > fensterBeginn);
-  const g = gewichte.filter((w) => w.date > fensterBeginn);
+  const ab = sicherAb(fensterBeginn);
+  const t = tage.filter((d) => d.date > ab);
+  const g = gewichte.filter((w) => w.date > ab);
 
   if (t.length > 0) {
     await prisma.$executeRaw`
@@ -64,20 +71,33 @@ export async function ablegen(
 
   if (g.length > 0) {
     await prisma.$executeRaw`
-      INSERT INTO "Gewichtsmessung" ("datum", "kg", "aktualisiert")
-      SELECT u.d::date, u.kg, now()
+      INSERT INTO "Gewichtsmessung" ("datum", "kg", "quelle", "aktualisiert")
+      SELECT u.d::date, u.kg, 'google', now()
       FROM unnest(${g.map((w) => w.date)}::text[], ${g.map((w) => w.kg)}::float8[]) AS u(d, kg)
-      ON CONFLICT ("datum") DO UPDATE SET "kg" = EXCLUDED."kg", "aktualisiert" = now()
-      WHERE "Gewichtsmessung"."kg" IS DISTINCT FROM EXCLUDED."kg"`;
+      ON CONFLICT ("datum") DO UPDATE SET "kg" = EXCLUDED."kg", "quelle" = 'google', "aktualisiert" = now()
+      WHERE ("Gewichtsmessung"."kg", "Gewichtsmessung"."quelle") IS DISTINCT FROM (EXCLUDED."kg", 'google')`;
   }
+
+  await prisma.$executeRaw`
+    DELETE FROM "Gewichtsmessung"
+    WHERE "quelle" = 'google'
+      AND "datum" > ${ab}::date
+      AND NOT ("datum" = ANY(${g.map((w) => w.date)}::date[]))`;
+}
+
+/** Der Tag nach dem Fensterbeginn — bis einschließlich dorthin wird nichts geschrieben. */
+export function sicherAb(fensterBeginn: string): string {
+  return iso(new Date(tag(fensterBeginn).getTime() + 864e5));
 }
 
 /** Ein eingetragenes Gewicht sofort festhalten — auch wenn Google es ablehnt. */
 export async function gewichtAblegen(datum: string, kg: number): Promise<void> {
+  /* Als "kadenz", bis ein Google-Abruf denselben Tag liefert und die Zeile
+     zur Abschrift macht. */
   await prisma.gewichtsmessung.upsert({
     where: { datum: tag(datum) },
-    update: { kg },
-    create: { datum: tag(datum), kg },
+    update: { kg, quelle: "kadenz" },
+    create: { datum: tag(datum), kg, quelle: "kadenz" },
   });
 }
 
@@ -96,10 +116,16 @@ export async function tageswerteLesen(tage: number): Promise<DailyReadiness[]> {
   }));
 }
 
-/** Die Gewichte der letzten `tage` Tage, älteste zuerst. */
-export async function gewichteLesen(tage: number): Promise<WeightEntry[]> {
+/**
+ * Die Gewichte der letzten `tage` Tage, älteste zuerst. `nurKadenz`: nur
+ * was es in Google nicht gibt — zum Ergänzen eines frischen Abrufs.
+ */
+export async function gewichteLesen(tage: number, nurKadenz = false): Promise<WeightEntry[]> {
   const zeilen = await prisma.gewichtsmessung.findMany({
-    where: { datum: { gt: tag(vorTagen(tage)) } },
+    where: {
+      datum: { gt: tag(vorTagen(tage)) },
+      ...(nurKadenz ? { quelle: "kadenz" } : {}),
+    },
     orderBy: { datum: "asc" },
   });
   return zeilen.map((z) => ({ date: iso(z.datum), kg: z.kg }));
@@ -126,6 +152,26 @@ export function vorTagen(tage: number, heute: string = heuteWien()): string {
 
 const RUECKFUELLUNG = "gesundheit_rueckfuellung";
 
+type Merker = { erledigt?: string; versuch?: string };
+
+/**
+ * Ist die Rückfüllung heute (noch) dran? Nicht, wenn sie erledigt ist, und
+ * nicht, wenn heute schon ein Versuch lief — ein Jahr Schlaf und HRV sind
+ * dreißig und mehr Abrufe bei Google, und ein Fehlschlag soll nicht bei
+ * jedem Seitenaufruf von vorn beginnen. Ein abgebrochener Versuch
+ * (Zeitlimit der Funktion) zählt ebenfalls: der Merker steht vorher.
+ */
+export function rueckfuellungFaellig(wert: string | null, heute: string): boolean {
+  if (!wert) return true;
+  let m: Merker;
+  try {
+    m = JSON.parse(wert) as Merker;
+  } catch {
+    return true;
+  }
+  return !m.erledigt && m.versuch !== heute;
+}
+
 /** Pro Serverinstanz: nach dem ersten Blick in die Datenbank nicht jedes Mal neu fragen. */
 let erledigt = false;
 /** Und nicht zweimal gleichzeitig, wenn zwei Seiten im selben Moment rendern. */
@@ -145,16 +191,21 @@ export async function rueckfuellenWennNoetig(holen: () => Promise<void>): Promis
 }
 
 async function rueckfuellen(holen: () => Promise<void>): Promise<void> {
+  const heute = heuteWien();
   const eintrag = await prisma.einstellung.findUnique({ where: { schluessel: RUECKFUELLUNG } });
-  if (eintrag) {
-    erledigt = true;
+  if (!rueckfuellungFaellig(eintrag?.wert ?? null, heute)) {
+    // Erledigt gilt für immer; ein heutiger Fehlversuch nur bis morgen.
+    if (eintrag && (JSON.parse(eintrag.wert) as Merker).erledigt) erledigt = true;
     return;
   }
+  const schreiben = (m: Merker) =>
+    prisma.einstellung.upsert({
+      where: { schluessel: RUECKFUELLUNG },
+      update: { wert: JSON.stringify(m) },
+      create: { schluessel: RUECKFUELLUNG, wert: JSON.stringify(m) },
+    });
+  await schreiben({ versuch: heute });
   await holen();
-  await prisma.einstellung.upsert({
-    where: { schluessel: RUECKFUELLUNG },
-    update: { wert: heuteWien() },
-    create: { schluessel: RUECKFUELLUNG, wert: heuteWien() },
-  });
+  await schreiben({ versuch: heute, erledigt: heute });
   erledigt = true;
 }

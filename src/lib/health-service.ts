@@ -44,7 +44,7 @@ import {
  * Auswertungen auseinander und die Seite zeigt etwas anderes als der Endpunkt.
  */
 export type Dashboard =
-  | { verbunden: false; grund: string }
+  | { verbunden: false; grund: string; neuVerbinden?: boolean }
   | {
       verbunden: true;
       baseline: DailyReadiness | null;
@@ -59,11 +59,12 @@ export type Dashboard =
       unvollstaendig: string[];
       /**
        * Gesetzt, wenn Google gerade nicht antwortet und die Werte aus der
-       * eigenen Ablage kommen (lib/gesundheit-ablage.ts): der Grund, warum.
-       * Die Seiten zeigen dann die Daten bis zur letzten Nacht und daneben
-       * den Weg zum neuen Verbinden.
+       * eigenen Ablage kommen (lib/gesundheit-ablage.ts): der Grund, und ob
+       * neu Verbinden hilft (abgelaufener Zugang) oder nur Warten (Google
+       * oder das Netz streikt). Die Seiten zeigen die Daten bis zur letzten
+       * Nacht und daneben den passenden Hinweis.
        */
-      abgelaufen?: string;
+      abgelaufen?: { grund: string; neuVerbinden: boolean };
     };
 
 /**
@@ -97,7 +98,15 @@ export type Dashboard =
  */
 
 /** Trägt den Grund, warum keine Daten kommen, aus dem Cache heraus. */
-class NichtVerbundenFehler extends Error {}
+class NichtVerbundenFehler extends Error {
+  /** Hilft es, Google neu zu verbinden — oder ist es eine Störung, die vorbeigeht? */
+  constructor(
+    message: string,
+    readonly neuVerbinden = true
+  ) {
+    super(message);
+  }
+}
 
 export async function loadDashboard(days = 30): Promise<Dashboard> {
   // Fehlende Variablen zuerst, und mit Namen: auf Vercel ist das der
@@ -165,7 +174,9 @@ async function alsLage(ermitteln: () => Promise<Dashboard>): Promise<Dashboard> 
   try {
     return await ermitteln();
   } catch (e) {
-    if (e instanceof NichtVerbundenFehler) return { verbunden: false, grund: e.message };
+    if (e instanceof NichtVerbundenFehler) {
+      return { verbunden: false, grund: e.message, neuVerbinden: e.neuVerbinden };
+    }
     throw e;
   }
 }
@@ -198,13 +209,14 @@ async function gesundheitsdaten(days: number): Promise<Dashboard> {
       throw new NichtVerbundenFehler(
         `Die Datenbank ist gerade nicht erreichbar: ${
           e instanceof Error ? e.message : String(e)
-        }`
+        }`,
+        false
       );
     }
 
     if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
     return auswerten(refresh, days);
-  }).then((l) => (l.verbunden ? l : ausAblage(days, l.grund)));
+  }).then((l) => (l.verbunden ? l : ausAblage(days, l.grund, l.neuVerbinden ?? true)));
 
   // Genau ein cacheLife je Aufruf, je nach Ausgang. Werte aus der Ablage
   // zählen als Fehlschlag: nach dem neuen Verbinden sollen sofort die
@@ -243,7 +255,8 @@ async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
       );
     }
 
-    throw new NichtVerbundenFehler(text);
+    // Netz weg oder Google gestört: neu verbinden hilft da nicht.
+    throw new NichtVerbundenFehler(text, false);
   }
 
   const to = new Date();
@@ -266,10 +279,12 @@ async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
       listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
     ]);
   } catch (e) {
+    /* Ein 401/403 heißt: Zugang oder Berechtigung weg, neu verbinden hilft.
+       Alles andere (5xx, Netz) geht von selbst vorbei. */
+    const text = e instanceof Error ? e.message : String(e);
     throw new NichtVerbundenFehler(
-      `Google Health hat die Abfrage abgelehnt: ${
-        e instanceof Error ? e.message : String(e)
-      }`
+      `Google Health hat die Abfrage abgelehnt: ${text}`,
+      /\b(401|403)\b|PERMISSION_DENIED|UNAUTHENTICATED/.test(text)
     );
   }
   const [sleepRes, hrRes, hrvRes, weightRes] = ergebnisse;
@@ -298,7 +313,7 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
   if (datenbankKonfiguriert()) {
     try {
       await ablegen(roh.series, roh.reihe, vorTagen(days));
-      reihe = gewichteVereinen(roh.reihe, await gewichteLesen(days));
+      reihe = gewichteVereinen(roh.reihe, await gewichteLesen(days, true));
     } catch (e) {
       console.error("Gesundheitswerte nicht abgelegt:", e);
     }
@@ -310,14 +325,14 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
  * Google antwortet nicht — dann die Werte aus der eigenen Ablage, solange es
  * dort welche gibt. Sonst bleibt es bei "nicht verbunden" mit dem Grund.
  */
-async function ausAblage(days: number, grund: string): Promise<Dashboard> {
-  if (!datenbankKonfiguriert()) return { verbunden: false, grund };
+async function ausAblage(days: number, grund: string, neuVerbinden: boolean): Promise<Dashboard> {
+  if (!datenbankKonfiguriert()) return { verbunden: false, grund, neuVerbinden };
   try {
     const [series, reihe] = await Promise.all([tageswerteLesen(days), gewichteLesen(days)]);
-    if (series.length === 0 && reihe.length === 0) return { verbunden: false, grund };
-    return { ...bauen(series, [], reihe), abgelaufen: grund };
+    if (series.length === 0 && reihe.length === 0) return { verbunden: false, grund, neuVerbinden };
+    return { ...bauen(series, [], reihe), abgelaufen: { grund, neuVerbinden } };
   } catch {
-    return { verbunden: false, grund };
+    return { verbunden: false, grund, neuVerbinden };
   }
 }
 

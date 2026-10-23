@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useId, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { de, kurzDatum, langDatum } from "@/components/ui";
 
 export type Reihenpunkt = { datum: string; wert: number };
@@ -75,6 +75,7 @@ export function ReihenChart({
 }) {
   const [zeitraum, setZeitraum] = useState(zeitraeume?.[0] ?? null);
   const [auswahl, setAuswahl] = useState<number | null>(null);
+  const beschreibungId = useId();
 
   const ende = ganzeReihe.length > 0 ? Date.parse(ganzeReihe[ganzeReihe.length - 1].datum) : 0;
   const beginn = zeitraum === null ? -Infinity : ende - zeitraum * 864e5;
@@ -114,7 +115,15 @@ export function ReihenChart({
     return (
       <>
         {knoepfe}
-        <p className="mt-4 text-sm leading-relaxed text-fg-dim">{reihe.length === 0 ? leer : einzeln}</p>
+        <p className="mt-4 text-sm leading-relaxed text-fg-dim">
+          {/* Im kurzen Fenster zu wenig, insgesamt aber genug: dann hilft
+              ein längerer Zeitraum, nicht das Warten auf die nächste Messung. */}
+          {ganzeReihe.length >= 2
+            ? "In diesem Zeitraum zu wenige Werte für eine Kurve — einen längeren wählen."
+            : reihe.length === 0
+              ? leer
+              : einzeln}
+        </p>
       </>
     );
   }
@@ -125,7 +134,18 @@ export function ReihenChart({
 
   /* Der Plan beginnt mit dem gewählten Zeitraum, endet aber, wo er endet —
      über die letzte Messung hinaus zu zeigen, wohin es geht, ist sein Zweck. */
-  const sollReihe = (soll ?? []).filter((p) => Date.parse(p.datum) > beginn);
+  const sollGanz = soll ?? [];
+  const sollReihe = sollGanz.filter((p) => Date.parse(p.datum) > beginn);
+  /* Der Plan liegt in Wochenpunkten vor. Ohne Zwischenwert am Fensteranfang
+     begänne die Linie erst beim nächsten Wochenpunkt, Tage nach der ersten
+     Messung. */
+  const ersteMessung = Date.parse(ganzeReihe.find((p) => Date.parse(p.datum) > beginn)?.datum ?? "");
+  if (sollReihe.length > 0 && Number.isFinite(ersteMessung) && Date.parse(sollReihe[0].datum) > ersteMessung) {
+    const zwischen = wertAm(sollGanz, ersteMessung);
+    if (zwischen !== null) {
+      sollReihe.unshift({ datum: new Date(ersteMessung).toISOString().slice(0, 10), wert: zwischen });
+    }
+  }
 
   /* Achsen über BEIDE Reihen. Ohne das liefe die Soll-Linie oben und rechts
      aus dem Bild, sobald der Plan über den gemessenen Bereich hinausgeht —
@@ -169,25 +189,34 @@ export function ReihenChart({
     });
     setAuswahl(beste);
   }
-  function taste(e: KeyboardEvent<SVGSVGElement>) {
+  function taste(e: KeyboardEvent<HTMLDivElement>) {
     const jetzt = auswahl ?? reihe.length - 1;
-    if (e.key === "ArrowLeft") setAuswahl(Math.max(0, jetzt - 1));
-    else if (e.key === "ArrowRight") setAuswahl(Math.min(reihe.length - 1, jetzt + 1));
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") setAuswahl(Math.max(0, jetzt - 1));
+    else if (e.key === "ArrowRight" || e.key === "ArrowUp") setAuswahl(Math.min(reihe.length - 1, jetzt + 1));
+    else if (e.key === "Home") setAuswahl(0);
+    else if (e.key === "End") setAuswahl(reihe.length - 1);
     else if (e.key === "Escape") setAuswahl(null);
     else return;
     e.preventDefault();
   }
 
-  const gezeigt = reihe[auswahl !== null && auswahl < reihe.length ? auswahl : reihe.length - 1];
+  const gezeigtIndex = auswahl !== null && auswahl < reihe.length ? auswahl : reihe.length - 1;
+  const gezeigt = reihe[gezeigtIndex];
   const planAmTag = sollReihe.length > 1 ? wertAm(sollReihe, Date.parse(gezeigt.datum)) : null;
+  /* Im Jahresbild kommt "Do., 22. Okt." zweimal vor — dann mit Jahr. */
+  const mitJahr = Date.parse(letzte.datum) - Date.parse(erste.datum) > HALBES_JAHR_MS;
+  const gezeigtDatum = `${kurzDatum(gezeigt.datum)}${mitJahr ? ` ${gezeigt.datum.slice(0, 4)}` : ""}`;
+  const ablesungText =
+    `${de(gezeigt.wert, stellen)} ${einheit} am ${gezeigtDatum}` +
+    (planAmTag !== null ? `, ${sollBezeichnung} ${de(planAmTag, stellen)} ${einheit}` : "");
   const ablesung = (
     /* Immer da, auch ohne Auswahl (dann der letzte Wert): so springt beim
        ersten Tipp nichts, und die jüngste Zahl steht ohne Suchen da. */
-    <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-[12px] text-fg-faint" aria-live="polite">
+    <p className="mt-3 flex flex-wrap items-baseline gap-x-2 text-[12px] text-fg-faint" aria-hidden>
       <b className="text-[15px] font-semibold tabular-nums text-fg">
         {de(gezeigt.wert, stellen)} {einheit}
       </b>
-      <span>{kurzDatum(gezeigt.datum)}</span>
+      <span>{gezeigtDatum}</span>
       {planAmTag !== null && (
         <span className="tabular-nums">
           · {sollBezeichnung} {de(planAmTag, stellen)} {einheit}
@@ -196,110 +225,129 @@ export function ReihenChart({
     </p>
   );
 
+  const ohnePunkt = (d: string) => kurzDatum(d).replace(/\.$/, "");
+  const beschreibung =
+    `${bezeichnung} von ${de(erste.wert, stellen)} ${einheit} am ${kurzDatum(erste.datum)} ` +
+    `auf ${de(letzte.wert, stellen)} ${einheit} am ${ohnePunkt(letzte.datum)}.` +
+    (sollReihe.length > 1
+      ? ` Gestrichelt daneben ${sollBezeichnung}: ${de(sollReihe[0].wert, stellen)} ${einheit} ` +
+        `am ${kurzDatum(sollReihe[0].datum)} auf ` +
+        `${de(sollReihe[sollReihe.length - 1].wert, stellen)} ${einheit} am ` +
+        `${ohnePunkt(sollReihe[sollReihe.length - 1].datum)}.`
+      : "");
+
+  /* Ein Schieberegler für Bildschirmleser: mit VoiceOver wischt man nach oben
+     oder unten von Messtag zu Messtag und hört Wert und Datum. Die Kurve
+     selbst ist Bild, beschrieben über aria-describedby. */
   const diagramm = (
-    <svg
-      viewBox={`0 0 ${VW} ${VH}`}
-      className="mt-2 block h-[170px] w-full touch-pan-y select-none outline-none focus-visible:ring-2 focus-visible:ring-accent/50 rounded-sm"
-      role="img"
+    <div
+      role="slider"
       tabIndex={0}
-      onPointerDown={waehlen}
-      onPointerMove={(e) => {
-        // Maus: folgen. Finger: nur solange er aufliegt.
-        if (e.pointerType === "mouse" || e.buttons > 0) waehlen(e);
-      }}
-      onPointerLeave={(e) => {
-        if (e.pointerType === "mouse") setAuswahl(null);
-      }}
+      aria-label={`${bezeichnung}, Messtag`}
+      aria-describedby={beschreibungId}
+      aria-valuemin={0}
+      aria-valuemax={reihe.length - 1}
+      aria-valuenow={gezeigtIndex}
+      aria-valuetext={ablesungText}
       onKeyDown={taste}
-      aria-label={
-        `${bezeichnung} von ${de(erste.wert, 1)} ${einheit} am ${kurzDatum(erste.datum)} ` +
-        `auf ${de(letzte.wert, 1)} ${einheit} am ${kurzDatum(letzte.datum).replace(/\.$/, "")}` +
-        (sollReihe.length > 1
-          ? `. Gestrichelt daneben ${sollBezeichnung}: ${de(sollReihe[0].wert, 1)} ${einheit} ` +
-            `am ${kurzDatum(sollReihe[0].datum)} auf ` +
-            `${de(sollReihe[sollReihe.length - 1].wert, 1)} ${einheit} am ` +
-            `${kurzDatum(sollReihe[sollReihe.length - 1].datum).replace(/\.$/, "")}.`
-          : "") +
-        ". Pfeiltasten wählen einen Messtag."
-      }
+      className="mt-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
     >
-      {[lo, (lo + hi) / 2, hi].map((g) => (
-        <g key={g}>
-          <line x1={P} y1={y(g)} x2={VW - 14} y2={y(g)} stroke="var(--color-hair-soft)" />
-          <text x="0" y={y(g) + 3.5} className="fill-fg-faint text-[10px] font-semibold">
-            {de(g, 0)}
-          </text>
-        </g>
-      ))}
-
-      {/* Zuerst der Plan, damit die gemessene Linie darüber liegt: wo beide
-          zusammenfallen, soll die Tatsache gewinnen, nicht die Absicht. */}
-      {sollReihe.length > 1 && (
-        <path
-          d={`M ${sollReihe.map((p) => `${x(p.datum)} ${y(p.wert)}`).join(" L ")}`}
-          fill="none"
-          stroke="var(--color-fg-faint)"
-          strokeWidth="1.6"
-          strokeDasharray="4 4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          opacity="0.75"
-        />
-      )}
-
-      {reihe.map((p) => (
-        <circle key={p.datum} cx={x(p.datum)} cy={y(p.wert)} r="1.9" className="fill-fg-faint opacity-50" />
-      ))}
-
-      {segmente
-        .filter((s) => s.length > 1)
-        .map((seg, i) => (
-          <path
-            key={i}
-            d={`M ${seg.map((p) => `${x(p.datum)} ${y(p.wert)}`).join(" L ")}`}
-            fill="none"
-            stroke="var(--color-accent)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+      <span id={beschreibungId} className="sr-only">
+        {beschreibung}
+      </span>
+      <svg
+        viewBox={`0 0 ${VW} ${VH}`}
+        className="block h-[170px] w-full touch-pan-y select-none"
+        aria-hidden
+        onPointerDown={waehlen}
+        onPointerMove={(e) => {
+          // Maus: folgen. Finger: nur solange er aufliegt.
+          if (e.pointerType === "mouse" || e.buttons > 0) waehlen(e);
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setAuswahl(null);
+        }}
+      >
+        {[lo, (lo + hi) / 2, hi].map((g) => (
+          <g key={g}>
+            <line x1={P} y1={y(g)} x2={VW - 14} y2={y(g)} stroke="var(--color-hair-soft)" />
+            <text x="0" y={y(g) + 3.5} className="fill-fg-faint text-[10px] font-semibold">
+              {/* Die Mitte liegt bei ungerader Spanne auf ,5 — gerundet stünde
+                  "8" an der 7,5-h-Linie. */}
+              {de(g, Number.isInteger(g) ? 0 : 1)}
+            </text>
+          </g>
         ))}
 
-      {auswahl !== null && (
-        <line
-          x1={x(gezeigt.datum)}
-          y1={12}
-          x2={x(gezeigt.datum)}
-          y2={VH - 24}
-          stroke="var(--color-fg-faint)"
-          strokeWidth="1"
+        {/* Zuerst der Plan, damit die gemessene Linie darüber liegt: wo beide
+            zusammenfallen, soll die Tatsache gewinnen, nicht die Absicht. */}
+        {sollReihe.length > 1 && (
+          <path
+            d={`M ${sollReihe.map((p) => `${x(p.datum)} ${y(p.wert)}`).join(" L ")}`}
+            fill="none"
+            stroke="var(--color-fg-faint)"
+            strokeWidth="1.6"
+            strokeDasharray="4 4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity="0.75"
+          />
+        )}
+
+        {reihe.map((p) => (
+          <circle key={p.datum} cx={x(p.datum)} cy={y(p.wert)} r="1.9" className="fill-fg-faint opacity-50" />
+        ))}
+
+        {segmente
+          .filter((s) => s.length > 1)
+          .map((seg, i) => (
+            <path
+              key={i}
+              d={`M ${seg.map((p) => `${x(p.datum)} ${y(p.wert)}`).join(" L ")}`}
+              fill="none"
+              stroke="var(--color-accent)"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+
+        {auswahl !== null && (
+          <line
+            x1={x(gezeigt.datum)}
+            y1={12}
+            x2={x(gezeigt.datum)}
+            y2={VH - 24}
+            stroke="var(--color-fg-faint)"
+            strokeWidth="1"
+          />
+        )}
+
+        <circle
+          cx={x(gezeigt.datum)}
+          cy={y(gezeigt.wert)}
+          r="4.5"
+          fill="var(--color-accent)"
+          stroke="var(--color-ground)"
+          strokeWidth="3"
         />
-      )}
 
-      <circle
-        cx={x(gezeigt.datum)}
-        cy={y(gezeigt.wert)}
-        r="4.5"
-        fill="var(--color-accent)"
-        stroke="var(--color-ground)"
-        strokeWidth="3"
-      />
+        {/* Die Kurve hatte keine Zeitachse: dass links April und rechts August
+            steht, war ihr nicht anzusehen, und eine Messlücke sah aus wie ein
+            gleichmäßiger Abstand.
 
-      {/* Die Kurve hatte keine Zeitachse: dass links April und rechts August
-          steht, war ihr nicht anzusehen, und eine Messlücke sah aus wie ein
-          gleichmäßiger Abstand.
-
-          Beschriftet wird die tatsächliche Spanne des Bildes, nicht die der
-          Messreihe — mit einer Planlinie reicht die Achse weiter nach rechts
-          als die letzte Messung, und dort stünde sonst ein Datum, das gar
-          nicht am rechten Rand liegt. */}
-      <text x={P} y={VH - 4} className="fill-fg-faint text-[10px] font-semibold">
-        {achsenDatum(t0, t1 - t0)}
-      </text>
-      <text x={VW - 14} y={VH - 4} textAnchor="end" className="fill-fg-faint text-[10px] font-semibold">
-        {achsenDatum(t1, t1 - t0)}
-      </text>
-    </svg>
+            Beschriftet wird die tatsächliche Spanne des Bildes, nicht die der
+            Messreihe — mit einer Planlinie reicht die Achse weiter nach rechts
+            als die letzte Messung, und dort stünde sonst ein Datum, das gar
+            nicht am rechten Rand liegt. */}
+        <text x={P} y={VH - 4} className="fill-fg-faint text-[10px] font-semibold">
+          {achsenDatum(t0, t1 - t0)}
+        </text>
+        <text x={VW - 14} y={VH - 4} textAnchor="end" className="fill-fg-faint text-[10px] font-semibold">
+          {achsenDatum(t1, t1 - t0)}
+        </text>
+      </svg>
+    </div>
   );
 
   /* Ohne Legende ist eine gestrichelte Linie nur eine zweite Linie. Sie steht

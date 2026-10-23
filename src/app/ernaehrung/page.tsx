@@ -13,6 +13,7 @@ import {
 import { Suspense } from "react";
 import { KalorienVorschlag } from "@/components/kalorien-vorschlag";
 import {
+  AbgelaufenHinweis,
   Card,
   Eyebrow,
   Metric,
@@ -128,6 +129,12 @@ async function Inhalt() {
             : "Noch kein Kalorienziel hinterlegt."}
         </p>
       </header>
+
+      {/* Der Vorschlag rechnet dann mit Gewichten aus der Ablage — richtig,
+          aber man soll wissen, warum nichts Neues dazukommt. */}
+      {daten.verbunden && daten.abgelaufen && (
+        <AbgelaufenHinweis lage={daten.abgelaufen} className="mt-5" />
+      )}
 
       <div className="mt-7 grid items-start gap-4 md:grid-cols-[0.95fr_1.05fr]">
         <div className="flex flex-col gap-3.5">
