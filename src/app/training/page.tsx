@@ -153,7 +153,9 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   /* Vorschläge fürs Tauschen — ebenfalls Beiwerk. */
   let bekannte: string[] = [];
   try {
-    bekannte = await bekannteUebungen();
+    bekannte = await bekannteUebungen(
+      plan.uebungen.flatMap((u) => (u.planName ? [u.name, u.planName] : [u.name]))
+    );
   } catch (e) {
     console.error("Übungsnamen nicht lesbar:", e);
   }

@@ -264,15 +264,26 @@ export async function bestwerteFuer(uebungen: string[]): Promise<Record<string, 
  * wieder tippen müssen, und unter demselben Namen landet es dann auch im
  * selben Kraftverlauf.
  */
-export async function bekannteUebungen(): Promise<string[]> {
+export async function bekannteUebungen(ausschliessen: string[] = []): Promise<string[]> {
   const [katalog, geloggt] = await Promise.all([
-    prisma.uebung.findMany({ select: { name: true } }),
+    prisma.uebung.findMany({ select: { name: true, programm: true } }),
     prisma.setLog.findMany({
       where: { loggedAt: { gte: new Date(Date.now() - 365 * 864e5) } },
       distinct: ["exercise"],
       select: { exercise: true },
     }),
   ]);
-  const namen = new Set([...katalog.map((k) => k.name), ...geloggt.map((g) => g.exercise)]);
+  /* Was heute schon auf dem Schirm steht, und Programmübungen (Bankdrücken),
+     taugen nicht als Ersatz — beides lehnt der Tausch ohnehin ab, weil zwei
+     gleiche Namen in einer Einheit sich die Sätze überschreiben würden. */
+  const weg = new Set([
+    ...ausschliessen.map((n) => n.toLowerCase()),
+    ...katalog.filter((k) => k.programm).map((k) => k.name.toLowerCase()),
+  ]);
+  const namen = new Set(
+    [...katalog.map((k) => k.name), ...geloggt.map((g) => g.exercise)].filter(
+      (n) => !weg.has(n.toLowerCase())
+    )
+  );
   return [...namen].sort((a, b) => a.localeCompare(b, "de"));
 }

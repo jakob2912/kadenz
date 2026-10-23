@@ -196,6 +196,14 @@ export function TrainingLogger({
   /* Heute mehr oder weniger Sätze als geplant, je Übungsname — siehe
      saetzeHeute(). Geladen aus dem localStorage im Effekt unten. */
   const [satzAenderung, setSatzAenderung] = useState<Record<string, number>>({});
+  /* Was zuletzt am Stand der Sätze gedreht hat. Automatisch beendet wird nur
+     nach dem Laden und nach einem Abhaken — nicht, weil "− Satz" den letzten
+     offenen Satz wegnimmt: das wäre ein Abschluss mit einem Tipp, ohne Weg
+     zurück. null heißt, der Browser-Teil des Zustands (Satzzahl aus dem
+     localStorage) ist noch nicht geladen — vorher hält der Logger die Einheit
+     sonst für vollständig, sobald alle geplanten Sätze in der Datenbank
+     stehen, und beendet sie trotz eines heute dazugenommenen Satzes. */
+  const [ausloeser, setAusloeser] = useState<"laden" | "abhaken" | "satzzahl" | null>(null);
   /* Die Pause ist ein Zeitpunkt, kein Zähler. Vorher zählte ein setTimeout
      jede Sekunde eins herunter — und iOS hält Zeitgeber einer Seite an,
      sobald der Bildschirm aus ist. Wer das Handy in der Pause weglegte, fand
@@ -284,6 +292,7 @@ export function TrainingLogger({
       if (Object.keys(zurueck).length > 0) setLogged((prev) => ({ ...prev, ...zurueck }));
 
       setSatzAenderung(satzzahlLesen(tag ?? heute, session.key));
+      setAusloeser("laden");
     }, 0);
     return () => clearTimeout(id);
     // uebungen ist absichtlich nicht dabei: der Ausgang soll genau einmal beim
@@ -366,6 +375,9 @@ export function TrainingLogger({
   const saetzeFertig = Object.keys(logged).length;
   const volumen = Object.values(logged).reduce((v, s) => v + s.kg * s.reps, 0);
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
+  /* Alles abgehakt, aber nur, weil Sätze weggelassen wurden: dann fragt der
+     Knopf "Einheit beenden" nach, statt dass die Einheit von selbst endet. */
+  const beendetVonSelbst = alleSaetzeFertig && (ausloeser === "laden" || ausloeser === "abhaken");
 
   /* Bestwerte von heute, aus den abgehakten Sätzen abgeleitet statt als
      eigener State: korrigiert man einen Satz nach unten, verschwindet die
@@ -401,7 +413,7 @@ export function TrainingLogger({
      eine Korrektur am nächsten Tag verlängert die Einheit also nicht
      rückwirkend. */
   useEffect(() => {
-    if (!alleSaetzeFertig || fertigSeit !== null) return;
+    if (!beendetVonSelbst || fertigSeit !== null) return;
 
     let abgebrochen = false;
     void trainingBeenden(session.key, undefined, Date.now(), tag ?? undefined).then((r) => {
@@ -417,26 +429,45 @@ export function TrainingLogger({
     return () => {
       abgebrochen = true;
     };
-  }, [alleSaetzeFertig, fertigSeit, session.key, tag]);
+  }, [beendetVonSelbst, fertigSeit, session.key, tag]);
 
   /* Ist eine Übung fertig, rückt die nächste ins Bild — vorher musste man
      nach jedem letzten Satz selbst weiterscrollen, mit verschwitzten Fingern
      über eine Karte, die man nicht mehr braucht. Nur beim Wechsel der Übung,
      nicht bei jedem Satz und nicht beim ersten Laden: wer die Seite öffnet,
-     will oben anfangen. */
+     will oben anfangen.
+
+     Nicht sofort: unter dem letzten Satz steht noch die Frage nach der
+     Reserve und vielleicht ein Bestwert. Gerückt wird, sobald die Reserve
+     beantwortet ist (kurz danach, damit man die Antwort sieht), sonst nach
+     ein paar Sekunden. */
   const karten = useRef<(HTMLDivElement | null)[]>([]);
   const vorigeAktive = useRef<number | null | undefined>(undefined);
+  const rueckenZu = useRef<number | null>(null);
   const aktiveUebung = aktiv?.i ?? null;
+  const reserveOffen = zuletzt !== null && logged[zuletzt] !== undefined && logged[zuletzt].rir == null;
   useEffect(() => {
     const vorher = vorigeAktive.current;
     vorigeAktive.current = aktiveUebung;
     if (vorher === undefined || aktiveUebung === null || vorher === aktiveUebung) return;
     if (vorher !== null && aktiveUebung < vorher) return;
-    karten.current[aktiveUebung]?.scrollIntoView({
-      behavior: reduce ? "auto" : "smooth",
-      block: "start",
-    });
-  }, [aktiveUebung, reduce]);
+    rueckenZu.current = aktiveUebung;
+  }, [aktiveUebung]);
+  useEffect(() => {
+    const ziel = rueckenZu.current;
+    if (ziel === null || ziel !== aktiveUebung) return;
+    const id = setTimeout(
+      () => {
+        rueckenZu.current = null;
+        karten.current[ziel]?.scrollIntoView({
+          behavior: reduce ? "auto" : "smooth",
+          block: "start",
+        });
+      },
+      reserveOffen ? 4000 : 700
+    );
+    return () => clearTimeout(id);
+  }, [aktiveUebung, reserveOffen, reduce]);
 
   function abhaken(
     key: string,
@@ -451,6 +482,7 @@ export function TrainingLogger({
     const t = uhr();
     setLogged((prev) => (prev[key] ? prev : { ...prev, [key]: { kg, reps, erfasstAm: t } }));
     setZuletzt(key);
+    setAusloeser("abhaken");
     /* Ist die Einheit schon beendet, ist das ein Nachtrag, kein Satz im Gym:
        keine Satzpause und keine Pausen-Nachricht drei Minuten später. */
     const nachtrag = fertigSeit !== null;
@@ -474,7 +506,12 @@ export function TrainingLogger({
 
     // Erst der Satz, dann die Ankündigung: Next arbeitet Server Actions
     // nacheinander ab, und der Satz soll nicht auf die Pausen-Nachricht warten.
-    senden({ kind: session.key, exercise, setIndex, kg, reps, erfasstAm: t }, setSpeicherFehler);
+    /* rir: null ausdrücklich — nach einer Korrektur gehört die alte Reserve
+       nicht mehr zu den neuen Zahlen; die Frage danach kommt neu. */
+    senden(
+      { kind: session.key, exercise, setIndex, kg, reps, erfasstAm: t, rir: null },
+      setSpeicherFehler
+    );
     // Für den gesperrten Bildschirm: der Server schickt am Ende eine
     // Push-Nachricht, falls sie eingeschaltet ist. Scheitert das, läuft der
     // Timer hier trotzdem — die Nachricht ist Zugabe, nicht Grundlage.
@@ -508,10 +545,20 @@ export function TrainingLogger({
     );
   }
 
-  /** Heute einen Satz mehr (+1) oder weniger (−1) für eine Übung. */
-  function satzzahlAendern(name: string, um: number) {
-    const neu = { ...satzAenderung, [name]: (satzAenderung[name] ?? 0) + um };
+  /**
+   * Heute einen Satz mehr (+1) oder weniger (−1) für eine Übung — gerechnet
+   * von dem, was auf dem Schirm steht. Stehen schon mehr Sätze in der
+   * Datenbank als geplant (anderes Gerät), lief ein "+1" auf den Plan sonst
+   * ins Leere.
+   */
+  function satzzahlAendern(i: number, um: number) {
+    const ex = uebungen[i];
+    const neu = {
+      ...satzAenderung,
+      [ex.name]: saetzeJe[i].length + um - heutigeSaetze(ex).length,
+    };
     setSatzAenderung(neu);
+    setAusloeser("satzzahl");
     satzzahlSchreiben(tag ?? wienerDatum(new Date(uhr())), session.key, neu);
   }
 
@@ -687,6 +734,8 @@ export function TrainingLogger({
             saetze.length > 0 && saetze.every((_, si) => logged[`${i}-${si}`]);
           const istAktiv = aktiv?.i === i;
           const letzterOffen = saetze.length > 0 && !logged[`${i}-${saetze.length - 1}`];
+          const ersterOffen = saetze.findIndex((_, si) => !logged[`${i}-${si}`]);
+          const angefangen = saetze.some((_, si) => logged[`${i}-${si}`]);
           const programm = ex.programmSaetze.length > 0;
           return (
             /* Der Rahmen um die Übung, die gerade dran ist: aus zwei Metern
@@ -694,7 +743,7 @@ export function TrainingLogger({
                hält die Karte beim Weiterrücken unter der klebenden
                Kopfleiste statt hinter ihr. */
             <div
-              key={`${ex.planName ?? ex.name}-${i}`}
+              key={`${ex.planName ?? ex.name}-${ex.name}-${i}`}
               ref={(el) => {
                 karten.current[i] = el;
               }}
@@ -766,6 +815,14 @@ export function TrainingLogger({
 
               {saetze.map((satz, si) => {
                 const key = `${i}-${si}`;
+                /* Wer den ersten Satz schwerer oder leichter geladen hat,
+                   macht den zweiten meist genauso. Die Vorgabe zieht deshalb
+                   das zuletzt geloggte Gewicht der Übung nach, solange der
+                   Plan für beide Sätze dasselbe vorsah. Beim Programm nicht:
+                   dort hat jeder Satz sein eigenes Gewicht. */
+                const vorher = si > 0 ? logged[`${i}-${si - 1}`] : undefined;
+                const zielKg =
+                  !programm && vorher && saetze[si - 1].kg === satz.kg ? vorher.kg : satz.kg;
                 return (
                   <SatzZeile
                     key={si}
@@ -773,13 +830,16 @@ export function TrainingLogger({
                     rekord={rekorde.get(key) ?? null}
                     nummer={si + 1}
                     prev={ex.prev[si]}
-                    zielKg={satz.kg}
+                    zielKg={zielKg}
                     zielReps={satz.wdh}
                     amrap={satz.amrap}
                     vorgegeben={programm}
                     logged={logged[key]}
                     hervorgehoben={zuletzt === key}
-                    aktiv={aktiv?.i === i && aktiv.si === si}
+                    /* Knöpfe am nächsten Satz jeder angefangenen Übung, nicht
+                       nur am ersten offenen der Einheit: wer eine Übung
+                       vorzieht, weil das Gerät belegt ist, braucht sie dort. */
+                    aktiv={si === ersterOffen && fertigSeit === null && (istAktiv || angefangen)}
                     reserveFrage={zuletzt === key && logged[key] !== undefined && logged[key].rir == null}
                     onReserve={(rir) => reserveSetzen(key, ex.name, si, rir)}
                     onLog={(kg, reps) => abhaken(key, ex.name, si, kg, reps)}
@@ -813,9 +873,9 @@ export function TrainingLogger({
                   kannMehr={saetze.length < 10}
                   hatGeloggt={saetze.some((_, si) => logged[`${i}-${si}`])}
                   ausgelassen={saetze.length === 0 && heutigeSaetze(ex).length > 0}
-                  onMehr={() => satzzahlAendern(ex.name, 1)}
-                  onWeniger={() => satzzahlAendern(ex.name, -1)}
-                  onWiederAufnehmen={() => satzzahlAendern(ex.name, -(satzAenderung[ex.name] ?? 0))}
+                  onMehr={() => satzzahlAendern(i, 1)}
+                  onWeniger={() => satzzahlAendern(i, -1)}
+                  onWiederAufnehmen={() => satzzahlAendern(i, heutigeSaetze(ex).length)}
                 />
               )}
             </Card>
@@ -839,7 +899,7 @@ export function TrainingLogger({
           </Card>
         )}
 
-        {!alleSaetzeFertig && fertigSeit === null && saetzeFertig > 0 && (
+        {!beendetVonSelbst && fertigSeit === null && saetzeFertig > 0 && (
           <EinheitBeenden
             offen={saetzeGesamt - saetzeFertig}
             onBeenden={async () => {
@@ -855,7 +915,7 @@ export function TrainingLogger({
           />
         )}
 
-        {(alleSaetzeFertig || fertigSeit !== null) && (
+        {(beendetVonSelbst || fertigSeit !== null) && (
           <motion.div
             initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -986,6 +1046,11 @@ function SatzZeile({
       ? wdhFuerBestwert(Number((kg || String(zielKg)).replace(",", ".")) || 0, bestwert)
       : null;
   const [repsUngueltig, setRepsUngueltig] = useState(false);
+  const [kgUngueltig, setKgUngueltig] = useState(false);
+  /* Keine Vorgabe (Ersatzübung ohne Historie, neue Übung): dann steht "kg"
+     im Feld statt einer 0, und ein Tipp auf den Haken loggt nicht still
+     0 kg in Verlauf und Progression. Eine getippte 0 gilt. */
+  const ohneVorgabe = zielKg === 0 && !vorgegeben;
   const fertig = Boolean(logged);
 
   // Beim Öffnen zum Korrigieren stehen die gespeicherten Werte im Feld,
@@ -995,6 +1060,7 @@ function SatzZeile({
     setKg(String(logged.kg).replace(".", ","));
     setReps(String(logged.reps));
     setRepsUngueltig(false);
+    setKgUngueltig(false);
     onKorrigieren();
   }
 
@@ -1009,8 +1075,13 @@ function SatzZeile({
       setRepsUngueltig(true);
       return;
     }
+    if (ohneVorgabe && kg.trim() === "") {
+      setKgUngueltig(true);
+      return;
+    }
 
     setRepsUngueltig(false);
+    setKgUngueltig(false);
     onLog(kgZahl, repsZahl);
   }
 
@@ -1021,6 +1092,7 @@ function SatzZeile({
   function kgSchritt(um: number) {
     const basis = Number((kg || String(zielKg)).replace(",", ".")) || 0;
     setKg(String(Math.max(0, Math.round((basis + um) * 100) / 100)).replace(".", ","));
+    setKgUngueltig(false);
   }
   function wdhSchritt(um: number) {
     const basis = Number(reps || String(zielReps)) || 0;
@@ -1042,9 +1114,13 @@ function SatzZeile({
       </span>
       <Feld
         wert={fertig ? String(logged!.kg).replace(".", ",") : kg}
-        setWert={setKg}
-        platzhalter={String(zielKg).replace(".", ",")}
+        setWert={(v) => {
+          setKg(v);
+          setKgUngueltig(false);
+        }}
+        platzhalter={ohneVorgabe ? "kg" : String(zielKg).replace(".", ",")}
         fertig={fertig}
+        ungueltig={kgUngueltig}
         onOeffnen={oeffnen}
         label={`Gewicht in Kilogramm, Satz ${nummer}`}
       />
@@ -1092,27 +1168,25 @@ function SatzZeile({
       )}
 
       {aktiv && !fertig && (
-        <div className="col-span-5 grid grid-cols-[92px_1fr_1fr_44px] items-center gap-2 pb-1.5">
-          <span className="text-right text-[11px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-            Anpassen
-          </span>
+        /* Über die ganze Breite statt unter den schmalen kg-/Wdh-Spalten:
+           dort blieben je Knopf 35 px, hier sind es gut 70. */
+        <div className="col-span-5 grid grid-cols-2 gap-3 pb-1.5">
           <span className="grid grid-cols-2 gap-1.5">
             <Schritt onClick={() => kgSchritt(-2.5)} label={`Gewicht 2,5 kg weniger, Satz ${nummer}`}>
-              −2,5
+              −2,5 kg
             </Schritt>
             <Schritt onClick={() => kgSchritt(2.5)} label={`Gewicht 2,5 kg mehr, Satz ${nummer}`}>
-              +2,5
+              +2,5 kg
             </Schritt>
           </span>
           <span className="grid grid-cols-2 gap-1.5">
             <Schritt onClick={() => wdhSchritt(-1)} label={`Eine Wiederholung weniger, Satz ${nummer}`}>
-              −1
+              −1 Wdh
             </Schritt>
             <Schritt onClick={() => wdhSchritt(1)} label={`Eine Wiederholung mehr, Satz ${nummer}`}>
-              +1
+              +1 Wdh
             </Schritt>
           </span>
-          <span />
         </div>
       )}
 
@@ -1557,8 +1631,9 @@ function EinheitBeenden({
   return (
     <div className="rounded-md border border-hair p-3.5">
       <p className="text-[13px] leading-relaxed text-fg-dim">
-        {anzahl(offen, "Satz ist", "Sätze sind")} noch offen. Trotzdem beenden? Die offenen
-        Sätze fallen dann weg; beim nächsten Mal plant Kadenz wieder alle.
+        {offen === 0
+          ? "Alles Übrige ist abgehakt. Einheit jetzt beenden? Danach steht die Dauer fest."
+          : `${anzahl(offen, "Satz ist", "Sätze sind")} noch offen. Trotzdem beenden? Die offenen Sätze fallen dann weg; beim nächsten Mal plant Kadenz wieder alle.`}
       </p>
       <div className="mt-3 flex gap-2.5">
         <button
@@ -1723,7 +1798,7 @@ function Schritt({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="min-h-[44px] rounded-sm border border-hair bg-surface-2 text-[14px] font-semibold tabular-nums text-fg
+      className="min-h-[44px] rounded-sm border border-hair bg-surface-2 text-[13px] font-semibold tabular-nums text-fg
                  transition active:scale-95 active:border-accent/50 active:text-accent"
     >
       {children}

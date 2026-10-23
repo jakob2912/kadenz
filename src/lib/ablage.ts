@@ -102,13 +102,22 @@ export function ausgangAblegen(satz: OffenerSatz): void {
 
 /**
  * Nach erfolgreichem Senden entfernen — aber nur, wenn der Eintrag noch der
- * gesendete ist. Wurde der Satz inzwischen korrigiert, liegt dort eine neuere
- * Fassung, die selbst noch unterwegs ist.
+ * gesendete ist. Wurde der Satz inzwischen korrigiert oder die Reserve
+ * nachgetragen, liegt dort eine neuere Fassung, die selbst noch unterwegs
+ * ist. Der Zeitpunkt allein reicht dafür nicht: die Reserve-Angabe trägt
+ * bewusst denselben wie der Satz.
  */
 export function ausgangErledigt(satz: OffenerSatz): void {
   const alle = alleLesen();
   const k = schluessel(satz);
-  if (alle[k]?.erfasstAm === satz.erfasstAm) {
+  const da = alle[k];
+  if (
+    da &&
+    da.erfasstAm === satz.erfasstAm &&
+    da.kg === satz.kg &&
+    da.reps === satz.reps &&
+    (da.rir ?? null) === (satz.rir ?? null)
+  ) {
     delete alle[k];
     alleSchreiben(alle);
   }

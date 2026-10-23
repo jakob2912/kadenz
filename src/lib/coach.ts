@@ -325,9 +325,17 @@ export function progression(
   /* Mit Reserve gerechnet: sechs Wiederholungen und drei in Reserve heißt,
      neun wären gegangen — die Obergrenze war drin, sie wurde nur nicht
      ausgereizt. Greift ausschließlich, wenn die Reserve angegeben wurde;
-     ohne Angabe gilt Jakobs Regel unverändert. */
+     ohne Angabe gilt Jakobs Regel unverändert.
+
+     Geschätzte Reserve ist ungenau, und "3+" wird als 3 gespeichert. Damit
+     nicht schon ein Satz knapp an der Untergrenze (5 + "3+") die Erhöhung
+     auslöst, muss der Satz mindestens eine Wiederholung darüber liegen. */
   const rir = lastSets[0].rir;
-  if (typeof rir === "number" && lastSets[0].reps + rir >= maxReps) {
+  if (
+    typeof rir === "number" &&
+    lastSets[0].reps >= minReps + 1 &&
+    lastSets[0].reps + rir >= maxReps
+  ) {
     return {
       kg: current + step,
       delta: step,

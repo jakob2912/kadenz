@@ -16,6 +16,10 @@ describe("progression mit Wiederholungen in Reserve", () => {
     expect(progression([{ kg: 50, reps: 6, rir: 1 }]).delta).toBe(0);
   });
 
+  it("knapp an der Untergrenze reicht auch viel Reserve nicht", () => {
+    expect(progression([{ kg: 50, reps: 5, rir: 3 }]).delta).toBe(0);
+  });
+
   it("die Untergrenze hat Vorrang vor jeder Reserve", () => {
     const r = progression([{ kg: 50, reps: 7, rir: 3 }, { kg: 50, reps: 4 }]);
     expect(r.delta).toBeLessThan(0);

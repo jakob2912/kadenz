@@ -9,33 +9,39 @@ import { heuteWien } from "./datum";
  * nur, was heute an welcher Stelle steht, und zwar am Kalendertag: morgen
  * gilt der Eintrag nicht mehr, ohne dass ihn jemand löschen muss.
  *
- * Eine Zeile in Einstellung genügt — es gibt immer nur einen heutigen Tag.
+ * Eine Zeile in Einstellung genügt, getrennt je Einheit — wer an einem Tag
+ * Push und Pull trainiert, verliert den einen Tausch nicht durch den anderen.
  * Die Sätze der Ersatzübung landen unter ihrem eigenen Namen in SetLog;
  * ihr Kraftverlauf beginnt also sauber für sich, statt die Zahlen der
  * eigentlichen Übung zu verfälschen.
+ *
+ * Nach Mitternacht ist der Tausch weg — wie die laufende Einheit selbst,
+ * die der Logger ebenfalls nur am heutigen Kalendertag sucht.
  */
 
 const SCHLUESSEL = "tagestausch";
 
-type Ablage = { datum: string; einheit: "push" | "pull"; ersetzt: Record<string, string> };
+type Einheit = "push" | "pull";
+type Ablage = { datum: string; ersetzt: Partial<Record<Einheit, Record<string, string>>> };
 
-async function lesen(): Promise<Ablage | null> {
+async function lesen(datum: string): Promise<Ablage> {
+  const leer: Ablage = { datum, ersetzt: {} };
   const zeile = await prisma.einstellung.findUnique({ where: { schluessel: SCHLUESSEL } });
-  if (!zeile) return null;
+  if (!zeile) return leer;
   try {
-    return JSON.parse(zeile.wert) as Ablage;
+    const a = JSON.parse(zeile.wert) as Ablage;
+    return a.datum === datum && a.ersetzt && typeof a.ersetzt === "object" ? a : leer;
   } catch {
-    return null;
+    return leer;
   }
 }
 
 /** Was heute in dieser Einheit getauscht ist: alter Name → neuer Name. */
 export async function heutigeTausche(
-  einheit: "push" | "pull",
+  einheit: Einheit,
   datum: string = heuteWien()
 ): Promise<Record<string, string>> {
-  const ablage = await lesen();
-  return ablage && ablage.datum === datum && ablage.einheit === einheit ? ablage.ersetzt : {};
+  return (await lesen(datum)).ersetzt[einheit] ?? {};
 }
 
 /**
@@ -45,17 +51,20 @@ export async function heutigeTausche(
  * der Tausch aufgehoben.
  */
 export async function heuteTauschen(
-  einheit: "push" | "pull",
+  einheit: Einheit,
   planName: string,
   neu: string
 ): Promise<Record<string, string>> {
   const datum = heuteWien();
-  const bisher = await heutigeTausche(einheit, datum);
-  const ersetzt = { ...bisher };
+  const ablage = await lesen(datum);
+  const ersetzt = { ...(ablage.ersetzt[einheit] ?? {}) };
   if (neu === planName) delete ersetzt[planName];
   else ersetzt[planName] = neu;
 
-  const wert = JSON.stringify({ datum, einheit, ersetzt } satisfies Ablage);
+  const wert = JSON.stringify({
+    datum,
+    ersetzt: { ...ablage.ersetzt, [einheit]: ersetzt },
+  } satisfies Ablage);
   await prisma.einstellung.upsert({
     where: { schluessel: SCHLUESSEL },
     update: { wert },
