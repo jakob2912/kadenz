@@ -26,6 +26,7 @@ import {
   type BestwertArt,
 } from "@/lib/bestwerte";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
+import { abzeichenAuffrischen } from "@/components/pwa";
 import { eigenesPushAbo, geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
 import { satzpauseAnkuendigen } from "@/lib/push-actions";
 import { uebungNotizSetzen, uebungTauschenAktion } from "@/lib/uebung-actions";
@@ -2008,6 +2009,7 @@ export function TrainingStart({
       // Die Seite lädt neu und zeigt dann den Logger — der Beginn kommt dabei
       // aus der Datenbank, nicht aus dem Browser.
       router.refresh();
+      abzeichenAuffrischen();
     } else {
       setFehler(r.fehler);
       setLaeuft(false);

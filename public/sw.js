@@ -82,17 +82,35 @@ self.addEventListener("push", (event) => {
 
   const titel = daten.title || "Kadenz";
   event.waitUntil(
-    self.registration.showNotification(titel, {
-      body: daten.body || "",
-      icon: "/icons/icon-192.png",
-      // tag ersetzt eine ältere Nachricht derselben Art, statt sie zu stapeln:
-      // drei "Satzpause vorbei" untereinander sagen nichts Neues.
-      tag: daten.tag || undefined,
-      renotify: Boolean(daten.tag),
-      data: { url: daten.url || "/" },
-    })
+    Promise.all([
+      zahlSetzen(daten.badge),
+      self.registration.showNotification(titel, {
+        body: daten.body || "",
+        icon: "/icons/icon-192.png",
+        // tag ersetzt eine ältere Nachricht derselben Art, statt sie zu stapeln:
+        // drei "Satzpause vorbei" untereinander sagen nichts Neues.
+        tag: daten.tag || undefined,
+        renotify: Boolean(daten.tag),
+        data: { url: daten.url || "/" },
+      }),
+    ])
   );
 });
+
+/**
+ * Zahl am App-Symbol (iOS 16.4+, nur als installierte App mit erlaubten
+ * Nachrichten). Fehlt die Zahl in der Nachricht, bleibt die alte stehen —
+ * "Satzpause vorbei" weiß nichts über offene Dinge.
+ */
+async function zahlSetzen(zahl) {
+  if (typeof zahl !== "number" || !("setAppBadge" in self.navigator)) return;
+  try {
+    if (zahl > 0) await self.navigator.setAppBadge(zahl);
+    else await self.navigator.clearAppBadge();
+  } catch {
+    // Ohne Erlaubnis lehnt der Browser ab; die Nachricht selbst geht vor.
+  }
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

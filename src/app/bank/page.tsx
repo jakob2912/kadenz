@@ -19,10 +19,11 @@ import { ZIEL_DATUM, ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib
 import type { Bankcoach, Prognose } from "@/lib/bankcoach";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { ReihenChart } from "@/components/reihen-chart";
+import { VerlaufUmschalter } from "@/components/verlauf-umschalter";
 import { Card, Eyebrow, Skelett, Tag, anzahl, de, kurzDatum, langDatum } from "@/components/ui";
 
 /**
- * Der Bankdrücken-Tab.
+ * Bankdrücken, seit der Vier-Tab-Leiste die zweite Ansicht unter Verlauf.
  *
  * Getrennt vom Verlauf, obwohl es dort längst eine Seite je Übung gibt
  * (/verlauf/[uebung]). Der Unterschied ist nicht die Übung, sondern die Frage:
@@ -37,7 +38,8 @@ import { Card, Eyebrow, Skelett, Tag, anzahl, de, kurzDatum, langDatum } from "@
 export default function Bank() {
   return (
     <div className="mx-auto max-w-[520px] md:max-w-[1180px]">
-      <header className="pt-10 md:pt-14">
+      <VerlaufUmschalter aktiv="bank" />
+      <header className="pt-6 md:pt-8">
         <Eyebrow>Bankdrücken</Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em] md:text-[33px]">
           5/3/1 mit leichtem Tag
@@ -161,7 +163,8 @@ function Stand({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Gültig seit {kurzDatum(tm.gueltigAb)}. {tm.begruendung}
+        {/* kurzDatum endet auf "Okt." — ein weiterer Punkt dahinter wäre doppelt. */}
+        Gültig seit {kurzDatum(tm.gueltigAb).replace(/\.$/, "")}. {tm.begruendung}
       </p>
     </Card>
   );

@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { rotationMitPlan } from "@/lib/wochenplan";
-import { heutigeEinheit } from "@/lib/training-lesen";
-import { offenerVorschlag } from "@/lib/ernaehrung";
+import { heutigeLage } from "@/lib/abzeichen";
 import { cronAbweisen } from "@/lib/cron";
 import { anAlleSenden, benachrichtigungenLesen } from "@/lib/push";
-import { abendNachricht } from "@/lib/benachrichtigung-texte";
+import { abendNachricht, offeneDinge } from "@/lib/benachrichtigung-texte";
 
 /**
  * Abend-Erinnerung — von Vercel Cron aufgerufen, siehe vercel.json.
@@ -23,23 +21,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ gesendet: false, grund: "ausgeschaltet" });
   }
 
-  const [rotation, einheit, vorschlag] = await Promise.all([
-    rotationMitPlan(new Date()),
-    heutigeEinheit(),
-    offenerVorschlag(),
-  ]);
+  const lage = await heutigeLage();
+  const nachricht = abendNachricht(lage);
 
-  const nachricht = abendNachricht({
-    plan:
-      rotation.art === "training"
-        ? { art: "training", einheit: rotation.einheit }
-        : { art: "pause", naechste: rotation.naechste },
-    trainiertHeute: einheit !== null,
-    kalorienvorschlagOffen: vorschlag !== null,
-  });
-
+  /* Ohne Nachricht geht auch keine Zahl ans App-Symbol: iOS erlaubt keinen
+     stillen Push, jede Zustellung zeigt eine Benachrichtigung. Wurde etwas
+     außerhalb der App erledigt (MCP-Server), bleibt die alte Zahl bis zum
+     nächsten Öffnen oder bis zur Morgen-Nachricht stehen. */
   if (!nachricht) return NextResponse.json({ gesendet: false, grund: "nichts zu sagen" });
 
-  const versand = await anAlleSenden(nachricht);
+  const versand = await anAlleSenden({ ...nachricht, badge: offeneDinge(lage) });
   return NextResponse.json({ gesendet: true, nachricht, versand });
 }

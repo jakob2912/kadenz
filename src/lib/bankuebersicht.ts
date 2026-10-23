@@ -111,7 +111,7 @@ export async function eingetragenerPr(): Promise<EchterPr | null> {
  * Geloggt zählt nur ein Single, der nicht ausdrücklich als unsauber markiert
  * ist. Der eingetragene PR zählt, solange kein geloggter Single schwerer
  * ist; bei Gleichstand gewinnt der geloggte — der hat einen Satz dahinter.
- * Rein, damit Bench-Tab und MCP-Server (bank_coach) dieselbe Zahl nennen.
+ * Rein, damit die Bankdrücken-Seite und der MCP-Server (bank_coach) dieselbe Zahl nennen.
  */
 export function echterPrAus(
   saetze: readonly { kg: number; reps: number; datum: string; sauber?: boolean | null }[],

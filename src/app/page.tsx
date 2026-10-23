@@ -16,13 +16,11 @@ import {
   Eyebrow,
   Gauge,
   Metric,
-  NichtVerbunden,
   Skelett,
   Tag,
   alterLabel,
   de,
   heuteWien,
-  kurzDatum,
   minToHm,
 } from "@/components/ui";
 
@@ -46,8 +44,11 @@ export default function Heute() {
             <Skelett hoehe={16} className="w-44" />
             <Skelett hoehe={38} className="mt-3 w-60" />
           </div>
-          <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
-            <Skelett hoehe={260} />
+          {/* Dieselbe Gestalt wie die fertige Seite: erst die Heute-Karte,
+              darunter Coach und Gewicht — sonst springt alles beim Laden. */}
+          <Skelett hoehe={230} className="mt-6" />
+          <div className="mt-4 grid items-start gap-4 md:grid-cols-[1.05fr_0.95fr]">
+            <Skelett hoehe={170} />
             <div className="flex flex-col gap-3.5">
               <Skelett hoehe={150} />
               <Skelett hoehe={130} />
@@ -69,7 +70,6 @@ async function Dashboard() {
 
   const data = await loadDashboard(30);
   const rotation = await rotationMitPlan(new Date());
-  const trainingHeute = rotation.art === "training";
   /* Ob heute schon eine Einheit läuft oder lief — dann sagt die Karte das,
      statt zu einer Einheit aufzufordern, die längst erledigt ist. Beiwerk:
      ist die Datenbank kurz weg, steht die Karte eben ohne diesen Zusatz. */
@@ -80,24 +80,11 @@ async function Dashboard() {
   } catch (e) {
     console.error("Trainingsstatus nicht lesbar:", e);
   }
+  /* Jede Einheit lässt sich an jedem Tag starten. Wer am Rest Day trotzdem
+     trainiert, soll darunter keinen Rest-Day-Befund lesen. */
+  const trainingHeute = rotation.art === "training" || schonHeute !== null;
 
-  if (!data.verbunden) {
-    /* Training hängt nicht an Google — die Karte bleibt auch dann, wenn die
-       Verbindung abgelaufen ist. Sonst stünde morgens nach dem wöchentlichen
-       Ablauf gar nichts mehr darüber da, was heute ansteht. */
-    return (
-      <>
-        <NichtVerbunden titel="Erst mit Google Health verbinden" grund={data.grund} />
-        <div className="mx-auto mt-6 max-w-[520px]">
-          <HeuteTraining rotation={rotation} schonHeute={schonHeute} />
-        </div>
-      </>
-    );
-  }
-
-  const { heute, baseline, gewicht } = data;
   const heuteIso = heuteWien();
-
   // timeZone ausdrücklich gesetzt: ohne sie nimmt toLocaleDateString die
   // Serverzeit, und auf Vercel (UTC) steht ab 22:00 Wiener Zeit der Vortag da.
   const heuteDatum = new Date().toLocaleDateString("de-AT", {
@@ -119,6 +106,44 @@ async function Dashboard() {
         })}`
       : "Schulzeit";
 
+  const kopf = (
+    <header className="flex items-start justify-between gap-4 pt-10 md:pt-14">
+      <div className="min-w-0">
+        <Eyebrow>
+          {heuteDatum} · {phasenText}
+        </Eyebrow>
+        <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em] md:text-[33px]">
+          {gruss()}, Jakob
+        </h1>
+      </div>
+      <EinstellungenLink />
+    </header>
+  );
+
+  if (!data.verbunden) {
+    /* Training hängt nicht an Google — die Karte bleibt auch dann, wenn die
+       Verbindung abgelaufen ist. Sonst stünde morgens nach dem wöchentlichen
+       Ablauf gar nichts mehr darüber da, was heute ansteht. */
+    return (
+      <>
+        {kopf}
+        <div className="mx-auto max-w-[520px]">
+          <HeuteKarte
+            rotation={rotation}
+            schonHeute={schonHeute}
+            regeneration={null}
+            befund={null}
+            veraltet={false}
+            heuteIso={heuteIso}
+          />
+          <VerbindenKarte grund={data.grund} />
+        </div>
+      </>
+    );
+  }
+
+  const { heute, baseline, gewicht } = data;
+
   // Nächte tragen den Aufwachtag als Datum. Ist der nicht von heute, hat die
   // Uhr nicht synchronisiert — dann stehen oben ältere Werte, und ohne diesen
   // Abgleich liest man sie als die von heute Nacht.
@@ -131,42 +156,67 @@ async function Dashboard() {
         );
   const veraltet = tageAlt >= 1;
 
+  const tagesBriefing =
+    heute && baseline
+      ? briefing({
+          heute,
+          baseline,
+          urteil: heute.regeneration,
+          nachtDatum: heute.date,
+          heuteIso,
+          trainingHeute,
+          stunde: wienerStunde(),
+        })
+      : null;
+
   return (
     <>
-      <header className="flex items-start justify-between gap-4 pt-10 md:pt-14">
-        <div className="min-w-0">
-          <Eyebrow>
-            {heuteDatum} · {phasenText}
-          </Eyebrow>
-          <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em] md:text-[33px]">
-            {gruss()}, Jakob
-          </h1>
-        </div>
-        <EinstellungenLink />
-      </header>
+      {kopf}
 
       <InstallHinweis className="mt-6" />
 
-      <div className="mt-7 grid items-start gap-4 md:grid-cols-[1.05fr_0.95fr]">
+      {/* Die eine Karte, die morgens zählt: wie erholt, was heute ansteht,
+          und der Knopf dorthin. Vorher verteilte sich das auf drei Karten
+          in zwei Spalten — Regeneration links, Training rechts, das Urteil
+          darunter —, und die Frage "was mache ich heute" beantwortete erst
+          die dritte. */}
+      <HeuteKarte
+        rotation={rotation}
+        schonHeute={schonHeute}
+        regeneration={heute && baseline ? { ...heute.regeneration, datum: heute.date } : null}
+        befund={schonHeute?.beendet ? null : (tagesBriefing?.befund ?? null)}
+        veraltet={veraltet}
+        heuteIso={heuteIso}
+      />
+
+      <div className="mt-4 grid items-start gap-4 md:grid-cols-[1.05fr_0.95fr]">
         <div className="flex flex-col gap-3.5">
-          {heute && baseline ? (
+          {heute && baseline && tagesBriefing ? (
             <Card tone={veraltet ? "warnung" : "normal"}>
-              <div className="flex items-center justify-between gap-3">
-                <Eyebrow>
-                  Regeneration · Nacht auf {alterLabel(heute.date, heuteIso)}
-                </Eyebrow>
-                <Tag tone={bandTon(heute.regeneration.band)}>
-                  {bandWort(heute.regeneration.band)}
-                </Tag>
+              <div className="flex items-start gap-3.5">
+                <div
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br
+                             from-accent to-accent-deep text-xs font-extrabold text-on-accent"
+                  aria-hidden
+                >
+                  K
+                </div>
+                <div className="min-w-0 flex-1 text-sm leading-relaxed text-fg-dim">
+                  <Tagesbriefing briefing={tagesBriefing} />
+                </div>
               </div>
 
-              <div className="mt-3.5 flex items-center gap-5">
-                <Gauge score={heute.regeneration.score} band={heute.regeneration.band} />
-                <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-                  {/* Alle vier Zeilen nach demselben Schema eingefärbt. Vorher
-                      war Schlaf unter Referenz amber, Tiefschlaf/Puls/HRV rot —
-                      zwei Farben für dieselbe Aussage in einer Liste zwingen
-                      dazu, die Skala pro Zeile neu zu lesen. */}
+
+              {/* Die vier Werte der Nacht eingeklappt: das Urteil darüber sagt,
+                  was sie bedeuten. Wer nachrechnen will, klappt auf. */}
+              <details className="group mt-3.5 border-t border-hair-soft pt-1">
+                <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-[13px] font-semibold text-fg-dim">
+                  Werte der Nacht auf {alterLabel(heute.date, heuteIso)}
+                  <span aria-hidden className="text-fg-faint transition group-open:rotate-90">›</span>
+                </summary>
+                {/* Alle vier Zeilen nach demselben Schema eingefärbt: über der
+                    Referenz gut, darunter schlecht. */}
+                <div className="flex flex-col gap-2.5 pb-1 pt-1">
                   <Metric
                     label="Schlaf"
                     value={minToHm(heute.sleepMin)}
@@ -191,66 +241,24 @@ async function Dashboard() {
                     delta={deltaLabel(heute.hrv - baseline.hrv, "")}
                     tone={heute.hrv >= baseline.hrv ? "gut" : "schlecht"}
                   />
+                  <p className="text-[11px] leading-relaxed text-fg-faint">
+                    Referenz aus {data.tagesreihe.length} Nächten der Fitbit.
+                  </p>
                 </div>
-              </div>
-
-              {veraltet && (
-                <p className="mt-3.5 rounded-md border border-caution/30 bg-caution/10 px-3.5 py-2.5 text-xs leading-relaxed text-caution">
-                  Die letzte vollständige Nacht ist die auf {kurzDatum(heute.date)} — das
-                  sind {tageAlt === 1 ? "ein Tag" : `${tageAlt} Tage`}. Was hier steht, ist
-                  nicht dein heutiger Zustand. Uhr synchronisieren lassen.
-                </p>
-              )}
-
-              {/* Der grüne Punkt, der hier stand, war immer grün — er hat den
-                  Zustand nie gemeldet, nur behauptet. An seiner Stelle steht
-                  jetzt, worauf die Referenz beruht. */}
-              <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-                Fitbit Air · Referenz aus {data.tagesreihe.length} ausgewerteten Nächten
-              </p>
+              </details>
             </Card>
           ) : (
             <Card>
               <Eyebrow>Regeneration</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-                Noch keine vollständige Nacht mit Ruhepuls und HRV. Sobald die Uhr eine
-                Nacht mit allen drei Werten geliefert hat, steht hier ein Wert; für die
-                persönliche Referenz braucht es fünf solche Nächte.
+                Noch keine vollständige Nacht mit Ruhepuls und HRV — für die Referenz
+                braucht es fünf.
               </p>
-            </Card>
-          )}
-
-          {heute && baseline && (
-            <Card tone={heute.regeneration.band === "gut" ? "normal" : "warnung"}>
-              <div className="flex items-start gap-3.5">
-                <div
-                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-gradient-to-br
-                             from-accent to-accent-deep text-xs font-extrabold text-on-accent"
-                  aria-hidden
-                >
-                  K
-                </div>
-                <div className="min-w-0 flex-1 text-sm leading-relaxed text-fg-dim">
-                  <Tagesbriefing
-                    briefing={briefing({
-                      heute,
-                      baseline,
-                      urteil: heute.regeneration,
-                      nachtDatum: heute.date,
-                      heuteIso,
-                      trainingHeute,
-                      stunde: wienerStunde(),
-                    })}
-                  />
-                </div>
-              </div>
             </Card>
           )}
         </div>
 
         <div className="flex flex-col gap-3.5">
-          <HeuteTraining rotation={rotation} schonHeute={schonHeute} />
-
           <GewichtEingabe
             aktuell={gewicht.aktuell?.kg ?? null}
             /* Das Alter wird am Server berechnet und fertig übergeben. Würde
@@ -272,9 +280,6 @@ async function Dashboard() {
                   {de(gewicht.trend.kgPerWeek, 2)}
                   <span className="ml-1 text-xs font-medium text-fg-faint">kg / Woche</span>
                 </p>
-                {/* Vorher stand hier nur der Korridor daneben und der Vergleich
-                    blieb dem Leser überlassen. Die Zahl allein sagt nicht, ob
-                    sie gut ist. */}
                 <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
                   {korridorUrteil(gewicht.trend.kgPerWeek, heuteIso)}
                 </p>
@@ -382,9 +387,9 @@ function deltaLabel(diff: number, unit: string): string {
 function Tagesbriefing({ briefing }: { briefing: Briefing }) {
   return (
     <>
-      <p>
-        <b className="font-semibold text-fg">{briefing.befund}</b> {briefing.schlaf}
-      </p>
+      {/* Der Befund steht schon groß in der Heute-Karte; hier folgt, was die
+          Nacht dazu sagt. */}
+      <p>{briefing.schlaf}</p>
 
       {briefing.vorschlaege.length > 0 ? (
         <ul className="mt-3 flex flex-col gap-2.5">
@@ -399,8 +404,7 @@ function Tagesbriefing({ briefing }: { briefing: Briefing }) {
         </ul>
       ) : (
         <p className="mt-2.5 text-[13px] leading-relaxed text-fg-faint">
-          Nichts zu verbessern — kein Wert liegt weit genug daneben, um daraus einen Rat zu
-          machen. Weiter wie gestern.
+          Kein Wert liegt weit daneben. Weiter wie gestern.
         </p>
       )}
     </>
@@ -408,19 +412,28 @@ function Tagesbriefing({ briefing }: { briefing: Briefing }) {
 }
 
 /**
- * Was heute im Gym ansteht, mit dem Weg dorthin.
+ * Die Karte oben auf der Startseite: wie erholt, was heute ansteht, und der
+ * Knopf dorthin.
  *
- * Die Startseite beantwortete bisher "wie bin ich erholt", aber nicht "was
- * mache ich heute" — dafür musste man erst auf Training tippen. Die Frage
- * stellt man sich morgens als erste; die Antwort gehört deshalb hierher,
- * neben die Freigabe aus der Regeneration.
+ * Die Freigabe steht als ein Satz unter der Einheit (der "Befund" aus dem
+ * Briefing) — das ist die Antwort auf "soll ich heute schwer trainieren",
+ * und die gehört neben die Einheit, nicht zwei Karten weiter. Ohne Google
+ * steht die Karte trotzdem, nur ohne Ring: Training hängt nicht an der Uhr.
  */
-function HeuteTraining({
+function HeuteKarte({
   rotation,
   schonHeute,
+  regeneration,
+  befund,
+  veraltet,
+  heuteIso,
 }: {
   rotation: Rotation;
   schonHeute: { art: "push" | "pull"; beendet: boolean } | null;
+  regeneration: { score: number; band: "gut" | "mittel" | "schlecht"; datum: string } | null;
+  befund: string | null;
+  veraltet: boolean;
+  heuteIso: string;
 }) {
   const name = (e: "push" | "pull") => SESSIONS[e].focus.split(" · ")[0];
 
@@ -429,35 +442,70 @@ function HeuteTraining({
   let knopf: string;
 
   if (schonHeute) {
-    titel = schonHeute.beendet
-      ? `${name(schonHeute.art)} erledigt`
-      : `${name(schonHeute.art)} läuft`;
+    titel = schonHeute.beendet ? `${name(schonHeute.art)} erledigt` : `${name(schonHeute.art)} läuft`;
     text = SESSIONS[schonHeute.art].title;
-    knopf = schonHeute.beendet ? "Ansehen" : "Weiterloggen";
+    knopf = schonHeute.beendet ? "Einheit ansehen" : "Weiterloggen";
   } else if (rotation.art === "training") {
-    titel = `Heute ${name(rotation.einheit)}`;
+    // "Heute" steht schon als Überschrift darüber.
+    titel = name(rotation.einheit);
     text = SESSIONS[rotation.einheit].title;
     knopf = "Training öffnen";
   } else {
-    titel = "Heute Rest Day";
+    titel = "Rest Day";
     text = `Als Nächstes ${name(rotation.naechste)} — ${SESSIONS[rotation.naechste].title}.`;
     knopf = "Plan ansehen";
   }
 
   return (
-    <Link
-      href="/training"
-      className="group flex items-center gap-4 rounded-lg border border-hair bg-gradient-to-b from-surface-2 to-surface p-5
-                 transition active:scale-[0.99] md:hover:border-accent/35"
-    >
-      <span className="min-w-0 flex-1">
-        <Eyebrow>Training</Eyebrow>
-        <b className="mt-1.5 block text-[17px] font-semibold tracking-[-0.015em]">{titel}</b>
-        <span className="mt-0.5 block text-[13px] leading-relaxed text-fg-dim">{text}</span>
-      </span>
-      <span className="shrink-0 rounded-md bg-accent/10 px-3 py-2 text-[13px] font-semibold text-accent">
-        {knopf} ›
-      </span>
-    </Link>
+    <section className="mt-6 rounded-lg border border-hair bg-gradient-to-b from-surface-2 to-surface p-5">
+      <div className="flex items-center gap-5">
+        {regeneration && <Gauge score={regeneration.score} band={regeneration.band} />}
+        <div className="min-w-0 flex-1">
+          <Eyebrow>Heute</Eyebrow>
+          <p className="mt-1 text-[22px] font-bold leading-tight tracking-[-0.02em]">{titel}</p>
+          <p className="mt-1 text-[13px] leading-snug text-fg-dim">{text}</p>
+          {regeneration && (
+            <div className="mt-2.5">
+              <Tag tone={veraltet ? "warnung" : bandTon(regeneration.band)}>
+                {veraltet ? `Nacht auf ${alterLabel(regeneration.datum, heuteIso)}` : bandWort(regeneration.band)}
+              </Tag>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {befund && <p className="mt-4 text-sm font-medium leading-relaxed text-fg">{befund}</p>}
+
+      <Link
+        href="/training"
+        className="mt-4 flex min-h-[52px] items-center justify-center rounded-md bg-accent text-base
+                   font-semibold text-on-accent transition active:scale-[0.98]"
+      >
+        {knopf}
+      </Link>
+    </section>
+  );
+}
+
+/**
+ * Google fehlt oder ist abgelaufen, und es gibt noch nichts in der eigenen
+ * Ablage. Eine Karte unter der Heute-Karte statt eines zweiten Seitenkopfs:
+ * das Training darüber ist die Hauptsache, und das Zahnrad steht schon oben.
+ */
+function VerbindenKarte({ grund }: { grund: string }) {
+  return (
+    <Card className="mt-4">
+      <Eyebrow>Google Health</Eyebrow>
+      <p className="mt-2 text-sm leading-relaxed text-fg-dim">{grund}</p>
+      {/* <a> statt <Link>: der OAuth-Start braucht einen echten Seitenwechsel
+          (siehe NichtVerbunden in ui.tsx). */}
+      <a
+        href="/api/auth/google"
+        className="mt-4 flex min-h-[48px] items-center justify-center rounded-md border border-hair
+                   text-sm font-semibold text-fg transition active:scale-[0.98]"
+      >
+        Mit Google verbinden
+      </a>
+    </Card>
   );
 }

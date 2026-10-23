@@ -20,6 +20,8 @@ export type Nachricht = {
   url?: string;
   /** Gleiches tag ersetzt eine ältere Nachricht statt sie zu stapeln. */
   tag?: string;
+  /** Neue Zahl am App-Symbol; 0 nimmt sie weg, fehlt sie, bleibt die alte. */
+  badge?: number;
 };
 
 // ─────────────────────────────────────────────────────────────

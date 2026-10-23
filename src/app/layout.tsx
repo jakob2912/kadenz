@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TabBar } from "@/components/nav";
-import { SwRegistrierung } from "@/components/pwa";
+import { AppAbzeichen, SwRegistrierung } from "@/components/pwa";
 
 export const metadata: Metadata = {
   title: "Kadenz",
@@ -76,6 +76,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Suspense>
 
         <SwRegistrierung />
+        {/* Liest ebenfalls die URL — dieselbe Grenze wie die Tab-Leiste. */}
+        <Suspense fallback={null}>
+          <AppAbzeichen />
+        </Suspense>
       </body>
     </html>
   );

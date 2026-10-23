@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { abendNachricht, morgenNachricht } from "../benachrichtigung-texte";
+import { abendNachricht, morgenNachricht, offeneDinge } from "../benachrichtigung-texte";
 
 describe("morgenNachricht", () => {
   it("nennt Regeneration und Einheit, und erinnert ans Wiegen", () => {
@@ -95,5 +95,24 @@ describe("abendNachricht", () => {
     });
     expect(n?.url).toBe("/training");
     expect(n?.body).toContain("Kalorienvorschlag");
+  });
+});
+
+describe("offeneDinge (Zahl am App-Symbol)", () => {
+  const training = { art: "training", einheit: "push" } as const;
+  const pause = { art: "pause", naechste: "pull" } as const;
+
+  it("zählt die geplante, noch nicht begonnene Einheit", () => {
+    expect(offeneDinge({ plan: training, trainiertHeute: false, kalorienvorschlagOffen: false })).toBe(1);
+  });
+
+  it("zählt nichts, sobald trainiert wurde oder Rest Day ist", () => {
+    expect(offeneDinge({ plan: training, trainiertHeute: true, kalorienvorschlagOffen: false })).toBe(0);
+    expect(offeneDinge({ plan: pause, trainiertHeute: false, kalorienvorschlagOffen: false })).toBe(0);
+  });
+
+  it("addiert einen offenen Kalorienvorschlag", () => {
+    expect(offeneDinge({ plan: training, trainiertHeute: false, kalorienvorschlagOffen: true })).toBe(2);
+    expect(offeneDinge({ plan: pause, trainiertHeute: false, kalorienvorschlagOffen: true })).toBe(1);
   });
 });

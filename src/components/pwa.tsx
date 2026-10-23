@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore, useState } from "react";
+import { usePathname } from "next/navigation";
 
 /**
  * Meldet den Service Worker an (public/sw.js).
@@ -100,4 +101,57 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
       </button>
     </section>
   );
+}
+
+const AUFFRISCHEN = "kadenz:abzeichen";
+
+/**
+ * Nach allem aufrufen, was die Zahl ändert, ohne die Adresse zu ändern:
+ * Training gestartet oder beendet, Kalorienvorschlag entschieden. Die
+ * Seite wird dabei nur aufgefrischt, und ein Seitenwechsel allein hätte die
+ * Eins stehen lassen, bis die App das nächste Mal geöffnet wird.
+ */
+export function abzeichenAuffrischen() {
+  window.dispatchEvent(new Event(AUFFRISCHEN));
+}
+
+/**
+ * Zahl am App-Symbol, frisch beim Öffnen, bei jedem Wechsel zwischen
+ * Vorder- und Hintergrund, bei jedem Seitenwechsel und auf
+ * abzeichenAuffrischen(). Die Push-Nachrichten setzen sie zusätzlich, wenn
+ * die App zu ist (public/sw.js).
+ *
+ * Auch beim Wechsel in den Hintergrund: das ist der Moment, in dem Jakob
+ * das Symbol als Nächstes sieht. keepalive hält die Anfrage am Leben, falls
+ * iOS die Seite gleich danach einfriert.
+ */
+export function AppAbzeichen() {
+  const pfad = usePathname();
+
+  useEffect(() => {
+    if (!("setAppBadge" in navigator) || pfad === "/anmelden") return;
+    let aus = false;
+    const holen = async () => {
+      try {
+        const antwort = await fetch("/api/abzeichen", { cache: "no-store", keepalive: true });
+        if (!antwort.ok || aus) return;
+        const { anzahl } = (await antwort.json()) as { anzahl: number | null };
+        if (typeof anzahl !== "number") return;
+        if (anzahl > 0) await navigator.setAppBadge(anzahl);
+        else await navigator.clearAppBadge();
+      } catch {
+        // Kein Netz oder keine Erlaubnis: die alte Zahl bleibt stehen.
+      }
+    };
+    holen();
+    document.addEventListener("visibilitychange", holen);
+    window.addEventListener(AUFFRISCHEN, holen);
+    return () => {
+      aus = true;
+      document.removeEventListener("visibilitychange", holen);
+      window.removeEventListener(AUFFRISCHEN, holen);
+    };
+  }, [pfad]);
+
+  return null;
 }
