@@ -46,13 +46,17 @@ export function NichtVerbunden({
       <Eyebrow>Kadenz</Eyebrow>
       <h1 className="mt-2 text-[27px] font-bold leading-tight tracking-[-0.025em]">{titel}</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">{grund}</p>
-      <Link
+      {/* Bewusst <a>, nicht <Link>: Link ruft die Route per fetch ab und folgt
+          der Weiterleitung zu accounts.google.com dann ebenfalls per fetch.
+          Google lehnt das ab (CORS), und der Knopf tut sichtbar nichts. Der
+          OAuth-Start braucht einen echten Seitenwechsel. */}
+      <a
         href="/api/auth/google"
         className="mt-6 flex min-h-[52px] items-center justify-center rounded-md bg-accent
                    font-semibold text-on-accent transition active:scale-[0.98]"
       >
         Mit Google verbinden
-      </Link>
+      </a>
       {/* Die Einstellungen hängen sonst nur am Kopf der Startseite — und der
           fehlt, solange Google nicht verbunden ist. */}
       <Link
