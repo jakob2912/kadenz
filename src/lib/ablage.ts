@@ -59,6 +59,8 @@ export type OffenerSatz = {
   kg: number;
   reps: number;
   erfasstAm: number;
+  /** Wiederholungen in Reserve, falls schon angegeben. */
+  rir?: number | null;
 };
 
 /** Länger hält der Server einen nachgereichten Satz ohnehin nicht für glaubhaft. */
@@ -100,13 +102,22 @@ export function ausgangAblegen(satz: OffenerSatz): void {
 
 /**
  * Nach erfolgreichem Senden entfernen — aber nur, wenn der Eintrag noch der
- * gesendete ist. Wurde der Satz inzwischen korrigiert, liegt dort eine neuere
- * Fassung, die selbst noch unterwegs ist.
+ * gesendete ist. Wurde der Satz inzwischen korrigiert oder die Reserve
+ * nachgetragen, liegt dort eine neuere Fassung, die selbst noch unterwegs
+ * ist. Der Zeitpunkt allein reicht dafür nicht: die Reserve-Angabe trägt
+ * bewusst denselben wie der Satz.
  */
 export function ausgangErledigt(satz: OffenerSatz): void {
   const alle = alleLesen();
   const k = schluessel(satz);
-  if (alle[k]?.erfasstAm === satz.erfasstAm) {
+  const da = alle[k];
+  if (
+    da &&
+    da.erfasstAm === satz.erfasstAm &&
+    da.kg === satz.kg &&
+    da.reps === satz.reps &&
+    (da.rir ?? null) === (satz.rir ?? null)
+  ) {
     delete alle[k];
     alleSchreiben(alle);
   }
@@ -127,4 +138,38 @@ export function ausgangOffen(jetzt: number): OffenerSatz[] {
   }
   if (verworfen) alleSchreiben(alle);
   return Object.values(alle);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Satzanzahl je Übung — heute mehr oder weniger als geplant
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Wie viele Sätze je Übung heute dazukommen (+1) oder wegfallen (−1).
+ *
+ * Am Gerät hängt, nicht am Server: die Änderung gilt für dieses eine
+ * Training, auf dem Handy, auf dem es läuft. Abgehakte Zusatzsätze stehen
+ * ohnehin in der Datenbank und erscheinen von dort wieder — gespeichert
+ * werden muss nur, was noch offen ist. Je Tag und Einheit ein Eintrag,
+ * ältere räumt das Lesen weg.
+ */
+const SATZZAHL = "kadenz_satzzahl";
+
+export function satzzahlLesen(tag: string, einheit: Einheit): Record<string, number> {
+  try {
+    const alles = JSON.parse(localStorage.getItem(SATZZAHL) ?? "null") as {
+      tag: string;
+      einheit: Einheit;
+      je: Record<string, number>;
+    } | null;
+    return alles && alles.tag === tag && alles.einheit === einheit ? alles.je : {};
+  } catch {
+    return {};
+  }
+}
+
+export function satzzahlSchreiben(tag: string, einheit: Einheit, je: Record<string, number>): void {
+  try {
+    localStorage.setItem(SATZZAHL, JSON.stringify({ tag, einheit, je }));
+  } catch {}
 }

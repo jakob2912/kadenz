@@ -82,6 +82,7 @@ export async function letzteSaetzeFuer(
       reps: true,
       setIndex: true,
       sauber: true,
+      rir: true,
     },
   });
 
@@ -104,6 +105,7 @@ export async function letzteSaetzeFuer(
       reps: zeile.reps,
       setIndex: zeile.setIndex,
       sauber: zeile.sauber,
+      rir: zeile.rir,
     };
     const liste = gesammelt.get(zeile.exercise);
     if (liste) liste.push(satz);
@@ -121,7 +123,7 @@ export async function letzteSaetzeFuer(
        vergleicht, soll als solcher erkennbar bleiben. */
     ergebnis.set(
       uebung,
-      liste.map(({ kg, reps, sauber }) => ({ kg, reps, sauber }))
+      liste.map(({ kg, reps, sauber, rir }) => ({ kg, reps, sauber, rir }))
     );
   }
 
@@ -153,6 +155,7 @@ export type GeloggterSatz = {
   setIndex: number;
   kg: number;
   reps: number;
+  rir: number | null;
 };
 
 /**
@@ -173,7 +176,7 @@ export async function laufendesTraining(
     include: {
       sets: {
         orderBy: [{ exercise: "asc" }, { setIndex: "asc" }],
-        select: { exercise: true, setIndex: true, kg: true, reps: true },
+        select: { exercise: true, setIndex: true, kg: true, reps: true, rir: true },
       },
     },
   });
@@ -252,4 +255,35 @@ export async function bestwerteFuer(uebungen: string[]): Promise<Record<string, 
     if (b) ergebnis[uebung] = b;
   }
   return ergebnis;
+}
+
+/**
+ * Übungsnamen für die Vorschläge beim Tauschen: alles aus dem Katalog und
+ * alles, was im letzten Jahr geloggt wurde — alphabetisch, ohne Doppelte.
+ * Wer schon einmal "Kurzhantel-Bankdrücken" gemacht hat, soll es nicht
+ * wieder tippen müssen, und unter demselben Namen landet es dann auch im
+ * selben Kraftverlauf.
+ */
+export async function bekannteUebungen(ausschliessen: string[] = []): Promise<string[]> {
+  const [katalog, geloggt] = await Promise.all([
+    prisma.uebung.findMany({ select: { name: true, programm: true } }),
+    prisma.setLog.findMany({
+      where: { loggedAt: { gte: new Date(Date.now() - 365 * 864e5) } },
+      distinct: ["exercise"],
+      select: { exercise: true },
+    }),
+  ]);
+  /* Was heute schon auf dem Schirm steht, und Programmübungen (Bankdrücken),
+     taugen nicht als Ersatz — beides lehnt der Tausch ohnehin ab, weil zwei
+     gleiche Namen in einer Einheit sich die Sätze überschreiben würden. */
+  const weg = new Set([
+    ...ausschliessen.map((n) => n.toLowerCase()),
+    ...katalog.filter((k) => k.programm).map((k) => k.name.toLowerCase()),
+  ]);
+  const namen = new Set(
+    [...katalog.map((k) => k.name), ...geloggt.map((g) => g.exercise)].filter(
+      (n) => !weg.has(n.toLowerCase())
+    )
+  );
+  return [...namen].sort((a, b) => a.localeCompare(b, "de"));
 }

@@ -2,7 +2,12 @@ import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
-import { bestwerteFuer, heutigeEinheit, laufendesTraining } from "@/lib/training-lesen";
+import {
+  bekannteUebungen,
+  bestwerteFuer,
+  heutigeEinheit,
+  laufendesTraining,
+} from "@/lib/training-lesen";
 import type { Bestwert } from "@/lib/bestwerte";
 import {
   heutigeSaetze,
@@ -145,6 +150,16 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
     console.error("Bestwerte nicht lesbar:", e);
   }
 
+  /* Vorschläge fürs Tauschen — ebenfalls Beiwerk. */
+  let bekannte: string[] = [];
+  try {
+    bekannte = await bekannteUebungen(
+      plan.uebungen.flatMap((u) => (u.planName ? [u.name, u.planName] : [u.name]))
+    );
+  } catch (e) {
+    console.error("Übungsnamen nicht lesbar:", e);
+  }
+
   /* Abschluss und bereits geloggte Sätze kommen ausdrücklich mit. Ohne sie
      begann der Logger nach jedem Aufruf wieder bei null Haken, und weil der
      Abschluss allein an diesen Haken hing, lief die Laufzeit weiter, obwohl
@@ -160,6 +175,7 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
       bestwerte={bestwerte}
       notiz={laufend.notiz}
       tag={laufend.tag}
+      bekannte={bekannte}
       wechsel={wechsel}
     />
   );

@@ -18,6 +18,11 @@ import { wienerDatum } from "./datum";
 
 export type Exercise = {
   name: string;
+  /**
+   * Der Name im Katalog, wenn die Übung heute getauscht ist (tagestausch.ts).
+   * Fehlt er, steht die Übung wie geplant da.
+   */
+  planName?: string;
   note?: string;
   /**
    * Wie viele Sätze heute anstehen.
