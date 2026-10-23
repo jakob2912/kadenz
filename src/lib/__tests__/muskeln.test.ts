@@ -35,6 +35,32 @@ describe("muskelnVon", () => {
   it("lässt Unbekanntes leer statt zu raten", () => {
     expect(muskelnVon("Farmer's Walk")).toEqual([]);
   });
+
+  it("verwechselt nichts über Wortteile oder Bindestriche", () => {
+    const faelle: [string, string | undefined][] = [
+      ["Leg-Curl", "Hamstrings"],
+      ["Chest-Press", "Brust"],
+      ["Shoulder-Press", "Schulter"],
+      ["Leg-Press", "Quads"],
+      ["Leg-Extension", "Quads"],
+      ["Slab Press", "Waden"],
+      ["Abduktoren (Maschine)", "Gesäß"],
+      ["Hip Thrust (Maschine)", "Gesäß"],
+      ["Overhead Triceps Extension", "Trizeps"],
+      ["Rear Delt Fly", "Schulter"],
+      ["Upright Row", "Schulter"],
+      ["Nordic Curl", "Hamstrings"],
+      ["Pec Deck", "Brust"],
+      ["Spoto Press", "Brust"],
+      ["Back Extension", "Rücken"],
+      ["Ausfallschritte", "Quads"],
+      ["Chin-Up", "Rücken"],
+      ["Machine Shrug", undefined],
+    ];
+    for (const [uebung, haupt] of faelle) {
+      expect(muskelnVon(uebung)[0], uebung).toBe(haupt);
+    }
+  });
 });
 
 describe("wochenvolumen", () => {
@@ -51,6 +77,7 @@ describe("wochenvolumen", () => {
     expect(w.map((x) => x.montag)).toEqual(["2026-10-12", "2026-10-19"]);
     expect(w[1].jeGruppe).toEqual({ Brust: 2, Trizeps: 1, Schulter: 1 });
     expect(w[1].saetze).toBe(2);
+    expect(w[1].ohneZuordnung).toBe(0);
     expect(w[0].jeGruppe).toEqual({ Rücken: 1, Bizeps: 0.5 });
   });
 

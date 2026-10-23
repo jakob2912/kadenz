@@ -43,7 +43,7 @@ import {
   trendSaetzeProUebung,
 } from "../src/lib/bankcoach";
 import { zielProjektion } from "../src/lib/bankziel";
-import { prEintragen } from "../src/lib/bankuebersicht";
+import { echterPrAus, eingetragenerPr, prEintragen } from "../src/lib/bankuebersicht";
 import {
   aktuellerTrainingsmax,
   bankstandFuer,
@@ -871,7 +871,7 @@ server.registerTool(
   {
     title: "Bank-Coach",
     description:
-      "Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
+      "Echter PR (schwerster sauberer Single oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
   },
   async () => {
     try {
@@ -891,6 +891,9 @@ server.registerTool(
       });
       const programm = tm ? zielProjektion(tm.tmKg, tm.zyklus, tm.gueltigAb) : null;
       return antwort({
+        // Derselbe Wert wie die Karte "Echter PR" im Bench-Tab — sonst nennt
+        // Claude auf "was ist mein PR?" den 90-%-Single aus der Historie.
+        echterPr: echterPrAus(saetze, await eingetragenerPr()),
         ...coach,
         prognose: prognose140(coach.urteil, heute),
         programm: programm
@@ -1009,7 +1012,13 @@ server.registerTool(
   async ({ kg, datum }) => {
     try {
       datenbankPruefen();
-      await prEintragen(kg === null ? null : { kg, datum: datum ?? heuteWien() });
+      const tag = datum ?? heuteWien();
+      // Kein 31. Februar und kein PR aus der Zukunft.
+      const geprueft = new Date(`${tag}T12:00:00Z`);
+      if (Number.isNaN(geprueft.getTime()) || geprueft.toISOString().slice(0, 10) !== tag || tag > heuteWien()) {
+        throw new Error(`Ungültiges Datum: ${tag}`);
+      }
+      await prEintragen(kg === null ? null : { kg, datum: tag });
       return antwort({ eingetragen: kg === null ? null : { kg, datum: datum ?? heuteWien() } });
     } catch (e) {
       return fehler(e);

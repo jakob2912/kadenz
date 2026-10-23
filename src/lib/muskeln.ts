@@ -36,21 +36,32 @@ export const MUSKELGRUPPEN = [
 
 export type Muskelgruppe = (typeof MUSKELGRUPPEN)[number];
 
+/*
+ * Die Namen werden vorher vereinheitlicht (klein, Bindestriche und
+ * Unterstriche zu Leerzeichen — "Leg-Curl" wie "Leg Curl"). Die Muster
+ * prüfen deshalb nur Leerzeichen und ganze Wörter: "chin" darf nicht in
+ * "Maschine" treffen, "ab" nicht in "Slab Press".
+ */
 const REGELN: [RegExp, Muskelgruppe[]][] = [
-  [/reverse\s*fly|face\s*pull|hintere\s*schulter/i, ["Schulter", "Rücken"]],
-  [/bankdr|bench|chest\s*press|brustpresse|dips/i, ["Brust", "Trizeps", "Schulter"]],
-  [/butterfly|fly\b|flys|cable\s*cross|kabelzug.*brust/i, ["Brust"]],
-  [/shoulder\s*press|schulterdr|overhead|military/i, ["Schulter", "Trizeps"]],
-  [/seitheben|lateral\s*raise/i, ["Schulter"]],
-  [/trizeps|triceps|pushdown|french|skull/i, ["Trizeps"]],
-  [/curl/i, ["Bizeps"]],
-  [/stiff|rum[aä]n|rdl|deadlift|kreuzheben/i, ["Hamstrings", "Gesäß", "Rücken"]],
-  [/squat|kniebeuge|beinpresse|leg\s*press/i, ["Quads", "Gesäß"]],
-  [/leg\s*extension|beinstrecker/i, ["Quads"]],
-  [/calf|wade/i, ["Waden"]],
-  [/adduk|adductor/i, ["Adduktoren"]],
-  [/crunch|bauch|ab\s|plank/i, ["Bauch"]],
-  [/row|rudern|pulldown|latzug|klimmz|pull[\s-]?up|chin/i, ["Rücken", "Bizeps"]],
+  // Speziell vor allgemein: diese Namen enthalten Wörter späterer Regeln.
+  [/\bleg curl|beinbeuger|nordic/, ["Hamstrings"]],
+  [/reverse fly|rear delt|face pull|hintere schulter/, ["Schulter", "Rücken"]],
+  [/overhead (triceps|trizeps)|trizeps|triceps|pushdown|french|skull/, ["Trizeps"]],
+  [/upright row|aufrechtes rudern/, ["Schulter"]],
+  [/hip thrust|glute|abdukt|abductor/, ["Gesäß"]],
+  [/back extension|hyperextension|rückenstrecker/, ["Rücken", "Gesäß"]],
+  [/bankdr|bench|spoto|chest press|brustpresse|\bdips?\b/, ["Brust", "Trizeps", "Schulter"]],
+  [/butterfly|pec deck|\bfly\b|\bflys\b|cable cross/, ["Brust"]],
+  [/shoulder press|schulterdr|overhead press|military/, ["Schulter", "Trizeps"]],
+  [/seitheben|lateral raise/, ["Schulter"]],
+  [/curl/, ["Bizeps"]],
+  [/stiff|rum[aä]n|\brdl\b|deadlift|kreuzheben/, ["Hamstrings", "Gesäß", "Rücken"]],
+  [/squat|kniebeuge|beinpresse|leg press|ausfallschritt|lunge|split/, ["Quads", "Gesäß"]],
+  [/leg extension|beinstrecker/, ["Quads"]],
+  [/calf|wade|slab press/, ["Waden"]],
+  [/adduk|adductor/, ["Adduktoren"]],
+  [/crunch|bauch|\babs?\b|plank|ab wheel/, ["Bauch"]],
+  [/\brow\b|rudern|pulldown|latzug|klimmz|pull up|\bchin ups?\b|\bchins?\b/, ["Rücken", "Bizeps"]],
 ];
 
 /**
@@ -58,10 +69,9 @@ const REGELN: [RegExp, Muskelgruppe[]][] = [
  * passt — dann zählt die Übung nirgends, statt irgendwo falsch.
  */
 export function muskelnVon(uebung: string): Muskelgruppe[] {
-  // Beinbeuger vor allen anderen Curls — "Leg Curl" enthält "Curl".
-  if (/leg\s*curl|beinbeuger/i.test(uebung)) return ["Hamstrings"];
+  const name = uebung.toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ");
   for (const [muster, gruppen] of REGELN) {
-    if (muster.test(uebung)) return gruppen;
+    if (muster.test(name)) return gruppen;
   }
   return [];
 }
@@ -73,6 +83,8 @@ export type Wochenwert = {
   /** Sätze je Muskelgruppe, Nebenmuskeln halb gezählt. */
   jeGruppe: Partial<Record<Muskelgruppe, number>>;
   saetze: number;
+  /** Sätze, die keiner Gruppe zugeordnet werden konnten — zeigt Lücken in den Regeln. */
+  ohneZuordnung: number;
 };
 
 function montagVon(tagIso: string): string {
@@ -96,6 +108,7 @@ export function wochenvolumen(
     montag: new Date(dieseWoche - (wochen - 1 - i) * 7 * 864e5).toISOString().slice(0, 10),
     jeGruppe: {},
     saetze: 0,
+    ohneZuordnung: 0,
   }));
   const index = new Map(ergebnis.map((w, i) => [w.montag, i]));
 
@@ -104,7 +117,9 @@ export function wochenvolumen(
     if (i === undefined) continue;
     const woche = ergebnis[i];
     woche.saetze++;
-    muskelnVon(s.exercise).forEach((gruppe, rang) => {
+    const gruppen = muskelnVon(s.exercise);
+    if (gruppen.length === 0) woche.ohneZuordnung++;
+    gruppen.forEach((gruppe, rang) => {
       woche.jeGruppe[gruppe] = (woche.jeGruppe[gruppe] ?? 0) + (rang === 0 ? 1 : 0.5);
     });
   }

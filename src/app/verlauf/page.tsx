@@ -63,7 +63,7 @@ export default function Verlauf() {
         <Einheitenverlauf />
       </Suspense>
 
-      <Suspense fallback={<Skelett hoehe={240} className="mt-4" />}>
+      <Suspense fallback={<Skelett hoehe={420} className="mt-4" />}>
         <Wochenueberblick />
       </Suspense>
     </>

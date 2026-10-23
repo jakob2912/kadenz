@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { Card, Eyebrow, heuteWien, kurzDatum } from "@/components/ui";
+import { Card, Eyebrow, heuteWien } from "@/components/ui";
 import { saetzeDerLetztenWochen } from "@/lib/einheiten-daten";
 import { MUSKELGRUPPEN, wochenvolumen } from "@/lib/muskeln";
 
@@ -27,7 +27,13 @@ export async function Wochenueberblick() {
   }
 
   const wochen = wochenvolumen(saetze, heuteWien(), WOCHEN);
-  const gruppen = MUSKELGRUPPEN.filter((g) => wochen.some((w) => (w.jeGruppe[g] ?? 0) > 0));
+  /* Alle Gruppen, die der Split trainiert, auch mit null Sätzen — eine leere
+     Zeile ist genau das Signal "kommt zu kurz". Adduktoren nur, wenn sie
+     überhaupt vorkommen: die stehen nur zeitweise im Plan. */
+  const gruppen = MUSKELGRUPPEN.filter(
+    (g) => g !== "Adduktoren" || wochen.some((w) => (w.jeGruppe[g] ?? 0) > 0)
+  );
+  const ohneZuordnung = wochen.reduce((n, w) => n + w.ohneZuordnung, 0);
   const hoechster = Math.max(1, ...wochen.flatMap((w) => gruppen.map((g) => w.jeGruppe[g] ?? 0)));
   const diese = wochen[WOCHEN - 1];
   const vorige = wochen[WOCHEN - 2];
@@ -56,10 +62,9 @@ export async function Wochenueberblick() {
         </div>
       </div>
 
-      {gruppen.length === 0 ? (
+      {wochen.every((w) => w.saetze === 0) ? (
         <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-          In den letzten {WOCHEN} Wochen keine Sätze, die sich einer Muskelgruppe zuordnen
-          lassen.
+          In den letzten {WOCHEN} Wochen keine Sätze.
         </p>
       ) : (
         <table className="mt-4 w-full border-separate border-spacing-y-1.5" aria-label="Sätze je Muskelgruppe und Woche">
@@ -69,9 +74,13 @@ export async function Wochenueberblick() {
                 Gruppe
               </th>
               <th scope="col" className="text-left text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                ab {kurzDatum(wochen[0].montag)}
+                <span aria-hidden>vor {WOCHEN - 1} Wo. → jetzt</span>
+                <span className="sr-only">Verlauf über {WOCHEN} Wochen</span>
               </th>
-              <th scope="col" className="w-[52px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
+              <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
+                Vorw.
+              </th>
+              <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
                 Jetzt
               </th>
             </tr>
@@ -98,8 +107,11 @@ export async function Wochenueberblick() {
                     })}
                   </span>
                   <span className="sr-only">
-                    {wochen.map((w) => `ab ${kurzDatum(w.montag)}: ${zahl(w.jeGruppe[g] ?? 0)}`).join(", ")}
+                    {wochen.map((w) => zahl(w.jeGruppe[g] ?? 0)).join(", ")}
                   </span>
+                </td>
+                <td className="text-right text-[13px] tabular-nums text-fg-dim">
+                  {zahl(vorige.jeGruppe[g] ?? 0)}
                 </td>
                 <td className="text-right text-[13px] font-semibold tabular-nums text-fg">
                   {zahl(diese.jeGruppe[g] ?? 0)}
@@ -112,7 +124,15 @@ export async function Wochenueberblick() {
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
         Nebenmuskeln zählen halb — ein Satz Bankdrücken ist ein Satz Brust und je ein halber
-        Trizeps und Schulter. Die rechte Spalte ist die laufende Woche, sie ist noch nicht vorbei.
+        Trizeps und Schulter. „Jetzt“ ist die laufende Woche, sie ist noch nicht vorbei; zum
+        Vergleich steht die Vorwoche daneben.
+        {ohneZuordnung > 0 && (
+          <>
+            {" "}
+            {ohneZuordnung === 1 ? "Ein Satz ließ" : `${ohneZuordnung} Sätze ließen`} sich keiner
+            Gruppe zuordnen und fehlen oben.
+          </>
+        )}
       </p>
     </Card>
   );

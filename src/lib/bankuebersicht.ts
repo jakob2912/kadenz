@@ -105,6 +105,27 @@ export async function eingetragenerPr(): Promise<EchterPr | null> {
   }
 }
 
+/**
+ * Der echte PR aus den geloggten Sätzen und dem eingetragenen Wert.
+ *
+ * Geloggt zählt nur ein Single, der nicht ausdrücklich als unsauber markiert
+ * ist. Der eingetragene PR zählt, solange kein geloggter Single schwerer
+ * ist; bei Gleichstand gewinnt der geloggte — der hat einen Satz dahinter.
+ * Rein, damit Bench-Tab und MCP-Server (bank_coach) dieselbe Zahl nennen.
+ */
+export function echterPrAus(
+  saetze: readonly { kg: number; reps: number; datum: string; sauber?: boolean | null }[],
+  eingetragen: EchterPr | null
+): EchterPr | null {
+  let pr: EchterPr | null = null;
+  for (const s of saetze) {
+    if (s.reps !== 1 || s.sauber === false) continue;
+    if (pr === null || s.kg > pr.kg) pr = { kg: s.kg, datum: s.datum, quelle: "geloggt" };
+  }
+  if (eingetragen && (pr === null || eingetragen.kg > pr.kg)) pr = eingetragen;
+  return pr;
+}
+
 /** Den eingetragenen PR setzen — oder mit null entfernen. */
 export async function prEintragen(pr: { kg: number; datum: string } | null): Promise<void> {
   if (pr === null) {
@@ -276,19 +297,13 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     .slice(0, 10);
   const schaetzung = schaetzungAus(saetze.filter((s) => s.datum >= seit && s.datum <= heute));
 
-  let pr: EchterPr | null = null;
-  for (const s of saetze) {
-    if (s.reps !== 1 || s.sauber === false) continue;
-    if (pr === null || s.kg > pr.kg) pr = { kg: s.kg, datum: s.datum, quelle: "geloggt" };
-  }
-  /* Der eingetragene PR zählt, solange kein geloggter Single schwerer ist.
-     Bei Gleichstand gewinnt der geloggte — der hat einen Satz dahinter. */
+  let eingetragen: EchterPr | null = null;
   try {
-    const eingetragen = await eingetragenerPr();
-    if (eingetragen && (pr === null || eingetragen.kg > pr.kg)) pr = eingetragen;
+    eingetragen = await eingetragenerPr();
   } catch (e) {
     console.error("Eingetragener PR nicht lesbar:", e);
   }
+  const pr = echterPrAus(saetze, eingetragen);
 
   let vorschau: Wochenvorschau[] = [];
   let ziel: Zielstand | null = null;

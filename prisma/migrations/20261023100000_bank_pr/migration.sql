@@ -1,9 +1,11 @@
 -- Eingetragener Bank-PR
 --
 -- Die Karte "Echter PR" im Bench-Tab nahm bisher ausschließlich geloggte,
--- saubere Singles — und zeigte damit 90 kg. Jakobs tatsächlicher Bestwert
--- sind 100 kg, gehoben vor der Zeit, aus der Kadenz saubere Singles kennt;
--- das genaue Datum ist nicht überliefert, der 25.09.2026 ist von Jakob
+-- saubere Singles — und zeigte damit 90 kg. Jakob nennt 100 kg als seinen
+-- echten PR. In Kadenz sind die 100 kg als Satz mit abgehobener Hüfte
+-- vermerkt (siehe SetLog.sauber im Schema) und zählen deshalb für
+-- Trainingsmax und Schätzung weiterhin nicht; als Bestwert in der Karte gilt
+-- jetzt Jakobs Wort. Das Datum kennt er nicht genau, den 25.09.2026 hat er
 -- festgelegt.
 --
 -- Bewusst als Einstellung und nicht als erfundener Satz in SetLog: ein Satz
