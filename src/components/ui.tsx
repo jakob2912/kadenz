@@ -72,8 +72,7 @@ export function NichtVerbunden({
 /**
  * Zahnrad zu den Einstellungen.
  *
- * Kein siebter Tab: auf 375 px blieben je Eintrag keine 50 px, und
- * Einstellungen öffnet man selten. Oben rechts auf der Startseite ist die
+ * Kein fünfter Tab: Einstellungen öffnet man selten. Oben rechts auf der Startseite ist die
  * Stelle, an der iOS-Apps sie üblicherweise haben.
  */
 export function EinstellungenLink() {

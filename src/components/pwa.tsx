@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore, useState } from "react";
+import { usePathname } from "next/navigation";
 
 /**
  * Meldet den Service Worker an (public/sw.js).
@@ -100,4 +101,40 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
       </button>
     </section>
   );
+}
+
+/**
+ * Zahl am App-Symbol, frisch beim Öffnen, beim Zurückholen aus dem
+ * Hintergrund und bei jedem Seitenwechsel — so verschwindet die Eins für das
+ * Training, sobald die Einheit begonnen hat. Die Push-Nachrichten setzen sie
+ * zusätzlich, wenn die App zu ist (public/sw.js).
+ */
+export function AppAbzeichen() {
+  const pfad = usePathname();
+
+  useEffect(() => {
+    if (!("setAppBadge" in navigator) || pfad === "/anmelden") return;
+    let aus = false;
+    const holen = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const antwort = await fetch("/api/abzeichen", { cache: "no-store" });
+        if (!antwort.ok || aus) return;
+        const { anzahl } = (await antwort.json()) as { anzahl: number | null };
+        if (typeof anzahl !== "number") return;
+        if (anzahl > 0) await navigator.setAppBadge(anzahl);
+        else await navigator.clearAppBadge();
+      } catch {
+        // Kein Netz oder keine Erlaubnis: die alte Zahl bleibt stehen.
+      }
+    };
+    holen();
+    document.addEventListener("visibilitychange", holen);
+    return () => {
+      aus = true;
+      document.removeEventListener("visibilitychange", holen);
+    };
+  }, [pfad]);
+
+  return null;
 }

@@ -113,3 +113,16 @@ export function abendNachricht(lage: AbendLage): Nachricht | null {
 
   return null;
 }
+
+/**
+ * Die Zahl am App-Symbol: wie viele Dinge heute noch auf Jakob warten.
+ *
+ * Dieselben zwei, die auch die Abend-Nachricht kennt — die geplante Einheit,
+ * solange noch nichts begonnen wurde, und ein offener Kalorienvorschlag. Kein
+ * fehlendes Morgengewicht: das wäre jeden Tag bis zum Wiegen eine Eins, und
+ * eine Zahl, die immer dasteht, sieht man bald nicht mehr.
+ */
+export function offeneDinge(lage: AbendLage): number {
+  const training = lage.plan.art === "training" && !lage.trainiertHeute ? 1 : 0;
+  return training + (lage.kalorienvorschlagOffen ? 1 : 0);
+}

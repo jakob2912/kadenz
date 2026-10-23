@@ -5,6 +5,7 @@ import { heuteWien } from "@/lib/datum";
 import { cronAbweisen } from "@/lib/cron";
 import { anAlleSenden, benachrichtigungenLesen } from "@/lib/push";
 import { morgenNachricht, type MorgenLage } from "@/lib/benachrichtigung-texte";
+import { abzeichenZahl } from "@/lib/abzeichen";
 
 /**
  * Morgen-Nachricht — von Vercel Cron aufgerufen, siehe vercel.json.
@@ -22,7 +23,12 @@ export async function GET(request: Request) {
   }
 
   const heute = heuteWien();
-  const [daten, rotation] = await Promise.all([loadDashboard(30), rotationMitPlan(new Date())]);
+  const [daten, rotation, badge] = await Promise.all([
+    loadDashboard(30),
+    rotationMitPlan(new Date()),
+    // Fällt die Zählung aus, geht die Nachricht trotzdem raus — ohne Zahl.
+    abzeichenZahl().catch(() => undefined),
+  ]);
 
   const lage: MorgenLage = daten.verbunden
     ? {
@@ -44,6 +50,8 @@ export async function GET(request: Request) {
       : ({ art: "pause", naechste: rotation.naechste } as const);
 
   const nachricht = morgenNachricht(lage, plan);
-  const versand = await anAlleSenden(nachricht);
+  // Die Zahl am Symbol kommt mit: sie stand seit gestern Abend womöglich auf
+  // null, und an einem Trainingstag ist die Einheit ab jetzt offen.
+  const versand = await anAlleSenden({ ...nachricht, badge });
   return NextResponse.json({ gesendet: true, nachricht, versand });
 }

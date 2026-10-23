@@ -67,6 +67,16 @@ const nextConfig: NextConfig = {
   },
 
   /**
+   * Der Coach-Tab ist in der Startseite aufgegangen. Ein altes Lesezeichen
+   * oder ein offener Tab im App-Umschalter soll nicht auf einer 404 landen.
+   * Nicht permanent: falls der Coach als Dialog zurückkommt, soll kein
+   * Browser die Umleitung für immer behalten haben.
+   */
+  async redirects() {
+    return [{ source: "/coach", destination: "/", permanent: false }];
+  },
+
+  /**
    * Der Service Worker darf nie aus einem Cache kommen: eine hängengebliebene
    * alte Version würde sich selbst immer weiter ausliefern.
    */

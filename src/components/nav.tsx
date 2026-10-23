@@ -3,49 +3,30 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const TABS = [
+const TABS: { href: string; label: string; d: string; auch?: string[] }[] = [
   {
     href: "/",
     label: "Heute",
     d: "M12 2v3M4.9 6.9 7 9M19.1 6.9 17 9M2 15h20M6 15a6 6 0 0 1 12 0M3 20h18",
   },
   { href: "/training", label: "Training", d: "M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9" },
-  /* Fünfter Eintrag statt einer Unterseite des Coaches: den Plan liest Jakob
-     mehrmals täglich nach ("was gehört in Meal 3?"), und ein wartender
-     Kalorienvorschlag braucht eine Stelle, an der er von selbst auffällt.
-     Zwei Tipps tief unter "Coach" wäre beides verfehlt.
-
-     Eingeordnet nach Training, nicht hinten angehängt: Training und Essen sind
-     das, was heute zu tun ist, Verlauf und Coach das, was daraus folgt. Die
-     App ist zwei Tage alt — die Reihenfolge jetzt zu ordnen kostet weniger als
-     später. */
+  /* Essen direkt nach Training: beides ist das, was heute zu tun ist. Den
+     Plan liest Jakob mehrmals täglich nach, und ein wartender
+     Kalorienvorschlag braucht eine Stelle, an der er von selbst auffällt. */
   {
     href: "/ernaehrung",
     label: "Essen",
     d: "M2.5 11.5h19a9.5 9.5 0 0 1-19 0M8.5 7.6c0-1.7 1.2-2 1.2-3.6M12.5 7.2c0-1.7 1.2-2 1.2-3.6M16.5 7.6c0-1.7 1.2-2 1.2-3.6",
   },
-  /* Bankdrücken bekommt einen eigenen Platz, obwohl es unter Verlauf schon
-     eine Seite je Übung gibt. Es ist die einzige Übung mit einem Programm,
-     einem Zyklus und einem Ziel mit Datum — und die einzige, nach der Jakob
-     zwischen zwei Einheiten sucht. Zwei Ebenen tief unter "Verlauf" wäre das
-     verfehlt.
-
-     Ein Hantel-Symbol wie bei Training wäre verwechselbar; hier steht die
-     Langhantel von der Seite, mit Scheiben an beiden Enden. */
+  /* Vier statt sechs Tabs. Bankdrücken lebt jetzt unter Verlauf (Umschalter
+     oben auf beiden Seiten), der Coach steckt in der Startseite — seine drei
+     Sätze standen dort ohnehin schon fast wörtlich. Bei sechs Einträgen
+     blieben auf 375 px je 52 px, und "Verlauf" stand kurz vor dem Umbruch. */
   {
-    href: "/bank",
-    // "Bench" und nicht "Bank": so nennt Jakob es selbst, und ein Tab namens
-    // "Bank" neben "Essen" und "Coach" liest sich beim ersten Blick nach
-    // Geldinstitut. Die Adresse bleibt /bank — der Quelltext ist deutsch, und
-    // Bankdrücken heißt dort überall Bank.
-    label: "Bench",
-    d: "M3 10v4M6 8v8M18 8v8M21 10v4M6 12h12",
-  },
-  { href: "/verlauf", label: "Verlauf", d: "M3 3v18h18M7 15l4-4 3 3 5-6M19 8h-3M19 8v3" },
-  {
-    href: "/coach",
-    label: "Coach",
-    d: "M21 11.5a8.4 8.4 0 0 1-8.5 8.5 8.9 8.9 0 0 1-3.8-.8L3 21l1.9-5.4A8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z",
+    href: "/verlauf",
+    label: "Verlauf",
+    d: "M3 3v18h18M7 15l4-4 3 3 5-6M19 8h-3M19 8v3",
+    auch: ["/bank"],
   },
 ];
 
@@ -64,7 +45,12 @@ export function TabBar() {
     >
       <div className="mx-auto flex max-w-[520px] gap-1 md:max-w-[1180px] md:justify-end md:gap-1.5">
         {TABS.map((t) => {
-          const active = path === t.href;
+          // Unterseiten zählen mit: /verlauf/bankdruecken und /bank sind
+          // beide noch "Verlauf".
+          const active =
+            t.href === "/"
+              ? path === "/"
+              : [t.href, ...(t.auch ?? [])].some((h) => path === h || path.startsWith(h + "/"));
           return (
             <Link
               key={t.href}
@@ -95,10 +81,7 @@ export function TabBar() {
               >
                 <path d={t.d} />
               </svg>
-              {/* Sechs statt fünf Tabs seit dem Bank-Tab: auf 375 px bleiben
-                  je Eintrag rund 52 px. Ein Umbruch mitten in "Verlauf" würde
-                  die Leiste höher machen als die Sicherheitszone unten. */}
-              <span className="whitespace-nowrap text-[10px] font-semibold md:text-[13px]">
+              <span className="whitespace-nowrap text-[11px] font-semibold md:text-[13px]">
                 {t.label}
               </span>
             </Link>

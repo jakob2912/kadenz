@@ -9,8 +9,8 @@ import { PushSchalter, GeraeteSchalter } from "@/components/einstellungen";
 /**
  * Einstellungen — Benachrichtigungen, dieses Gerät, Daten.
  *
- * Kein eigener Tab: die Leiste trägt seit dem Bench-Tab sechs Einträge, und
- * Einstellungen öffnet man selten. Der Weg hierher ist das Zahnrad oben auf
+ * Kein eigener Tab: die Leiste bleibt bei den vier Dingen, die man täglich
+ * braucht, und Einstellungen öffnet man selten. Der Weg hierher ist das Zahnrad oben auf
  * der Startseite.
  */
 export default function Einstellungen() {

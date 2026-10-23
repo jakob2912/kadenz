@@ -17,6 +17,7 @@ import { ReihenChart } from "@/components/reihen-chart";
 import { Kraftverlauf } from "@/components/kraftverlauf";
 import { Einheitenverlauf } from "@/components/einheitenverlauf";
 import { Wochenueberblick } from "@/components/wochenueberblick";
+import { VerlaufUmschalter } from "@/components/verlauf-umschalter";
 import {
   ENDZIEL_KG,
   aktuellePhase,
@@ -34,10 +35,11 @@ import {
 export default function Verlauf() {
   return (
     <>
+      <VerlaufUmschalter aktiv="koerper" />
       <Suspense
         fallback={
           <>
-            <div className="pt-10 md:pt-14">
+            <div className="pt-6 md:pt-8">
               <Skelett hoehe={16} className="w-56" />
               <Skelett hoehe={38} className="mt-3 w-40" />
               <Skelett hoehe={18} className="mt-3 w-72" />
@@ -91,7 +93,7 @@ async function Gewichtsteil() {
 
   return (
     <>
-      <header className="pt-10 md:pt-14">
+      <header className="pt-6 md:pt-8">
         {/* Statt "195 cm": die Körpergröße ändert sich nie und beantwortet
             keine Frage. Wie alt der angezeigte Wert ist, entscheidet dagegen,
             ob man ihm überhaupt glauben darf. */}
