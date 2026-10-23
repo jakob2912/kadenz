@@ -19,6 +19,7 @@ import {
 } from "./bank";
 import { neustartsLesen, saetzeFuerMehrere } from "./kraftverlauf";
 import { heuteWien } from "./datum";
+import { prisma } from "./db";
 import {
   datumFuerPushIndex,
   pushIndexAbDatum,
@@ -78,7 +79,66 @@ export type Wochenvorschau = {
 };
 
 /** Ein sauber gehobener Single. */
-export type EchterPr = { kg: number; datum: string };
+export type EchterPr = {
+  kg: number;
+  datum: string;
+  /**
+   * "geloggt": der schwerste saubere Single aus SetLog.
+   * "eingetragen": von Jakob genannt (Einstellung bank_pr) — ein Bestwert aus
+   * der Zeit vor den sauberen Singles in Kadenz, ohne Satz dahinter.
+   */
+  quelle: "geloggt" | "eingetragen";
+};
+
+const PR_SCHLUESSEL = "bank_pr";
+
+/** Der eingetragene PR, falls es einen gibt und er lesbar ist. */
+export async function eingetragenerPr(): Promise<EchterPr | null> {
+  const zeile = await prisma.einstellung.findUnique({ where: { schluessel: PR_SCHLUESSEL } });
+  if (!zeile) return null;
+  try {
+    const { kg, datum } = JSON.parse(zeile.wert) as { kg: unknown; datum: unknown };
+    if (typeof kg !== "number" || typeof datum !== "string") return null;
+    return { kg, datum, quelle: "eingetragen" };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Der echte PR aus den geloggten Sätzen und dem eingetragenen Wert.
+ *
+ * Geloggt zählt nur ein Single, der nicht ausdrücklich als unsauber markiert
+ * ist. Der eingetragene PR zählt, solange kein geloggter Single schwerer
+ * ist; bei Gleichstand gewinnt der geloggte — der hat einen Satz dahinter.
+ * Rein, damit Bench-Tab und MCP-Server (bank_coach) dieselbe Zahl nennen.
+ */
+export function echterPrAus(
+  saetze: readonly { kg: number; reps: number; datum: string; sauber?: boolean | null }[],
+  eingetragen: EchterPr | null
+): EchterPr | null {
+  let pr: EchterPr | null = null;
+  for (const s of saetze) {
+    if (s.reps !== 1 || s.sauber === false) continue;
+    if (pr === null || s.kg > pr.kg) pr = { kg: s.kg, datum: s.datum, quelle: "geloggt" };
+  }
+  if (eingetragen && (pr === null || eingetragen.kg > pr.kg)) pr = eingetragen;
+  return pr;
+}
+
+/** Den eingetragenen PR setzen — oder mit null entfernen. */
+export async function prEintragen(pr: { kg: number; datum: string } | null): Promise<void> {
+  if (pr === null) {
+    await prisma.einstellung.deleteMany({ where: { schluessel: PR_SCHLUESSEL } });
+    return;
+  }
+  const wert = JSON.stringify({ kg: pr.kg, datum: pr.datum });
+  await prisma.einstellung.upsert({
+    where: { schluessel: PR_SCHLUESSEL },
+    update: { wert },
+    create: { schluessel: PR_SCHLUESSEL, wert },
+  });
+}
 
 export type Bankuebersicht = {
   tm: Trainingsmax | null;
@@ -237,11 +297,13 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     .slice(0, 10);
   const schaetzung = schaetzungAus(saetze.filter((s) => s.datum >= seit && s.datum <= heute));
 
-  let pr: EchterPr | null = null;
-  for (const s of saetze) {
-    if (s.reps !== 1 || s.sauber === false) continue;
-    if (pr === null || s.kg > pr.kg) pr = { kg: s.kg, datum: s.datum };
+  let eingetragen: EchterPr | null = null;
+  try {
+    eingetragen = await eingetragenerPr();
+  } catch (e) {
+    console.error("Eingetragener PR nicht lesbar:", e);
   }
+  const pr = echterPrAus(saetze, eingetragen);
 
   let vorschau: Wochenvorschau[] = [];
   let ziel: Zielstand | null = null;

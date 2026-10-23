@@ -88,6 +88,7 @@ Referenzgewichte vor. Beides läuft in einer Transaktion.
 | `bank_trainingsmax` | Der aktuelle Trainingsmax samt Historie — jeder Zyklus mit Begründung |
 | `bank_coach` | Läuft, steht oder fällt das Bankdrücken (56 Tage, nur schwere Tage), ein Vorschlag nach 5/3/1-Regeln und die Hochrechnung auf 140 kg samt nötigem Tempo bis Ende 2027. Ändert nichts |
 | `bank_tm_setzen` | Setzt den Trainingsmax; zum Einstieg nötig, danach nur noch als Korrektur |
+| `bank_pr_setzen` | Trägt den echten PR für die Karte „Echter PR“ ein (nur Anzeige, keine Wirkung auf Trainingsmax oder Historie); ein schwererer geloggter Single löst ihn ab |
 
 Bank-Tag ist **jede zweite Push-Einheit**, also alle sechs Tage; ein Zyklus
 dauert damit 24 Tage. Gezählt wird ab dem Tag, an dem der Trainingsmax gesetzt

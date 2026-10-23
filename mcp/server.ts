@@ -44,6 +44,12 @@ import {
 } from "../src/lib/bankcoach";
 import { zielProjektion } from "../src/lib/bankziel";
 import {
+  BANK_FENSTER_TAGE,
+  echterPrAus,
+  eingetragenerPr,
+  prEintragen,
+} from "../src/lib/bankuebersicht";
+import {
   aktuellerTrainingsmax,
   bankstandFuer,
   trainingsmaxHistorie,
@@ -870,7 +876,7 @@ server.registerTool(
   {
     title: "Bank-Coach",
     description:
-      "Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
+      "Echter PR (schwerster sauberer Single oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
   },
   async () => {
     try {
@@ -889,7 +895,23 @@ server.registerTool(
         neustartAb: grundlage.neustarts[BANK_UEBUNG],
       });
       const programm = tm ? zielProjektion(tm.tmKg, tm.zyklus, tm.gueltigAb) : null;
+
+      /* Derselbe Wert wie die Karte "Echter PR" im Bench-Tab — sonst nennt
+         Claude auf "was ist mein PR?" den 90-%-Single aus der Historie. Dafür
+         dasselbe Fenster wie dort (ein Jahr), nicht die 120 Tage des Trends.
+         Nur Anzeige: scheitert das Lesen, antwortet der Coach trotzdem. */
+      let echterPr = null;
+      try {
+        echterPr = echterPrAus(
+          await saetzeFuer(BANK_UEBUNG, BANK_FENSTER_TAGE),
+          await eingetragenerPr()
+        );
+      } catch (e) {
+        console.error("Echter PR nicht lesbar:", e);
+      }
+
       return antwort({
+        echterPr,
         ...coach,
         prognose: prognose140(coach.urteil, heute),
         programm: programm
@@ -984,6 +1006,38 @@ server.registerTool(
       datenbankPruefen();
       const r = await trainingsmaxSetzen(kg, begruendung);
       return r.ok ? antwort({ gesetzt: r.tm }) : fehler(new Error(r.fehler));
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
+  "bank_pr_setzen",
+  {
+    title: "Bank-PR eintragen",
+    description:
+      "Trägt Jakobs echten Bankdrück-PR (schwerstes einmal gehobenes Gewicht) für die Karte \"Echter PR\" im Bench-Tab ein — für Bestwerte, die nicht als sauberer Single in Kadenz geloggt sind. Ändert NUR die Anzeige: kein Satz in der Historie, keine Wirkung auf Trainingsmax, Schätzung oder Kraftverlauf. Ein geloggter sauberer Single, der schwerer ist, löst den Eintrag automatisch ab. `kg: null` entfernt den Eintrag.",
+    inputSchema: {
+      kg: z.number().min(20).max(300).nullable(),
+      datum: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe("Tag des PR als YYYY-MM-DD; ohne Angabe heute"),
+    },
+  },
+  async ({ kg, datum }) => {
+    try {
+      datenbankPruefen();
+      const tag = datum ?? heuteWien();
+      // Kein 31. Februar und kein PR aus der Zukunft.
+      const geprueft = new Date(`${tag}T12:00:00Z`);
+      if (Number.isNaN(geprueft.getTime()) || geprueft.toISOString().slice(0, 10) !== tag || tag > heuteWien()) {
+        throw new Error(`Ungültiges Datum: ${tag}`);
+      }
+      await prEintragen(kg === null ? null : { kg, datum: tag });
+      return antwort({ eingetragen: kg === null ? null : { kg, datum: tag } });
     } catch (e) {
       return fehler(e);
     }

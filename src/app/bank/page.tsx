@@ -273,7 +273,9 @@ function TmHistorie({ historie }: { historie: Trainingsmax[] }) {
 }
 
 /**
- * Der echte Bestwert: der schwerste saubere Single, kein geschätztes Maximum.
+ * Der echte Bestwert: der schwerste saubere Single — oder, wenn höher, der
+ * von Jakob eingetragene PR (echterPrAus() in bankuebersicht.ts). Kein
+ * geschätztes Maximum.
  * Daneben, wann wieder getestet wird.
  */
 function Pr({
@@ -302,7 +304,9 @@ function Pr({
             {de(pr.kg, 1)} kg
           </p>
           <p className="mt-1.5 text-[13px] text-fg-dim">
-            Schwerster sauberer Single, am {kurzDatum(pr.datum)}.
+            {pr.quelle === "geloggt"
+              ? `Schwerster sauberer Single, am ${kurzDatum(pr.datum)}.`
+              : `Bestwert vom ${kurzDatum(pr.datum)} · von dir eingetragen. Ein schwererer geloggter Single löst ihn ab.`}
           </p>
         </>
       ) : (
