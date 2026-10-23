@@ -213,7 +213,16 @@ export async function trainingBeenden(
       throw new Ungueltig("Ungültiger Tag.");
     }
     const zeitpunkt = erfassungszeit(erfasstAm);
-    const workout = await workoutHeute(art(kind), tagIso ?? wienerDatum(zeitpunkt));
+    /* Mit ausdrücklichem Tag nur eine bestehende Einheit beenden, nie eine
+       anlegen — ein veralteter Tag aus einer tagelang offenen App soll keine
+       leere Einheit in die Vergangenheit schreiben. */
+    const workout =
+      tagIso !== undefined
+        ? await prisma.workout.findUnique({
+            where: { date_kind: { date: new Date(`${tagIso}T00:00:00Z`), kind: art(kind) } },
+          })
+        : await workoutHeute(art(kind), wienerDatum(zeitpunkt));
+    if (workout === null) throw new Ungueltig("Zu diesem Tag gibt es keine Einheit.");
     if (workout.finishedAt !== null) {
       return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
     }

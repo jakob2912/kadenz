@@ -334,7 +334,13 @@ export function TrainingLogger({
 
     let abgebrochen = false;
     void trainingBeenden(session.key, undefined, Date.now(), tag ?? undefined).then((r) => {
-      if (!abgebrochen && r.ok) setFertigSeit(r.finishedAtMs);
+      if (abgebrochen || !r.ok) return;
+      setFertigSeit(r.finishedAtMs);
+      /* Wie beim Knopf "Einheit beenden": nach dem letzten Satz keine
+         Satzpause mehr, und keine Pausen-Nachricht drei Minuten später. */
+      setPauseEnde(null);
+      pauseSchreiben(null);
+      satzpauseAnkuendigen(null).catch(() => {});
     });
 
     return () => {
@@ -740,7 +746,8 @@ function SatzZeile({
 }: {
   nummer: number;
   /**
-   * Beim AMRAP-Satz: so viele Wiederholungen wären ein Bestwert. Das ist beim
+   * Beim AMRAP-Satz die bisherigen Bestwerte der Übung — daraus rechnet die
+   * Zeile, ab wie vielen Wiederholungen es ein Bestwert wäre. Das ist beim
    * 5/3/1 der eigentliche Antrieb des letzten Satzes — Wendler nennt genau
    * diese Zahl als Ziel, über das Minimum hinaus.
    */
@@ -1238,6 +1245,7 @@ function UebungsNotiz({
         <button
           type="button"
           onClick={schliessen}
+          disabled={speichert}
           className="-ml-1 min-h-[44px] self-start px-1 text-[13px] font-semibold text-fg-faint active:text-fg"
         >
           Abbrechen
@@ -1252,7 +1260,7 @@ function UebungsNotiz({
       ref={knopf}
       type="button"
       onClick={() => setEntwurf(notiz ?? "")}
-      className="-my-1.5 -ml-1 mt-0 flex min-h-[44px] items-center gap-1.5 rounded-sm px-1 text-left text-xs text-fg-faint active:bg-surface-2"
+      className="-my-1.5 -ml-1 flex min-h-[44px] items-center gap-1.5 rounded-sm px-1 text-left text-xs text-fg-faint active:bg-surface-2"
       aria-label={notiz ? `Notiz zu ${name} ändern: ${notiz}` : `Notiz zu ${name} hinzufügen`}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>

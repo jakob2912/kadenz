@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
 
-/** Länger hat keine Notiz im Katalog — auch die vom MCP-Server gesetzten nicht. */
+/** Länger nimmt diese Aktion keine Notiz an; der MCP-Server prüft dieselbe Grenze. */
 const NOTIZ_MAX = 300;
 
 /**
