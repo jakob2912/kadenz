@@ -44,15 +44,17 @@ export type Muskelgruppe = (typeof MUSKELGRUPPEN)[number];
  */
 const REGELN: [RegExp, Muskelgruppe[]][] = [
   // Speziell vor allgemein: diese Namen enthalten Wörter späterer Regeln.
-  [/\bleg curl|beinbeuger|nordic/, ["Hamstrings"]],
-  [/reverse fly|rear delt|face pull|hintere schulter/, ["Schulter", "Rücken"]],
+  [/\bleg curl|hamstring|beinbeuger|nordic|glute ham/, ["Hamstrings"]],
+  [/reverse fl|rear delt|face ?pull|hintere schulter/, ["Schulter", "Rücken"]],
   [/overhead (triceps|trizeps)|trizeps|triceps|pushdown|french|skull/, ["Trizeps"]],
-  [/upright row|aufrechtes rudern/, ["Schulter"]],
+  [/upright row|aufrechtes rudern|shrug/, ["Schulter"]],
+  // Rudern vor Bankdrücken: "Incline Bench Dumbbell Row" ist ein Rudern.
+  [/\brows?\b|rudern|pulldown|latzug|latziehen|klimmz|pull up|\bchin ups?\b|\bchins?\b/, ["Rücken", "Bizeps"]],
   [/hip thrust|glute|abdukt|abductor/, ["Gesäß"]],
   [/back extension|hyperextension|rückenstrecker/, ["Rücken", "Gesäß"]],
   [/bankdr|bench|spoto|chest press|brustpresse|\bdips?\b/, ["Brust", "Trizeps", "Schulter"]],
-  [/butterfly|pec deck|\bfly\b|\bflys\b|cable cross/, ["Brust"]],
-  [/shoulder press|schulterdr|overhead press|military/, ["Schulter", "Trizeps"]],
+  [/butterfly|pec deck|\bfl(y|ys|ies|yes)\b|cable cross/, ["Brust"]],
+  [/shoulder press|schulterdr|overhead press|military|arnold/, ["Schulter", "Trizeps"]],
   [/seitheben|lateral raise/, ["Schulter"]],
   [/curl/, ["Bizeps"]],
   [/stiff|rum[aä]n|\brdl\b|deadlift|kreuzheben/, ["Hamstrings", "Gesäß", "Rücken"]],
@@ -60,8 +62,7 @@ const REGELN: [RegExp, Muskelgruppe[]][] = [
   [/leg extension|beinstrecker/, ["Quads"]],
   [/calf|wade|slab press/, ["Waden"]],
   [/adduk|adductor/, ["Adduktoren"]],
-  [/crunch|bauch|\babs?\b|plank|ab wheel/, ["Bauch"]],
-  [/\brow\b|rudern|pulldown|latzug|klimmz|pull up|\bchin ups?\b|\bchins?\b/, ["Rücken", "Bizeps"]],
+  [/crunch|bauch|\babs?\b|plank|ab wheel|leg raise|beinheben/, ["Bauch"]],
 ];
 
 /**

@@ -55,7 +55,16 @@ describe("muskelnVon", () => {
       ["Back Extension", "Rücken"],
       ["Ausfallschritte", "Quads"],
       ["Chin-Up", "Rücken"],
-      ["Machine Shrug", undefined],
+      ["Machine Shrug", "Schulter"],
+      ["Facepull", "Schulter"],
+      ["Bent Over Rows", "Rücken"],
+      ["Dumbbell Flyes", "Brust"],
+      ["Hamstring Curl", "Hamstrings"],
+      ["Glute Ham Raise", "Hamstrings"],
+      ["Incline Bench Dumbbell Row", "Rücken"],
+      ["Latziehen", "Rücken"],
+      ["Hanging Leg Raise", "Bauch"],
+      ["Arnold Press", "Schulter"],
     ];
     for (const [uebung, haupt] of faelle) {
       expect(muskelnVon(uebung)[0], uebung).toBe(haupt);

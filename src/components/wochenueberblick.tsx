@@ -78,7 +78,9 @@ export async function Wochenueberblick() {
                 <span className="sr-only">Verlauf über {WOCHEN} Wochen</span>
               </th>
               <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                Vorw.
+                <abbr title="Vorwoche" className="no-underline">
+                  Vorw.
+                </abbr>
               </th>
               <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
                 Jetzt
@@ -107,7 +109,7 @@ export async function Wochenueberblick() {
                     })}
                   </span>
                   <span className="sr-only">
-                    {wochen.map((w) => zahl(w.jeGruppe[g] ?? 0)).join(", ")}
+                    älteste Woche zuerst: {wochen.map((w) => zahl(w.jeGruppe[g] ?? 0)).join(", ")}
                   </span>
                 </td>
                 <td className="text-right text-[13px] tabular-nums text-fg-dim">

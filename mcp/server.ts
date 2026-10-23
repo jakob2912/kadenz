@@ -43,7 +43,12 @@ import {
   trendSaetzeProUebung,
 } from "../src/lib/bankcoach";
 import { zielProjektion } from "../src/lib/bankziel";
-import { echterPrAus, eingetragenerPr, prEintragen } from "../src/lib/bankuebersicht";
+import {
+  BANK_FENSTER_TAGE,
+  echterPrAus,
+  eingetragenerPr,
+  prEintragen,
+} from "../src/lib/bankuebersicht";
 import {
   aktuellerTrainingsmax,
   bankstandFuer,
@@ -890,10 +895,23 @@ server.registerTool(
         neustartAb: grundlage.neustarts[BANK_UEBUNG],
       });
       const programm = tm ? zielProjektion(tm.tmKg, tm.zyklus, tm.gueltigAb) : null;
+
+      /* Derselbe Wert wie die Karte "Echter PR" im Bench-Tab — sonst nennt
+         Claude auf "was ist mein PR?" den 90-%-Single aus der Historie. Dafür
+         dasselbe Fenster wie dort (ein Jahr), nicht die 120 Tage des Trends.
+         Nur Anzeige: scheitert das Lesen, antwortet der Coach trotzdem. */
+      let echterPr = null;
+      try {
+        echterPr = echterPrAus(
+          await saetzeFuer(BANK_UEBUNG, BANK_FENSTER_TAGE),
+          await eingetragenerPr()
+        );
+      } catch (e) {
+        console.error("Echter PR nicht lesbar:", e);
+      }
+
       return antwort({
-        // Derselbe Wert wie die Karte "Echter PR" im Bench-Tab — sonst nennt
-        // Claude auf "was ist mein PR?" den 90-%-Single aus der Historie.
-        echterPr: echterPrAus(saetze, await eingetragenerPr()),
+        echterPr,
         ...coach,
         prognose: prognose140(coach.urteil, heute),
         programm: programm
@@ -1019,7 +1037,7 @@ server.registerTool(
         throw new Error(`Ungültiges Datum: ${tag}`);
       }
       await prEintragen(kg === null ? null : { kg, datum: tag });
-      return antwort({ eingetragen: kg === null ? null : { kg, datum: datum ?? heuteWien() } });
+      return antwort({ eingetragen: kg === null ? null : { kg, datum: tag } });
     } catch (e) {
       return fehler(e);
     }
