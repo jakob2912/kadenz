@@ -7,7 +7,27 @@ import { SwRegistrierung } from "@/components/pwa";
 export const metadata: Metadata = {
   title: "Kadenz",
   description: "Persönlicher Trainings- und Ernährungscoach",
-  appleWebApp: { capable: true, title: "Kadenz", statusBarStyle: "black-translucent" },
+  appleWebApp: {
+    capable: true,
+    title: "Kadenz",
+    statusBarStyle: "black-translucent",
+    /* Startbilder: ohne sie zeigt iOS beim Öffnen der installierten App erst
+       einen weißen Bildschirm — bei einer durchgehend dunklen App ein greller
+       Blitz, morgens um sechs. iOS nimmt nur ein Bild, das exakt zur
+       Bildschirmgröße passt; deshalb je iPhone-Größe eins (15/16, 16 Pro,
+       15/16 Plus, 16 Pro Max). Erzeugt aus public/icon.svg. */
+    startupImage: (
+      [
+        [393, 852],
+        [402, 874],
+        [430, 932],
+        [440, 956],
+      ] as const
+    ).map(([b, h]) => ({
+      url: `/startup/start-${b}x${h}.png`,
+      media: `(device-width: ${b}px) and (device-height: ${h}px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)`,
+    })),
+  },
 };
 
 export const viewport: Viewport = {

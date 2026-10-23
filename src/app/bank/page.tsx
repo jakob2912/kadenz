@@ -302,7 +302,9 @@ function Pr({
             {de(pr.kg, 1)} kg
           </p>
           <p className="mt-1.5 text-[13px] text-fg-dim">
-            Schwerster sauberer Single, am {kurzDatum(pr.datum)}.
+            {pr.quelle === "geloggt"
+              ? `Schwerster sauberer Single, am ${kurzDatum(pr.datum)}.`
+              : `Eingetragen, am ${kurzDatum(pr.datum)} — ein geloggter Single darüber löst ihn ab.`}
           </p>
         </>
       ) : (

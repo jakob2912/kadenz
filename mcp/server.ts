@@ -43,6 +43,7 @@ import {
   trendSaetzeProUebung,
 } from "../src/lib/bankcoach";
 import { zielProjektion } from "../src/lib/bankziel";
+import { prEintragen } from "../src/lib/bankuebersicht";
 import {
   aktuellerTrainingsmax,
   bankstandFuer,
@@ -984,6 +985,32 @@ server.registerTool(
       datenbankPruefen();
       const r = await trainingsmaxSetzen(kg, begruendung);
       return r.ok ? antwort({ gesetzt: r.tm }) : fehler(new Error(r.fehler));
+    } catch (e) {
+      return fehler(e);
+    }
+  }
+);
+
+server.registerTool(
+  "bank_pr_setzen",
+  {
+    title: "Bank-PR eintragen",
+    description:
+      "Trägt Jakobs echten Bankdrück-PR (schwerstes einmal gehobenes Gewicht) für die Karte \"Echter PR\" im Bench-Tab ein — für Bestwerte, die nicht als sauberer Single in Kadenz geloggt sind. Ändert NUR die Anzeige: kein Satz in der Historie, keine Wirkung auf Trainingsmax, Schätzung oder Kraftverlauf. Ein geloggter sauberer Single, der schwerer ist, löst den Eintrag automatisch ab. `kg: null` entfernt den Eintrag.",
+    inputSchema: {
+      kg: z.number().min(20).max(300).nullable(),
+      datum: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/)
+        .optional()
+        .describe("Tag des PR als YYYY-MM-DD; ohne Angabe heute"),
+    },
+  },
+  async ({ kg, datum }) => {
+    try {
+      datenbankPruefen();
+      await prEintragen(kg === null ? null : { kg, datum: datum ?? heuteWien() });
+      return antwort({ eingetragen: kg === null ? null : { kg, datum: datum ?? heuteWien() } });
     } catch (e) {
       return fehler(e);
     }

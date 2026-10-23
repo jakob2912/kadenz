@@ -87,3 +87,15 @@ export async function letzteEinheiten(anzahl = 12): Promise<Einheitsbericht[]> {
     };
   });
 }
+
+/**
+ * Jeder Satz der letzten Wochen, nur Übung und Tag — für den Wochenüberblick
+ * je Muskelgruppe (wochenvolumen() in muskeln.ts).
+ */
+export async function saetzeDerLetztenWochen(wochen: number): Promise<{ exercise: string; datum: string }[]> {
+  const zeilen = await prisma.setLog.findMany({
+    where: { workout: { date: { gte: new Date(Date.now() - (wochen * 7 + 1) * 864e5) } } },
+    select: { exercise: true, workout: { select: { date: true } } },
+  });
+  return zeilen.map((z) => ({ exercise: z.exercise, datum: z.workout.date.toISOString().slice(0, 10) }));
+}
