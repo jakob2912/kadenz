@@ -15,6 +15,7 @@ import {
 } from "@/components/ui";
 import { ReihenChart } from "@/components/reihen-chart";
 import { Kraftverlauf } from "@/components/kraftverlauf";
+import { Einheitenverlauf } from "@/components/einheitenverlauf";
 import {
   ENDZIEL_KG,
   aktuellePhase,
@@ -55,6 +56,10 @@ export default function Verlauf() {
 
       <Suspense fallback={<Skelett hoehe={240} className="mt-4" />}>
         <Kraftverlauf />
+      </Suspense>
+
+      <Suspense fallback={<Skelett hoehe={240} className="mt-4" />}>
+        <Einheitenverlauf />
       </Suspense>
     </>
   );

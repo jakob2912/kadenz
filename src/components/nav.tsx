@@ -52,6 +52,9 @@ const TABS = [
 export function TabBar() {
   const path = usePathname();
 
+  // Auf der Anmeldeseite führt jeder Tab ohnehin zurück auf sie.
+  if (path === "/anmelden") return null;
+
   return (
     <nav
       aria-label="Hauptnavigation"

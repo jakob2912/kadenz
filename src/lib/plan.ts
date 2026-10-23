@@ -1,6 +1,5 @@
 import { progression, type SetLog } from "./coach";
 import { wienerDatum } from "./datum";
-import { datenbankKonfiguriert } from "./konfiguration";
 
 /**
  * Jakobs Split. "Push/Pull" meint bei ihm Anterior/Posterior — Beine sind an
@@ -654,33 +653,15 @@ export function planFor(session: Session): PlannedExercise[] {
  * woher die Liste kommt, entscheidet der Aufrufer — aus der Datenbank im
  * Normalfall, aus SESSIONS als Rückfall.
  */
-export async function mitHistorie(uebungen: ZuPlanen[]): Promise<PlannedExercise[]> {
-  // Ist gar keine Datenbank konfiguriert, wären die Abfragen unten so viele
-  // vergebliche Verbindungsversuche, wie es Übungen gibt — bei einem Pool mit
-  // max 1 nacheinander. Dann lieber gleich die Referenzwerte.
-  if (!datenbankKonfiguriert()) return uebungen.map((ex) => baue(ex, ex.last));
-
-  const { letzteSaetzeFuer } = await import("./workouts");
-
-  /* Eine Abfrage für die ganze Einheit statt zwei je Übung. Vorher lief hier
-     ein Promise.all über letzteSaetze() — das sah nebenläufig aus, war es
-     aber nicht: der Pool in db.ts steht auf max 1, also gingen die zwanzig
-     Abfragen einer Push-Einheit nacheinander über die Leitung. Genau das war
-     die Wartezeit beim Wechsel auf den Trainings-Tab.
-
-     Der try umschließt jetzt den einen Aufruf statt jede Übung einzeln. Die
-     Haltung bleibt dieselbe: im Gym zählt, dass der Plan dasteht. Ist die
-     Datenbank kurz weg, fällt die Einheit auf ihre Referenzwerte zurück,
-     statt die Seite mit einem 500 abzuräumen. Das Loggen meldet den Ausfall
-     ohnehin sichtbar — satzSpeichern gibt { ok: false, fehler } zurück und
-     die Karte zeigt das an. */
-  let historie = new Map<string, SetLog[]>();
-  try {
-    historie = await letzteSaetzeFuer(uebungen.map((ex) => ex.name));
-  } catch (e) {
-    console.error("Trainingshistorie nicht lesbar, nutze Referenzwerte:", e);
-  }
-
+export function mitHistorie(
+  uebungen: ZuPlanen[],
+  historie: ReadonlyMap<string, SetLog[]>
+): PlannedExercise[] {
+  /* Rein: die Historie lädt der Aufrufer (trainingsplanAls() in uebungen.ts).
+     Bis zum 22.10.2026 holte diese Funktion sie selbst per dynamischem Import
+     — und weil plan.ts auch im Browser läuft (heutigeSaetze im Logger),
+     landete der Datenbanktreiber damit im Client-Bündel, sobald das
+     importierte Modul keine Server-Action-Datei mehr war. */
   return uebungen.map((ex) => {
     const ausDb = historie.get(ex.name) ?? [];
     return baue(ex, ausDb.length > 0 ? ausDb : ex.last);

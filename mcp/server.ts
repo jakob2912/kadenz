@@ -76,7 +76,8 @@ import {
   uebungenUmsortieren,
   type Einheit,
 } from "../src/lib/uebungen";
-import { heutigeEinheit, satzSpeichern } from "../src/lib/workouts";
+import { satzSpeichern } from "../src/lib/workouts";
+import { heutigeEinheit } from "../src/lib/training-lesen";
 import {
   aktuellesZiel,
   ernaehrungsplanLesen,
@@ -617,7 +618,7 @@ server.registerTool(
       einheit: einheitSchema,
       alt: z.string().min(1).describe("Name der Übung, die weichen soll"),
       neu: z.string().min(1).describe("Name der neuen Übung"),
-      notiz: z.string().optional(),
+      notiz: z.string().max(300).optional(),
       startKg: z.number().min(0).max(500).optional().describe("Referenzgewicht, solange nichts geloggt ist"),
       startWdh: z.array(z.number().int().min(1).max(50)).optional().describe("Wiederholungen je Satz, etwa [6, 5]"),
       saetze: z.number().int().min(1).max(10).optional().describe("Wie viele Sätze die Übung vorsieht. Ohne Angabe 2 — Jakobs Regel."),
@@ -650,7 +651,7 @@ server.registerTool(
       einheit: einheitSchema,
       name: z.string().min(1),
       position: z.number().int().min(1).max(30).optional().describe("1-basiert; ohne Angabe ans Ende"),
-      notiz: z.string().optional(),
+      notiz: z.string().max(300).optional(),
       startKg: z.number().min(0).max(500).optional(),
       startWdh: z.array(z.number().int().min(1).max(50)).optional(),
       saetze: z.number().int().min(1).max(10).optional().describe("Wie viele Sätze die Übung vorsieht. Ohne Angabe 2 — Jakobs Regel."),

@@ -15,6 +15,8 @@ import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
 import { wochenwahlenLesen } from "./wochenplan";
 import { NEUSTART_SCHLUESSEL, neustartsAusText } from "./kraftverlauf";
+import { letzteSaetzeFuer } from "./training-lesen";
+import type { SetLog } from "./coach";
 import {
   SESSIONS,
   mitHistorie,
@@ -71,7 +73,7 @@ export async function katalogVollstaendig(): Promise<Record<Einheit, Katalogeint
 /**
  * Katalog mit Rückfallebene.
  *
- * Im Gym zählt, dass der Plan dasteht — dieselbe Haltung wie in mitHistorie().
+ * Im Gym zählt, dass der Plan dasteht — dieselbe Haltung wie in historieLaden().
  * Ist die Datenbank weg, kommen die Übungen aus SESSIONS. Dann fehlt zwar der
  * Bank-Slot, aber acht Übungen sind besser als eine Fehlerseite.
  */
@@ -268,9 +270,28 @@ async function trainingsplanFuer(
     einheit,
     titel: texte.title,
     fokus: texte.focus,
-    uebungen: await mitHistorie(geplant),
+    uebungen: mitHistorie(geplant, await historieLaden(geplant.map((u) => u.name))),
     bank,
   };
+}
+
+/**
+ * Die letzte Ausführung je Übung, für die Startgewichte.
+ *
+ * Eine Abfrage für die ganze Einheit statt zwei je Übung (letzteSaetzeFuer).
+ * Ist gar keine Datenbank konfiguriert, oder ist sie kurz weg, fällt die
+ * Einheit auf ihre Referenzwerte zurück, statt die Seite mit einem 500
+ * abzuräumen: im Gym zählt, dass der Plan dasteht. Das Loggen meldet den
+ * Ausfall ohnehin sichtbar.
+ */
+async function historieLaden(namen: string[]): Promise<Map<string, SetLog[]>> {
+  if (!datenbankKonfiguriert()) return new Map();
+  try {
+    return await letzteSaetzeFuer(namen);
+  } catch (e) {
+    console.error("Trainingshistorie nicht lesbar, nutze Referenzwerte:", e);
+    return new Map();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────

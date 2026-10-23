@@ -53,7 +53,47 @@ export function NichtVerbunden({
       >
         Mit Google verbinden
       </Link>
+      {/* Die Einstellungen hängen sonst nur am Kopf der Startseite — und der
+          fehlt, solange Google nicht verbunden ist. */}
+      <Link
+        href="/einstellungen"
+        className="mt-3 flex min-h-[44px] items-center justify-center text-[13px] font-semibold text-fg-faint active:text-fg"
+      >
+        Einstellungen
+      </Link>
     </div>
+  );
+}
+
+/**
+ * Zahnrad zu den Einstellungen.
+ *
+ * Kein siebter Tab: auf 375 px blieben je Eintrag keine 50 px, und
+ * Einstellungen öffnet man selten. Oben rechts auf der Startseite ist die
+ * Stelle, an der iOS-Apps sie üblicherweise haben.
+ */
+export function EinstellungenLink() {
+  return (
+    <Link
+      href="/einstellungen"
+      aria-label="Einstellungen"
+      className="-mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-md text-fg-dim transition
+                 active:bg-surface-2 active:text-fg md:hover:text-fg"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="h-[22px] w-[22px]"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.85"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+      </svg>
+    </Link>
   );
 }
 

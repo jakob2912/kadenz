@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { TabBar } from "@/components/nav";
+import { SwRegistrierung } from "@/components/pwa";
 
 export const metadata: Metadata = {
   title: "Kadenz",
@@ -53,6 +54,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         >
           <TabBar />
         </Suspense>
+
+        <SwRegistrierung />
       </body>
     </html>
   );

@@ -2,7 +2,8 @@ import { Suspense, type ReactNode } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
 import { einheitFuerTag, trainingsplanAls } from "@/lib/uebungen";
-import { heutigeEinheit, laufendesTraining } from "@/lib/workouts";
+import { bestwerteFuer, heutigeEinheit, laufendesTraining } from "@/lib/training-lesen";
+import type { Bestwert } from "@/lib/bestwerte";
 import {
   heutigeSaetze,
   montagVon,
@@ -135,6 +136,15 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
     );
   }
 
+  /* Bestwerte sind Beiwerk: fehlen sie, loggt es sich wie bisher, nur ohne
+     Markierung. */
+  let bestwerte: Record<string, Bestwert> = {};
+  try {
+    bestwerte = await bestwerteFuer(plan.uebungen.map((u) => u.name));
+  } catch (e) {
+    console.error("Bestwerte nicht lesbar:", e);
+  }
+
   /* Abschluss und bereits geloggte Sätze kommen ausdrücklich mit. Ohne sie
      begann der Logger nach jedem Aufruf wieder bei null Haken, und weil der
      Abschluss allein an diesen Haken hing, lief die Laufzeit weiter, obwohl
@@ -147,6 +157,9 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
       startedAtMs={laufend.startedAtMs}
       finishedAtMs={laufend.finishedAtMs}
       geloggt={laufend.geloggt}
+      bestwerte={bestwerte}
+      notiz={laufend.notiz}
+      tag={laufend.tag}
       wechsel={wechsel}
     />
   );
