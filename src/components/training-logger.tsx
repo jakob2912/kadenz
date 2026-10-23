@@ -377,7 +377,14 @@ export function TrainingLogger({
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
   /* Alles abgehakt, aber nur, weil Sätze weggelassen wurden: dann fragt der
      Knopf "Einheit beenden" nach, statt dass die Einheit von selbst endet. */
-  const beendetVonSelbst = alleSaetzeFertig && (ausloeser === "laden" || ausloeser === "abhaken");
+  const weggelassen = Object.values(satzAenderung).some((n) => n < 0);
+  const beendetVonSelbst =
+    alleSaetzeFertig &&
+    (ausloeser === "abhaken" ||
+      // Beim Laden nur, wenn nichts weggelassen wurde: iOS lädt die App im
+      // Hintergrund gern neu, und das soll kein "− Satz" nachträglich zum
+      // Abschluss machen.
+      (ausloeser === "laden" && !weggelassen));
 
   /* Bestwerte von heute, aus den abgehakten Sätzen abgeleitet statt als
      eigener State: korrigiert man einen Satz nach unten, verschwindet die
@@ -1222,6 +1229,12 @@ function SatzZeile({
         // man sonst nicht, welcher der 16 Sätze gemeint ist.
         <p className="col-span-5 pb-1 text-right text-[11px] text-strain" role="alert">
           Wiederholungen müssen größer als 0 sein.
+        </p>
+      )}
+
+      {kgUngueltig && (
+        <p className="col-span-5 pb-1 text-right text-[11px] text-strain" role="alert">
+          Für diese Übung gibt es noch kein Gewicht — bitte eintragen (0 für ohne).
         </p>
       )}
     </div>
