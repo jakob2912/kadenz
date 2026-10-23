@@ -2,13 +2,11 @@
  * Kadenz — Langhantel: Aufwärmen
  *
  * Rein und ohne Datenbank. Die Aufwärmtreppe vor dem ersten Arbeitssatz,
- * wie Strong, Hevy und Liftoff sie anbieten. Einen Scheibenrechner gab es
- * hier kurz auch — Jakob braucht ihn nicht, er ist am 23.10.2026 wieder
- * rausgeflogen.
+ * wie Strong, Hevy und Liftoff sie anbieten.
  */
 
 /** Olympische Stange — das, was im Gym auf der Bank liegt. */
-export const STANGE_KG = 20;
+const STANGE_KG = 20;
 
 export type Aufwaermsatz = { kg: number; wdh: number };
 

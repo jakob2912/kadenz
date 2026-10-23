@@ -198,12 +198,22 @@ export async function trainingBeenden(
   kind: "push" | "pull",
   note?: string,
   /** Wann im Browser beendet wurde — aus demselben Grund wie bei satzSpeichern. */
-  erfasstAm?: number
+  erfasstAm?: number,
+  /**
+   * Der Tag der Einheit, wenn der Logger ihn kennt. Hat Vorrang vor dem Tag
+   * aus erfasstAm: wer eine Einheit von 23:30 erst nach Mitternacht beendet,
+   * meint die von gestern — sonst entstünde für heute eine leere Einheit, die
+   * beendet wird, während die echte offen bleibt.
+   */
+  tagIso?: string
 ): Promise<{ ok: true; finishedAtMs: number } | { ok: false; fehler: string }> {
   try {
     if (note !== undefined) note = text(note, "Notiz", 1000);
+    if (tagIso !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(tagIso))) {
+      throw new Ungueltig("Ungültiger Tag.");
+    }
     const zeitpunkt = erfassungszeit(erfasstAm);
-    const workout = await workoutHeute(art(kind), wienerDatum(zeitpunkt));
+    const workout = await workoutHeute(art(kind), tagIso ?? wienerDatum(zeitpunkt));
     if (workout.finishedAt !== null) {
       return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
     }

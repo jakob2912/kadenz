@@ -68,6 +68,12 @@ describe("wdhFuerBestwert", () => {
     expect(wdhFuerBestwert(75, bisher)).toBe(8);
   });
 
+  it("reichen zehn nicht, zählen die Wiederholungen jenseits der Schätzung", () => {
+    // 70 × 10 = 93,3 — gleich dem bisherigen Maximum, nicht darüber. Ab 11
+    // wird nicht mehr geschätzt; Maßstab sind dann 70 × 8 und 80 × 5.
+    expect(wdhFuerBestwert(70, bisher)).toBe(11);
+  });
+
   it("schwerer als je zuvor: schon eine Wiederholung", () => {
     expect(wdhFuerBestwert(85, bisher)).toBe(1);
   });

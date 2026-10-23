@@ -97,7 +97,10 @@ export function staerke(satz: { kg: number; reps: number }): number {
 
 /**
  * Wie viele Wiederholungen bei diesem Gewicht ein Bestwert wären — für den
- * AMRAP-Satz, bevor er gehoben ist. Null, wenn es keine Historie gibt oder
+ * AMRAP-Satz, bevor er gehoben ist. Reichen zehn Wiederholungen nicht, um das
+ * geschätzte Maximum zu übertreffen, springt die Antwort in den Bereich ohne
+ * Schätzung: dort zählen die meisten Wiederholungen bei diesem Gewicht oder
+ * schwerer (siehe bestwertArt). Null, wenn es keine Historie gibt oder
  * selbst dreißig Wiederholungen nicht reichten (dann ist das Gewicht für
  * diese Frage zu leicht).
  */

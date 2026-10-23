@@ -1,6 +1,10 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { prisma } from "./db";
+
+/** Länger hat keine Notiz im Katalog — auch die vom MCP-Server gesetzten nicht. */
+const NOTIZ_MAX = 300;
 
 /**
  * Notiz zu einer Übung setzen — "Sitz Stufe 4", "Griff eng".
@@ -25,8 +29,11 @@ export async function uebungNotizSetzen(
       throw new Error("Unbekannte Übung.");
     }
     if (typeof notiz !== "string") throw new Error("Notiz fehlt.");
+    // Ablehnen statt still kürzen: eine abgeschnittene Notiz sähe aus, als
+    // wäre sie so gemeint.
+    if (notiz.trim().length > NOTIZ_MAX) throw new Error(`Höchstens ${NOTIZ_MAX} Zeichen.`);
 
-    const text = notiz.trim().slice(0, 200) || null;
+    const text = notiz.trim() || null;
     const r = await prisma.uebung.updateMany({
       where: { einheit, name },
       data: { notiz: text },
@@ -34,8 +41,13 @@ export async function uebungNotizSetzen(
     if (r.count === 0) {
       throw new Error("Die Übung steht nicht im Katalog — die Notiz hätte keinen Platz.");
     }
+    // Sonst zeigt der Router-Cache beim Zurück-Navigieren kurz die alte Notiz.
+    revalidatePath("/training");
     return { ok: true, notiz: text };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    /* Eine nicht erreichbare Datenbank meldet Prisma mit einem halben Roman;
+       im Gym hilft der nicht weiter. */
+    const text = e instanceof Error ? e.message : "Unbekannter Fehler";
+    return { ok: false, fehler: text.length > 160 ? "Datenbank gerade nicht erreichbar." : text };
   }
 }
