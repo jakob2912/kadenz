@@ -3,7 +3,12 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "motion/react";
 import { useOffline } from "next/offline";
-import { heutigeSaetze, type Einheitskopf, type PlannedExercise } from "@/lib/plan";
+import {
+  heutigeSaetze,
+  type Einheitskopf,
+  type GeplanterSatz,
+  type PlannedExercise,
+} from "@/lib/plan";
 import { useRouter } from "next/navigation";
 import {
   notizSpeichern,
@@ -23,13 +28,15 @@ import {
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
 import { eigenesPushAbo, geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
 import { satzpauseAnkuendigen } from "@/lib/push-actions";
-import { uebungNotizSetzen } from "@/lib/uebung-actions";
+import { uebungNotizSetzen, uebungTauschenAktion } from "@/lib/uebung-actions";
 import {
   ausgangAblegen,
   ausgangErledigt,
   ausgangOffen,
   pauseLesen,
   pauseSchreiben,
+  satzzahlLesen,
+  satzzahlSchreiben,
   type OffenerSatz,
 } from "@/lib/ablage";
 import { wienerDatum } from "@/lib/datum";
@@ -77,7 +84,34 @@ function senden(satz: OffenerSatz, melden: (fehler: string | null) => void) {
 }
 
 /** Der Zustand eines abgehakten Satzes im Logger. */
-type Logged = { kg: number; reps: number };
+type Logged = {
+  kg: number;
+  reps: number;
+  /** Wiederholungen in Reserve, wenn nach dem Satz angegeben. */
+  rir?: number | null;
+  /** Wann abgehakt — damit eine spätere Reserve-Angabe denselben Tag trifft. */
+  erfasstAm?: number;
+};
+
+/**
+ * Die Sätze, die heute für eine Übung auf dem Schirm stehen.
+ *
+ * Geplant plus heute dazugenommen, minus heute weggelassen — aber nie
+ * weniger, als schon abgehakt ist: ein geloggter Satz verschwindet nicht,
+ * weil jemand "Satz weglassen" tippt. Zusatzsätze übernehmen die Vorgabe des
+ * letzten geplanten Satzes (beim 5/3/1 ohne AMRAP — ein zweiter Maximalsatz
+ * ist nicht der Plan).
+ */
+function saetzeHeute(
+  ex: PlannedExercise,
+  aenderung: number,
+  hoechsterGeloggt: number
+): GeplanterSatz[] {
+  const basis = heutigeSaetze(ex);
+  const zahl = Math.max(0, basis.length + aenderung, hoechsterGeloggt + 1);
+  const vorlage: GeplanterSatz = basis.at(-1) ?? { kg: ex.ziel, wdh: 5, amrap: false };
+  return Array.from({ length: zahl }, (_, si) => basis[si] ?? { ...vorlage, amrap: false });
+}
 
 /**
  * Die geloggten Sätze auf die Schlüssel des Loggers abbilden.
@@ -99,7 +133,7 @@ function ausDatenbank(
   for (const satz of geloggt) {
     const i = platz.get(satz.exercise);
     if (i === undefined) continue;
-    stand[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps };
+    stand[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps, rir: satz.rir };
   }
 
   return stand;
@@ -119,8 +153,11 @@ export function TrainingLogger({
   bestwerte = {},
   notiz = null,
   tag = null,
+  bekannte = [],
   wechsel,
 }: {
+  /** Übungsnamen aus Katalog und Historie — Vorschläge beim Tauschen. */
+  bekannte?: string[];
   uebungen: PlannedExercise[];
   session: Einheitskopf;
   /**
@@ -156,6 +193,9 @@ export function TrainingLogger({
   const [fertigSeit, setFertigSeit] = useState<number | null>(finishedAtMs);
   const [zuletzt, setZuletzt] = useState<string | null>(null);
   const [speicherFehler, setSpeicherFehler] = useState<string | null>(null);
+  /* Heute mehr oder weniger Sätze als geplant, je Übungsname — siehe
+     saetzeHeute(). Geladen aus dem localStorage im Effekt unten. */
+  const [satzAenderung, setSatzAenderung] = useState<Record<string, number>>({});
   /* Die Pause ist ein Zeitpunkt, kein Zähler. Vorher zählte ein setTimeout
      jede Sekunde eins herunter — und iOS hält Zeitgeber einer Seite an,
      sobald der Bildschirm aus ist. Wer das Handy in der Pause weglegte, fand
@@ -232,11 +272,18 @@ export function TrainingLogger({
       for (const satz of offen) {
         const i = platz.get(satz.exercise);
         if (satz.kind === session.key && i !== undefined && wienerDatum(new Date(satz.erfasstAm)) === heute) {
-          zurueck[`${i}-${satz.setIndex}`] = { kg: satz.kg, reps: satz.reps };
+          zurueck[`${i}-${satz.setIndex}`] = {
+            kg: satz.kg,
+            reps: satz.reps,
+            rir: satz.rir,
+            erfasstAm: satz.erfasstAm,
+          };
         }
         senden(satz, setSpeicherFehler);
       }
       if (Object.keys(zurueck).length > 0) setLogged((prev) => ({ ...prev, ...zurueck }));
+
+      setSatzAenderung(satzzahlLesen(tag ?? heute, session.key));
     }, 0);
     return () => clearTimeout(id);
     // uebungen ist absichtlich nicht dabei: der Ausgang soll genau einmal beim
@@ -291,7 +338,31 @@ export function TrainingLogger({
     return () => clearTimeout(id);
   }, [pauseVorbei]);
 
-  const saetzeGesamt = uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0);
+  /* Je Übung die Sätze von heute, samt Zusatz- und weggelassenen Sätzen. */
+  const saetzeJe = uebungen.map((ex, i) => {
+    let hoechster = -1;
+    for (const key of Object.keys(logged)) {
+      const [u, s] = key.split("-").map(Number);
+      if (u === i) hoechster = Math.max(hoechster, s);
+    }
+    return saetzeHeute(ex, satzAenderung[ex.name] ?? 0, hoechster);
+  });
+  const saetzeGesamt = saetzeJe.reduce((n, s) => n + s.length, 0);
+
+  /* Der Satz, der als nächster dran ist: der erste offene in Plan-Reihenfolge.
+     Er bekommt die Plus-/Minus-Knöpfe, seine Übung den Rahmen. Nach dem
+     Abschluss der Einheit gibt es keinen. */
+  let aktiv: { i: number; si: number } | null = null;
+  if (fertigSeit === null) {
+    outer: for (let i = 0; i < saetzeJe.length; i++) {
+      for (let si = 0; si < saetzeJe[i].length; si++) {
+        if (!logged[`${i}-${si}`]) {
+          aktiv = { i, si };
+          break outer;
+        }
+      }
+    }
+  }
   const saetzeFertig = Object.keys(logged).length;
   const volumen = Object.values(logged).reduce((v, s) => v + s.kg * s.reps, 0);
   const alleSaetzeFertig = saetzeGesamt > 0 && saetzeFertig === saetzeGesamt;
@@ -307,7 +378,7 @@ export function TrainingLogger({
   const rekordUebungen: { name: string; art: BestwertArt; satz: Logged }[] = [];
   uebungen.forEach((ex, i) => {
     let bester: { key: string; art: BestwertArt; satz: Logged } | null = null;
-    heutigeSaetze(ex).forEach((_, si) => {
+    saetzeJe[i].forEach((_, si) => {
       const key = `${i}-${si}`;
       const satz = logged[key];
       const art = satz ? bestwertArt(satz, bestwerte[ex.name]) : null;
@@ -348,6 +419,25 @@ export function TrainingLogger({
     };
   }, [alleSaetzeFertig, fertigSeit, session.key, tag]);
 
+  /* Ist eine Übung fertig, rückt die nächste ins Bild — vorher musste man
+     nach jedem letzten Satz selbst weiterscrollen, mit verschwitzten Fingern
+     über eine Karte, die man nicht mehr braucht. Nur beim Wechsel der Übung,
+     nicht bei jedem Satz und nicht beim ersten Laden: wer die Seite öffnet,
+     will oben anfangen. */
+  const karten = useRef<(HTMLDivElement | null)[]>([]);
+  const vorigeAktive = useRef<number | null | undefined>(undefined);
+  const aktiveUebung = aktiv?.i ?? null;
+  useEffect(() => {
+    const vorher = vorigeAktive.current;
+    vorigeAktive.current = aktiveUebung;
+    if (vorher === undefined || aktiveUebung === null || vorher === aktiveUebung) return;
+    if (vorher !== null && aktiveUebung < vorher) return;
+    karten.current[aktiveUebung]?.scrollIntoView({
+      behavior: reduce ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [aktiveUebung, reduce]);
+
   function abhaken(
     key: string,
     exercise: string,
@@ -358,11 +448,9 @@ export function TrainingLogger({
     // Zuerst die Oberfläche aktualisieren, dann speichern: im Gym soll der
     // Timer sofort laufen und nicht auf das Netz warten. Schlägt das
     // Speichern fehl, bleibt der Satz sichtbar und der Fehler wird angezeigt.
-    setLogged((prev) =>
-      prev[key] ? prev : { ...prev, [key]: { kg, reps } }
-    );
-    setZuletzt(key);
     const t = uhr();
+    setLogged((prev) => (prev[key] ? prev : { ...prev, [key]: { kg, reps, erfasstAm: t } }));
+    setZuletzt(key);
     /* Ist die Einheit schon beendet, ist das ein Nachtrag, kein Satz im Gym:
        keine Satzpause und keine Pausen-Nachricht drei Minuten später. */
     const nachtrag = fertigSeit !== null;
@@ -393,6 +481,38 @@ export function TrainingLogger({
     if (!nachtrag) {
       satzpauseAnkuendigen(t + PAUSE_SEKUNDEN * 1000, pushAbo.current).catch(() => {});
     }
+  }
+
+  /**
+   * Wiederholungen in Reserve nachtragen — der freiwillige Tipp nach dem Satz.
+   *
+   * Geht über denselben Weg wie das Abhaken (Ausgang, Upsert), mit dem
+   * ursprünglichen Zeitpunkt des Satzes: sonst rutschte ein Satz von 23:59,
+   * dessen Reserve um 0:01 kommt, in den nächsten Tag.
+   */
+  function reserveSetzen(key: string, exercise: string, setIndex: number, rir: number) {
+    const satz = logged[key];
+    if (!satz) return;
+    setLogged((prev) => ({ ...prev, [key]: { ...satz, rir } }));
+    senden(
+      {
+        kind: session.key,
+        exercise,
+        setIndex,
+        kg: satz.kg,
+        reps: satz.reps,
+        erfasstAm: satz.erfasstAm ?? uhr(),
+        rir,
+      },
+      setSpeicherFehler
+    );
+  }
+
+  /** Heute einen Satz mehr (+1) oder weniger (−1) für eine Übung. */
+  function satzzahlAendern(name: string, um: number) {
+    const neu = { ...satzAenderung, [name]: (satzAenderung[name] ?? 0) + um };
+    setSatzAenderung(neu);
+    satzzahlSchreiben(tag ?? wienerDatum(new Date(uhr())), session.key, neu);
   }
 
   /**
@@ -439,6 +559,17 @@ export function TrainingLogger({
                           : "border-hair-soft bg-ground/90"
                     }`}
       >
+        {/* Fortschritt der Einheit als feine Linie am unteren Rand der
+            Kopfleiste: wie weit es noch ist, ohne die Sätze zu zählen. */}
+        <span
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 h-[3px] bg-hair-soft"
+        >
+          <span
+            className="block h-full bg-accent transition-[width] duration-500"
+            style={{ width: `${saetzeGesamt > 0 ? (saetzeFertig / saetzeGesamt) * 100 : 0}%` }}
+          />
+        </span>
         <Ring
           fortschritt={
             kopfTon === "pause"
@@ -551,24 +682,45 @@ export function TrainingLogger({
 
       <div className="mt-5 flex flex-col gap-3.5">
         {uebungen.map((ex, i) => {
-          const saetze = heutigeSaetze(ex);
+          const saetze = saetzeJe[i];
           const alleFertig =
             saetze.length > 0 && saetze.every((_, si) => logged[`${i}-${si}`]);
+          const istAktiv = aktiv?.i === i;
+          const letzterOffen = saetze.length > 0 && !logged[`${i}-${saetze.length - 1}`];
+          const programm = ex.programmSaetze.length > 0;
           return (
-            /* Kein opacity mehr auf der ganzen Karte: 55 % Deckkraft senkt
+            /* Der Rahmen um die Übung, die gerade dran ist: aus zwei Metern
+               Abstand sieht man so, wo man ist, ohne zu lesen. scroll-mt
+               hält die Karte beim Weiterrücken unter der klebenden
+               Kopfleiste statt hinter ihr. */
+            <div
+              key={`${ex.planName ?? ex.name}-${i}`}
+              ref={(el) => {
+                karten.current[i] = el;
+              }}
+              className={`scroll-mt-[136px] rounded-lg transition-shadow md:scroll-mt-[200px] ${
+                istAktiv ? "ring-2 ring-accent/45" : ""
+              }`}
+            >
+            {/* Kein opacity mehr auf der ganzen Karte: 55 % Deckkraft senkt
                jeden Kontrast darin unter die Lesbarkeitsgrenze — ausgerechnet
                bei den Zahlen, die man später nachliest. Erledigt steht jetzt
-               am Zähler und als Wort im Tag. */
-            <Card key={ex.name}>
+               am Zähler und als Wort im Tag. */}
+            <Card>
               <div className="flex items-center gap-3.5">
                 <span
                   className={`grid h-[26px] w-[26px] shrink-0 place-items-center rounded-sm text-[11px] font-bold
-                              ${alleFertig ? "bg-ready/15 text-ready" : "bg-surface-3 text-fg-dim"}`}
+                              ${alleFertig ? "bg-ready/15 text-ready" : istAktiv ? "bg-accent/15 text-accent" : "bg-surface-3 text-fg-dim"}`}
                 >
                   {i + 1}
                 </span>
                 <span className="min-w-0 flex-1">
                   <b className="block text-[15px] font-semibold tracking-[-0.015em]">{ex.name}</b>
+                  {ex.planName && (
+                    <span className="mt-0.5 block text-xs text-accent">
+                      heute statt {ex.planName}
+                    </span>
+                  )}
                   {/* Begründung der Progression und Notiz stehen getrennt.
                       Vorher verdrängte die eine die andere — an jedem Tag mit
                       Gewichtsänderung war die Notiz ("Sitz Stufe 4") weg,
@@ -576,7 +728,9 @@ export function TrainingLogger({
                   {ex.grund && (
                     <span className="mt-0.5 block text-xs text-fg-faint">{ex.grund}</span>
                   )}
-                  <UebungsNotiz einheit={session.key} name={ex.name} anfang={ex.note ?? null} />
+                  {!ex.planName && (
+                    <UebungsNotiz einheit={session.key} name={ex.name} anfang={ex.note ?? null} />
+                  )}
                 </span>
                 {alleFertig ? (
                   <Tag tone="gut">fertig</Tag>
@@ -590,61 +744,82 @@ export function TrainingLogger({
                 )}
               </div>
 
-              <div className="mt-3 grid grid-cols-[26px_58px_1fr_1fr_44px] items-center gap-2 border-b border-hair-soft pb-2">
-                {["Satz", "Zuletzt", "kg", "Wdh", ""].map((h, hi) => (
-                  <span
-                    key={hi}
-                    className={`text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint ${
-                      hi === 2 || hi === 3 ? "text-center" : ""
-                    }`}
-                  >
-                    {h}
-                  </span>
-                ))}
-              </div>
+              {saetze.length > 0 && (
+                <div className="mt-3 grid grid-cols-[26px_58px_1fr_1fr_44px] items-center gap-2 border-b border-hair-soft pb-2">
+                  {["Satz", "Zuletzt", "kg", "Wdh", ""].map((h, hi) => (
+                    <span
+                      key={hi}
+                      className={`text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint ${
+                        hi === 2 || hi === 3 ? "text-center" : ""
+                      }`}
+                    >
+                      {h}
+                    </span>
+                  ))}
+                </div>
+              )}
 
               {/* Aufwärmen nur, wo ein Programm die Sätze vorgibt (Bankdrücken
                   5/3/1): dort beginnt die Einheit direkt mit 65–85 % des
                   Trainingsmax, und die Treppe davor rechnet man sonst im Kopf. */}
-              {ex.programmSaetze.length > 0 && saetze.length > 0 && (
-                <Aufwaermen arbeitsKg={saetze[0].kg} />
-              )}
+              {programm && saetze.length > 0 && <Aufwaermen arbeitsKg={saetze[0].kg} />}
 
-              {saetze.map((satz, si) => (
-                <SatzZeile
-                  key={si}
-                  bestwert={satz.amrap ? bestwerte[ex.name] : undefined}
-                  rekord={rekorde.get(`${i}-${si}`) ?? null}
-                  nummer={si + 1}
-                  prev={ex.prev[si]}
-                  zielKg={satz.kg}
-                  zielReps={satz.wdh}
-                  amrap={satz.amrap}
-                  vorgegeben={ex.programmSaetze.length > 0}
-                  logged={logged[`${i}-${si}`]}
-                  hervorgehoben={zuletzt === `${i}-${si}`}
-                  onLog={(kg, reps) => abhaken(`${i}-${si}`, ex.name, si, kg, reps)}
-                  onKorrigieren={() => korrigieren(`${i}-${si}`)}
-                />
-              ))}
+              {saetze.map((satz, si) => {
+                const key = `${i}-${si}`;
+                return (
+                  <SatzZeile
+                    key={si}
+                    bestwert={satz.amrap ? bestwerte[ex.name] : undefined}
+                    rekord={rekorde.get(key) ?? null}
+                    nummer={si + 1}
+                    prev={ex.prev[si]}
+                    zielKg={satz.kg}
+                    zielReps={satz.wdh}
+                    amrap={satz.amrap}
+                    vorgegeben={programm}
+                    logged={logged[key]}
+                    hervorgehoben={zuletzt === key}
+                    aktiv={aktiv?.i === i && aktiv.si === si}
+                    reserveFrage={zuletzt === key && logged[key] !== undefined && logged[key].rir == null}
+                    onReserve={(rir) => reserveSetzen(key, ex.name, si, rir)}
+                    onLog={(kg, reps) => abhaken(key, ex.name, si, kg, reps)}
+                    onKorrigieren={() => korrigieren(key)}
+                  />
+                );
+              })}
 
               {/* Ohne Trainingsmax steht der Bank-Slot ohne Zahlen da. Die
                   Karte bleibt trotzdem, statt die Übung zu verstecken: dass
-                  hier etwas fehlt, ist die Information.
-
-                  Der Text steht auch dann, wenn kein Programm dahintersteckt.
-                  Vorher hing er allein an programmHinweis, und eine Übung mit
-                  null Sätzen aus anderem Grund — der Adductor kam so aus dem
-                  MCP-Server — zeigte eine Tabellenkopfzeile mit nichts
-                  darunter. Eine leere Tabelle sieht aus wie ein Ladefehler,
-                  nicht wie eine Auskunft. */}
+                  hier etwas fehlt, ist die Information. */}
               {saetze.length === 0 && (
-                <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-                  {ex.programmHinweis ??
-                    "Für diese Übung sind heute keine Sätze hinterlegt. Setz die Satzanzahl im Katalog, dann steht sie beim nächsten Training hier."}
+                <p className="mt-2 text-[12px] leading-relaxed text-fg-faint">
+                  {heutigeSaetze(ex).length > 0
+                    ? "Heute ausgelassen."
+                    : (ex.programmHinweis ??
+                      "Für diese Übung sind heute keine Sätze hinterlegt. Setz die Satzanzahl im Katalog, dann steht sie beim nächsten Training hier.")}
                 </p>
               )}
+
+              {/* Abweichen vom Plan, ohne den Plan zu ändern: ein Satz mehr,
+                  wenn es läuft; einer weniger oder die ganze Übung weg, wenn
+                  nicht; ein anderes Gerät, wenn dieses belegt ist. */}
+              {fertigSeit === null && (
+                <UebungAnpassen
+                  einheit={session.key}
+                  planName={ex.planName ?? ex.name}
+                  getauscht={ex.planName !== undefined}
+                  tauschbar={!programm}
+                  kannWeniger={letzterOffen}
+                  kannMehr={saetze.length < 10}
+                  hatGeloggt={saetze.some((_, si) => logged[`${i}-${si}`])}
+                  ausgelassen={saetze.length === 0 && heutigeSaetze(ex).length > 0}
+                  onMehr={() => satzzahlAendern(ex.name, 1)}
+                  onWeniger={() => satzzahlAendern(ex.name, -1)}
+                  onWiederAufnehmen={() => satzzahlAendern(ex.name, -(satzAenderung[ex.name] ?? 0))}
+                />
+              )}
             </Card>
+            </div>
           );
         })}
 
@@ -681,6 +856,11 @@ export function TrainingLogger({
         )}
 
         {(alleSaetzeFertig || fertigSeit !== null) && (
+          <motion.div
+            initial={reduce ? false : { opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 24 }}
+          >
           <Card className="border-ready/30">
             <Eyebrow>Einheit abgeschlossen</Eyebrow>
             <p className="mt-2 text-[15px] font-semibold tracking-[-0.015em]">
@@ -722,8 +902,15 @@ export function TrainingLogger({
               )}
             </p>
           </Card>
+          </motion.div>
         )}
       </div>
+
+      <datalist id="kadenz-uebungen">
+        {bekannte.map((n) => (
+          <option key={n} value={n} />
+        ))}
+      </datalist>
 
       {wechsel}
     </div>
@@ -741,10 +928,18 @@ function SatzZeile({
   hervorgehoben,
   bestwert,
   rekord = null,
+  aktiv = false,
+  reserveFrage = false,
+  onReserve,
   onLog,
   onKorrigieren,
 }: {
   nummer: number;
+  /** Der Satz, der als nächster dran ist — er bekommt die Plus-/Minus-Knöpfe. */
+  aktiv?: boolean;
+  /** Direkt nach dem Abhaken: nach den Wiederholungen in Reserve fragen. */
+  reserveFrage?: boolean;
+  onReserve?: (rir: number) => void;
   /**
    * Beim AMRAP-Satz die bisherigen Bestwerte der Übung — daraus rechnet die
    * Zeile, ab wie vielen Wiederholungen es ein Bestwert wäre. Das ist beim
@@ -819,6 +1014,20 @@ function SatzZeile({
     onLog(kgZahl, repsZahl);
   }
 
+  /* Plus und Minus statt Tastatur: im Gym, mit Kreide oder Schweiß an den
+     Fingern, ist "+2,5" ein Tipp, "77,5" auf der Zahlentastatur vier — und
+     die Tastatur deckt dabei die halbe Seite zu. Ausgangspunkt ist, was im
+     Feld steht, sonst die Vorgabe. */
+  function kgSchritt(um: number) {
+    const basis = Number((kg || String(zielKg)).replace(",", ".")) || 0;
+    setKg(String(Math.max(0, Math.round((basis + um) * 100) / 100)).replace(".", ","));
+  }
+  function wdhSchritt(um: number) {
+    const basis = Number(reps || String(zielReps)) || 0;
+    setReps(String(Math.max(1, basis + um)));
+    setRepsUngueltig(false);
+  }
+
   return (
     <div
       className={`grid grid-cols-[26px_58px_1fr_1fr_44px] items-center gap-2 rounded-sm py-1
@@ -882,6 +1091,58 @@ function SatzZeile({
         <SatzHinweis rekord={rekord} ziel={bestwertZiel} minimum={zielReps} />
       )}
 
+      {aktiv && !fertig && (
+        <div className="col-span-5 grid grid-cols-[92px_1fr_1fr_44px] items-center gap-2 pb-1.5">
+          <span className="text-right text-[11px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
+            Anpassen
+          </span>
+          <span className="grid grid-cols-2 gap-1.5">
+            <Schritt onClick={() => kgSchritt(-2.5)} label={`Gewicht 2,5 kg weniger, Satz ${nummer}`}>
+              −2,5
+            </Schritt>
+            <Schritt onClick={() => kgSchritt(2.5)} label={`Gewicht 2,5 kg mehr, Satz ${nummer}`}>
+              +2,5
+            </Schritt>
+          </span>
+          <span className="grid grid-cols-2 gap-1.5">
+            <Schritt onClick={() => wdhSchritt(-1)} label={`Eine Wiederholung weniger, Satz ${nummer}`}>
+              −1
+            </Schritt>
+            <Schritt onClick={() => wdhSchritt(1)} label={`Eine Wiederholung mehr, Satz ${nummer}`}>
+              +1
+            </Schritt>
+          </span>
+          <span />
+        </div>
+      )}
+
+      {reserveFrage && onReserve && (
+        /* Freiwillig und nur kurz: die Frage steht unter dem eben
+           abgehakten Satz, bis eine Antwort kommt oder der nächste Satz
+           abgehakt wird. Wer sie ignoriert, verliert nichts — ohne Angabe
+           rechnet die Progression wie immer. */
+        <div className="col-span-5 flex items-center gap-1.5 pb-1.5 pl-[34px]">
+          <span className="mr-1 text-[12px] text-fg-faint">Noch drin?</span>
+          {[0, 1, 2, 3].map((r) => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => onReserve(r)}
+              aria-label={`${r === 3 ? "Drei oder mehr" : r} Wiederholungen in Reserve`}
+              className="min-h-[44px] min-w-[44px] rounded-sm bg-surface-2 text-[13px] font-semibold text-fg-dim transition active:scale-95 active:bg-accent/15 active:text-accent"
+            >
+              {r === 3 ? "3+" : r}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {fertig && logged!.rir != null && !reserveFrage && hervorgehoben && (
+        <p className="col-span-5 pb-1 pl-[34px] text-[12px] text-fg-faint">
+          {logged!.rir === 0 ? "Bis ans Limit." : `${logged!.rir >= 3 ? "3+" : logged!.rir} in Reserve.`}
+        </p>
+      )}
+
       {repsUngueltig && (
         // Direkt unter der Zeile statt als Sammelmeldung oben: im Gym sieht
         // man sonst nicht, welcher der 16 Sätze gemeint ist.
@@ -906,6 +1167,7 @@ function SatzHinweis({
   ziel: number | null;
   minimum: number;
 }) {
+  const reduce = useReducedMotion();
   return (
     <p className="col-span-5 -mt-0.5 flex items-center justify-between gap-2 pb-1.5 pl-[34px] text-[13px] leading-relaxed text-fg-dim">
       <span>
@@ -921,10 +1183,18 @@ function SatzHinweis({
           ))}
       </span>
       {rekord && (
-        <span className="flex flex-col items-end gap-0.5">
+        /* Ein kurzer Auftritt statt eines stillen Erscheinens: ein Bestwert
+           ist der Moment, für den man trainiert. Ohne Bewegung, wenn das
+           System reduzierte Bewegung wünscht. */
+        <motion.span
+          initial={reduce ? false : { scale: 0.6, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 520, damping: 18 }}
+          className="flex flex-col items-end gap-0.5"
+        >
           <Tag tone="akzent">Bestwert</Tag>
           <span className="text-[11px] text-fg-faint">{BESTWERT_TEXT[rekord]}</span>
-        </span>
+        </motion.span>
       )}
     </p>
   );
@@ -1078,6 +1348,173 @@ function Notiz({
               ? "Gespeichert."
               : ""}
       </p>
+    </div>
+  );
+}
+
+/**
+ * Die Leiste unter einer Übung: Satz dazu, Satz weg, Übung tauschen.
+ *
+ * Satz dazu und weg gelten nur heute und nur auf diesem Handy (ablage.ts) —
+ * der Plan fürs nächste Mal bleibt, wie er ist. Tauschen fragt, ob nur heute
+ * oder dauerhaft: das belegte Gerät ist ein Heute-Problem, die Schulter, die
+ * bei einer Übung jedes Mal zwickt, ein dauerhaftes.
+ *
+ * Getauscht wird nur, solange von der Übung noch nichts abgehakt ist. Danach
+ * gehörten die Haken auf dem Schirm zu einer Übung, die nicht mehr dasteht.
+ */
+function UebungAnpassen({
+  einheit,
+  planName,
+  getauscht,
+  tauschbar,
+  kannWeniger,
+  kannMehr,
+  hatGeloggt,
+  ausgelassen,
+  onMehr,
+  onWeniger,
+  onWiederAufnehmen,
+}: {
+  einheit: "push" | "pull";
+  planName: string;
+  getauscht: boolean;
+  tauschbar: boolean;
+  kannWeniger: boolean;
+  kannMehr: boolean;
+  hatGeloggt: boolean;
+  ausgelassen: boolean;
+  onMehr: () => void;
+  onWeniger: () => void;
+  onWiederAufnehmen: () => void;
+}) {
+  const router = useRouter();
+  const [offen, setOffen] = useState(false);
+  const [name, setName] = useState("");
+  const [dauerhaft, setDauerhaft] = useState(false);
+  const [laeuft, setLaeuft] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const id = useId();
+
+  async function tauschen(neu: string, fuerImmer: boolean) {
+    if (laeuft) return;
+    setLaeuft(true);
+    setFehler(null);
+    try {
+      const r = await uebungTauschenAktion(einheit, planName, neu, fuerImmer);
+      if (!r.ok) throw new Error(r.fehler);
+      setOffen(false);
+      setName("");
+      router.refresh();
+    } catch (e) {
+      setFehler(e instanceof Error ? e.message : "Server nicht erreichbar");
+    } finally {
+      setLaeuft(false);
+    }
+  }
+
+  const knopf =
+    "flex min-h-[44px] items-center justify-center rounded-sm px-3 text-[13px] font-semibold text-fg-dim transition active:scale-95 active:bg-surface-2 disabled:opacity-40 md:hover:text-fg";
+
+  if (ausgelassen) {
+    return (
+      <div className="mt-2 flex">
+        <button type="button" onClick={onWiederAufnehmen} className={`${knopf} -ml-3`}>
+          Wieder aufnehmen
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <div className="-mx-1 flex flex-wrap items-center gap-1">
+        <button type="button" onClick={onMehr} disabled={!kannMehr} className={knopf}>
+          + Satz
+        </button>
+        <button
+          type="button"
+          onClick={onWeniger}
+          disabled={!kannWeniger}
+          className={knopf}
+          aria-label="Letzten offenen Satz weglassen"
+        >
+          − Satz
+        </button>
+        {tauschbar && !hatGeloggt && (
+          <button
+            type="button"
+            onClick={() => setOffen(!offen)}
+            aria-expanded={offen}
+            className={`${knopf} ml-auto`}
+          >
+            {offen ? "Abbrechen" : "Tauschen"}
+          </button>
+        )}
+      </div>
+
+      {offen && (
+        <div className="mt-2 rounded-md border border-hair p-3">
+          <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
+            Stattdessen
+          </label>
+          <input
+            id={id}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            list="kadenz-uebungen"
+            autoFocus
+            enterKeyHint="done"
+            maxLength={100}
+            placeholder="z. B. Kurzhantel-Bankdrücken"
+            className="mt-1.5 min-h-[44px] w-full rounded-sm border border-transparent bg-surface-3 px-3 text-base outline-none focus:border-accent"
+          />
+          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Wie lange">
+            {[
+              { wert: false, text: "Nur heute" },
+              { wert: true, text: "Dauerhaft im Plan" },
+            ].map((o) => (
+              <button
+                key={o.text}
+                type="button"
+                role="radio"
+                aria-checked={dauerhaft === o.wert}
+                onClick={() => setDauerhaft(o.wert)}
+                className={`min-h-[44px] rounded-sm text-[13px] font-semibold transition ${
+                  dauerhaft === o.wert ? "bg-accent/15 text-accent" : "bg-surface-2 text-fg-dim"
+                }`}
+              >
+                {o.text}
+              </button>
+            ))}
+          </div>
+          {dauerhaft && (
+            <p className="mt-2 text-[12px] leading-relaxed text-fg-faint">
+              Ersetzt {planName} im Katalog. Die bisherigen Sätze bleiben unter dem alten Namen
+              im Verlauf.
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={laeuft || name.trim() === ""}
+            onClick={() => void tauschen(name, dauerhaft)}
+            className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-md bg-accent text-sm font-semibold text-on-accent transition active:scale-[0.98] disabled:opacity-50"
+          >
+            {laeuft ? "Wird getauscht…" : "Tauschen"}
+          </button>
+          {getauscht && (
+            <button
+              type="button"
+              disabled={laeuft}
+              onClick={() => void tauschen(planName, false)}
+              className="mt-2 flex min-h-[44px] w-full items-center justify-center text-[13px] font-semibold text-fg-dim"
+            >
+              Zurück zu {planName}
+            </button>
+          )}
+          {fehler && <p className="mt-2 text-xs text-strain">{fehler}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -1267,6 +1704,29 @@ function UebungsNotiz({
         <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
       </svg>
       <span className={notiz ? "text-fg-dim" : ""}>{notiz ?? "Notiz"}</span>
+    </button>
+  );
+}
+
+/** Plus-/Minus-Knopf im aktiven Satz — 44 px, mit einer Hand zu treffen. */
+function Schritt({
+  children,
+  label,
+  onClick,
+}: {
+  children: ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="min-h-[44px] rounded-sm border border-hair bg-surface-2 text-[14px] font-semibold tabular-nums text-fg
+                 transition active:scale-95 active:border-accent/50 active:text-accent"
+    >
+      {children}
     </button>
   );
 }

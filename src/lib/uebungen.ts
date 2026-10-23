@@ -16,6 +16,7 @@ import { bankstandFuer, type Bankstand } from "./bank";
 import { wochenwahlenLesen } from "./wochenplan";
 import { NEUSTART_SCHLUESSEL, neustartsAusText } from "./kraftverlauf";
 import { letzteSaetzeFuer } from "./training-lesen";
+import { heutigeTausche } from "./tagestausch";
 import type { SetLog } from "./coach";
 import {
   SESSIONS,
@@ -254,6 +255,17 @@ async function trainingsplanFuer(
   const istTmTag = bank !== null && (bank.position.art === "tm" || bank.position.art === "test");
   const bankSlot = bank !== null && bank.position.art !== "keiner";
 
+  /* Heute getauschte Übungen (Gerät belegt) — nur am heutigen Tag, der
+     Katalog bleibt. Ein Lesefehler kostet den Tausch, nicht den Plan. */
+  let tausche: Record<string, string> = {};
+  if (wienerDatum(date) === wienerDatum(new Date()) && datenbankKonfiguriert()) {
+    try {
+      tausche = await heutigeTausche(einheit);
+    } catch (e) {
+      console.error("Tagestausch nicht lesbar:", e);
+    }
+  }
+
   const geplant: ZuPlanen[] = [];
   for (const eintrag of katalog) {
     if (eintrag.programm === PROGRAMM_BANK) {
@@ -261,6 +273,17 @@ async function trainingsplanFuer(
       // vorzugeben — dann bleibt der Slot weg statt leer dazustehen.
       if (!bankSlot) continue;
       geplant.push({ ...zuPlanen(eintrag, istTmTag), programm: bank!.vorgabe });
+      continue;
+    }
+    const ersatz = tausche[eintrag.name];
+    if (ersatz) {
+      /* Die Ersatzübung behält Platz und Satzanzahl, aber nicht Notiz und
+         Referenzgewichte — die gehören zur geplanten Übung. Ihre Startgewichte
+         kommen aus der eigenen Historie, falls es eine gibt. */
+      geplant.push({
+        ...zuPlanen({ ...eintrag, name: ersatz, notiz: null, startKg: null, startWdh: [] }, istTmTag),
+        planName: eintrag.name,
+      });
       continue;
     }
     geplant.push(zuPlanen(eintrag, istTmTag));

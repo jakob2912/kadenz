@@ -99,6 +99,8 @@ export async function satzSpeichern(input: {
    * Satz von 23:40 landete im Training des nächsten Tages.
    */
   erfasstAm?: number;
+  /** Wiederholungen in Reserve, 0–5; undefined lässt einen gespeicherten Wert stehen. */
+  rir?: number | null;
 }): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
     input = {
@@ -109,6 +111,10 @@ export async function satzSpeichern(input: {
       kg: zahl(input.kg, "Gewicht", 0, 500),
       reps: zahl(input.reps, "Wiederholungen", 1, 100, true),
       erfasstAm: input.erfasstAm,
+      rir:
+        input.rir === undefined || input.rir === null
+          ? input.rir
+          : zahl(input.rir, "Reserve", 0, 5, true),
     };
     const zeitpunkt = erfassungszeit(input.erfasstAm);
     const workout = await workoutHeute(input.kind, wienerDatum(zeitpunkt));
@@ -127,6 +133,7 @@ export async function satzSpeichern(input: {
         kg: input.kg,
         reps: input.reps,
         loggedAt: zeitpunkt,
+        ...(input.rir !== undefined ? { rir: input.rir } : {}),
       },
       create: {
         workoutId: workout.id,
@@ -135,6 +142,7 @@ export async function satzSpeichern(input: {
         kg: input.kg,
         reps: input.reps,
         loggedAt: zeitpunkt,
+        rir: input.rir ?? null,
       },
     });
     return { ok: true };

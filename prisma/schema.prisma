@@ -95,6 +95,13 @@ model SetLog {
   /// rechtfertigt später ein Urteil über die Technik.
   sauber Boolean?
 
+  /// Wiederholungen in Reserve ("reps in reserve"), 0 bis 5 — wie viele
+  /// noch gegangen wären. NULL heißt "nicht angegeben" und ist der Normalfall:
+  /// die Angabe ist ein freiwilliger Tipp nach dem Satz. Steht sie da, rechnet
+  /// progression() mit ihr — sechs Wiederholungen mit drei in Reserve sind
+  /// eine erreichte Obergrenze, auch wenn nur sechs im Log stehen.
+  rir Int?
+
   /// Deckt die häufigste Abfrage ab: "was habe ich bei X zuletzt gemacht?"
   @@unique([workoutId, exercise, setIndex])
   @@index([exercise, loggedAt])
