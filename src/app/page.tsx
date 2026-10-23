@@ -16,13 +16,11 @@ import {
   Eyebrow,
   Gauge,
   Metric,
-  NichtVerbunden,
   Skelett,
   Tag,
   alterLabel,
   de,
   heuteWien,
-  kurzDatum,
   minToHm,
 } from "@/components/ui";
 
@@ -46,8 +44,11 @@ export default function Heute() {
             <Skelett hoehe={16} className="w-44" />
             <Skelett hoehe={38} className="mt-3 w-60" />
           </div>
-          <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
-            <Skelett hoehe={260} />
+          {/* Dieselbe Gestalt wie die fertige Seite: erst die Heute-Karte,
+              darunter Coach und Gewicht — sonst springt alles beim Laden. */}
+          <Skelett hoehe={230} className="mt-6" />
+          <div className="mt-4 grid items-start gap-4 md:grid-cols-[1.05fr_0.95fr]">
+            <Skelett hoehe={170} />
             <div className="flex flex-col gap-3.5">
               <Skelett hoehe={150} />
               <Skelett hoehe={130} />
@@ -69,7 +70,6 @@ async function Dashboard() {
 
   const data = await loadDashboard(30);
   const rotation = await rotationMitPlan(new Date());
-  const trainingHeute = rotation.art === "training";
   /* Ob heute schon eine Einheit läuft oder lief — dann sagt die Karte das,
      statt zu einer Einheit aufzufordern, die längst erledigt ist. Beiwerk:
      ist die Datenbank kurz weg, steht die Karte eben ohne diesen Zusatz. */
@@ -80,6 +80,9 @@ async function Dashboard() {
   } catch (e) {
     console.error("Trainingsstatus nicht lesbar:", e);
   }
+  /* Jede Einheit lässt sich an jedem Tag starten. Wer am Rest Day trotzdem
+     trainiert, soll darunter keinen Rest-Day-Befund lesen. */
+  const trainingHeute = rotation.art === "training" || schonHeute !== null;
 
   const heuteIso = heuteWien();
   // timeZone ausdrücklich gesetzt: ohne sie nimmt toLocaleDateString die
@@ -103,9 +106,6 @@ async function Dashboard() {
         })}`
       : "Schulzeit";
 
-  // Nächte tragen den Aufwachtag als Datum. Ist der nicht von heute, hat die
-  // Uhr nicht synchronisiert — dann stehen oben ältere Werte, und ohne diesen
-  // Abgleich liest man sie als die von heute Nacht.
   const kopf = (
     <header className="flex items-start justify-between gap-4 pt-10 md:pt-14">
       <div className="min-w-0">
@@ -137,13 +137,16 @@ async function Dashboard() {
             heuteIso={heuteIso}
           />
         </div>
-        <NichtVerbunden titel="Google Health verbinden" grund={data.grund} />
+        <VerbindenKarte grund={data.grund} />
       </>
     );
   }
 
   const { heute, baseline, gewicht } = data;
 
+  // Nächte tragen den Aufwachtag als Datum. Ist der nicht von heute, hat die
+  // Uhr nicht synchronisiert — dann stehen oben ältere Werte, und ohne diesen
+  // Abgleich liest man sie als die von heute Nacht.
   const tageAlt =
     heute === null
       ? 0
@@ -181,7 +184,7 @@ async function Dashboard() {
         rotation={rotation}
         schonHeute={schonHeute}
         regeneration={heute && baseline ? { ...heute.regeneration, datum: heute.date } : null}
-        befund={tagesBriefing?.befund ?? null}
+        befund={schonHeute?.beendet ? null : (tagesBriefing?.befund ?? null)}
         veraltet={veraltet}
         heuteIso={heuteIso}
       />
@@ -203,12 +206,6 @@ async function Dashboard() {
                 </div>
               </div>
 
-              {veraltet && (
-                <p className="mt-3.5 rounded-md border border-caution/30 bg-caution/10 px-3.5 py-2.5 text-xs leading-relaxed text-caution">
-                  Letzte vollständige Nacht: {kurzDatum(heute.date)}, also{" "}
-                  {tageAlt === 1 ? "ein Tag" : `${tageAlt} Tage`} alt. Uhr synchronisieren lassen.
-                </p>
-              )}
 
               {/* Die vier Werte der Nacht eingeklappt: das Urteil darüber sagt,
                   was sie bedeuten. Wer nachrechnen will, klappt auf. */}
@@ -449,7 +446,8 @@ function HeuteKarte({
     text = SESSIONS[schonHeute.art].title;
     knopf = schonHeute.beendet ? "Einheit ansehen" : "Weiterloggen";
   } else if (rotation.art === "training") {
-    titel = `Heute ${name(rotation.einheit)}`;
+    // "Heute" steht schon als Überschrift darüber.
+    titel = name(rotation.einheit);
     text = SESSIONS[rotation.einheit].title;
     knopf = "Training öffnen";
   } else {
@@ -486,5 +484,28 @@ function HeuteKarte({
         {knopf}
       </Link>
     </section>
+  );
+}
+
+/**
+ * Google fehlt oder ist abgelaufen, und es gibt noch nichts in der eigenen
+ * Ablage. Eine Karte unter der Heute-Karte statt eines zweiten Seitenkopfs:
+ * das Training darüber ist die Hauptsache, und das Zahnrad steht schon oben.
+ */
+function VerbindenKarte({ grund }: { grund: string }) {
+  return (
+    <Card className="mt-4">
+      <Eyebrow>Google Health</Eyebrow>
+      <p className="mt-2 text-sm leading-relaxed text-fg-dim">{grund}</p>
+      {/* <a> statt <Link>: der OAuth-Start braucht einen echten Seitenwechsel
+          (siehe NichtVerbunden in ui.tsx). */}
+      <a
+        href="/api/auth/google"
+        className="mt-4 flex min-h-[48px] items-center justify-center rounded-md border border-hair
+                   text-sm font-semibold text-fg transition active:scale-[0.98]"
+      >
+        Mit Google verbinden
+      </a>
+    </Card>
   );
 }

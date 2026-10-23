@@ -24,6 +24,10 @@ export async function GET(request: Request) {
   const lage = await heutigeLage();
   const nachricht = abendNachricht(lage);
 
+  /* Ohne Nachricht geht auch keine Zahl ans App-Symbol: iOS erlaubt keinen
+     stillen Push, jede Zustellung zeigt eine Benachrichtigung. Wurde etwas
+     außerhalb der App erledigt (MCP-Server), bleibt die alte Zahl bis zum
+     nächsten Öffnen oder bis zur Morgen-Nachricht stehen. */
   if (!nachricht) return NextResponse.json({ gesendet: false, grund: "nichts zu sagen" });
 
   const versand = await anAlleSenden({ ...nachricht, badge: offeneDinge(lage) });

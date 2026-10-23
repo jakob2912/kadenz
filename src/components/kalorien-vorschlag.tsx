@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { vorschlagAblehnen, vorschlagAnnehmen } from "@/lib/ernaehrung-actions";
 import { Card, Eyebrow, de } from "@/components/ui";
+import { abzeichenAuffrischen } from "@/components/pwa";
 import type { Vorschlag } from "@/lib/ernaehrung";
 
 /**
@@ -51,6 +52,7 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
           return;
         }
         setStatus({ art: "angenommen", kcal: r.kcal });
+        abzeichenAuffrischen();
         return;
       }
 
@@ -60,6 +62,7 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
         return;
       }
       setStatus({ art: "abgelehnt" });
+      abzeichenAuffrischen();
     });
   }
 

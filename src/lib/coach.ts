@@ -789,9 +789,10 @@ function schlafSatz(
   /* Bei veralteten Daten steht das Datum vorne, nicht als Fußnote. "Du hast
      6 h 10 geschlafen" ist schlicht falsch, wenn die Nacht drei Tage her ist,
      und wer den Satz liest, bezieht ihn sonst auf heute. */
+  const [, monat, tag] = nachtDatum.split("-").map(Number);
   const kopf =
     tageAlt >= 1
-      ? `Die letzte ausgewertete Nacht ist die auf ${nachtDatum} — nicht heute Nacht. Damals: `
+      ? `Nacht auf ${tag}.${monat}., nicht heute Nacht — Uhr synchronisieren lassen. Damals: `
       : "";
 
   const dauer =
@@ -831,8 +832,13 @@ function befundSatz(urteil: ReadinessVerdict, trainingHeute: boolean): string {
     return "Rest Day, und deine Werte sagen dasselbe: heute nichts draufpacken.";
   }
 
+  /* Das Band allein reicht nicht: ein Ruhepuls leicht über Normal kann den
+     Score oben lassen und trotzdem gegen Cardio sprechen. Diese Aussage
+     stand früher auf dem Coach-Tab und darf mit ihm nicht verschwinden. */
   if (urteil.band === "gut") {
-    return "Volle Freigabe. Deine Werte liegen auf Normalniveau — Training läuft wie geplant, Cardio ist frei.";
+    return urteil.allowCardio
+      ? "Volle Freigabe. Deine Werte liegen auf Normalniveau — Training läuft wie geplant, Cardio ist frei."
+      : "Training wie geplant, Cardio heute nicht.";
   }
   if (urteil.allowLifting) {
     return "Krafttraining ja, Cardio nein.";

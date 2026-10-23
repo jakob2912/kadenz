@@ -22,8 +22,8 @@ export function VerlaufUmschalter({ aktiv }: { aktiv: "koerper" | "bank" }) {
               key={e.id}
               href={e.href}
               aria-current={an ? "page" : undefined}
-              className={`flex min-h-[40px] items-center rounded-md px-4 text-[13px] font-semibold transition-colors ${
-                an ? "bg-surface-3 text-fg" : "text-fg-dim active:text-fg"
+              className={`flex min-h-[44px] items-center rounded-md px-4 text-[13px] font-semibold transition-colors ${
+                an ? "bg-accent/10 text-accent" : "text-fg-dim active:text-fg"
               }`}
             >
               {e.label}

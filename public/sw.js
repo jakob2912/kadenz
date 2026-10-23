@@ -85,13 +85,13 @@ self.addEventListener("push", (event) => {
     Promise.all([
       zahlSetzen(daten.badge),
       self.registration.showNotification(titel, {
-      body: daten.body || "",
-      icon: "/icons/icon-192.png",
-      // tag ersetzt eine ältere Nachricht derselben Art, statt sie zu stapeln:
-      // drei "Satzpause vorbei" untereinander sagen nichts Neues.
-      tag: daten.tag || undefined,
-      renotify: Boolean(daten.tag),
-      data: { url: daten.url || "/" },
+        body: daten.body || "",
+        icon: "/icons/icon-192.png",
+        // tag ersetzt eine ältere Nachricht derselben Art, statt sie zu stapeln:
+        // drei "Satzpause vorbei" untereinander sagen nichts Neues.
+        tag: daten.tag || undefined,
+        renotify: Boolean(daten.tag),
+        data: { url: daten.url || "/" },
       }),
     ])
   );

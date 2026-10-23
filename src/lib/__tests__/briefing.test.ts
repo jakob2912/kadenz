@@ -91,9 +91,20 @@ describe("briefing", () => {
     expect(faellig.vorschlaege.some((v) => v.text.includes("Koffein"))).toBe(true);
   });
 
+  it("gibt Cardio nicht frei, wenn das Urteil es sperrt, auch bei gutem Band", () => {
+    const werte = { ...baseline, restingHr: baseline.restingHr + 2.5 };
+    const urteil = readiness(werte, baseline);
+    // Voraussetzung des Falls: oben im Band, aber ohne Cardio.
+    expect(urteil.band).toBe("gut");
+    expect(urteil.allowCardio).toBe(false);
+    const b = bau({ restingHr: baseline.restingHr + 2.5 });
+    expect(b.befund).toContain("Cardio heute nicht");
+    expect(b.befund).not.toContain("Cardio ist frei");
+  });
+
   it("stellt veralteten Nächten das Datum voran, statt sie als heute auszugeben", () => {
     const b = bau({ sleepMin: 370 }, { nachtDatum: "2026-08-17", heuteIso: "2026-08-20" });
-    expect(b.schlaf).toContain("2026-08-17");
+    expect(b.schlaf).toContain("17.8.");
     expect(b.schlaf).toContain("nicht heute Nacht");
   });
 });

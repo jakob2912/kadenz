@@ -85,7 +85,13 @@ async function Gewichtsteil() {
        die Trainingshistorie weg, wenn ohnehin schon etwas klemmt. Er steht
        jetzt eine Ebene höher in seiner eigenen Suspense-Grenze und bleibt
        damit von selbst sichtbar. */
-    return <NichtVerbunden titel="Verlauf braucht Google Health" grund={data.grund} />;
+    return (
+      <NichtVerbunden
+        titel="Verlauf braucht Google Health"
+        grund={data.grund}
+        className="pt-6 md:pt-8"
+      />
+    );
   }
 
   const { gewicht, tagesreihe, baseline, unvollstaendig } = data;

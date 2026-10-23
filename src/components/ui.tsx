@@ -30,19 +30,22 @@ export function Card({
  * Sackgasse ohne Google-Verbindung auflösen.
  *
  * Bis hierher stand der Verbinden-Knopf nur auf der Startseite; wer über die
- * Tab-Leiste auf Verlauf oder Coach landete, las dort nur, dass keine
+ * Tab-Leiste auf Verlauf oder Essen landete, las dort nur, dass keine
  * Verbindung besteht, ohne einen Weg heraus. Ein Grund ohne Ausweg ist keine
  * Fehlermeldung, sondern eine Wand.
  */
 export function NichtVerbunden({
   titel,
   grund,
+  className = "pt-10 md:pt-14",
 }: {
   titel: string;
   grund: string;
+  /** Abstand nach oben — unter dem Verlauf-Umschalter kleiner. */
+  className?: string;
 }) {
   return (
-    <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
+    <div className={`mx-auto max-w-[520px] ${className}`}>
       <Eyebrow>Kadenz</Eyebrow>
       <h1 className="mt-2 text-[27px] font-bold leading-tight tracking-[-0.025em]">{titel}</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">{grund}</p>
@@ -57,8 +60,8 @@ export function NichtVerbunden({
       >
         Mit Google verbinden
       </a>
-      {/* Die Einstellungen hängen sonst nur am Kopf der Startseite — und der
-          fehlt, solange Google nicht verbunden ist. */}
+      {/* Die Einstellungen hängen sonst nur am Kopf der Startseite; von
+          Verlauf aus ist das ein Tab-Wechsel weiter. */}
       <Link
         href="/einstellungen"
         className="mt-3 flex min-h-[44px] items-center justify-center text-[13px] font-semibold text-fg-faint active:text-fg"
@@ -72,8 +75,8 @@ export function NichtVerbunden({
 /**
  * Zahnrad zu den Einstellungen.
  *
- * Kein fünfter Tab: Einstellungen öffnet man selten. Oben rechts auf der Startseite ist die
- * Stelle, an der iOS-Apps sie üblicherweise haben.
+ * Kein fünfter Tab: Einstellungen öffnet man selten. Oben rechts auf der
+ * Startseite ist die Stelle, an der iOS-Apps sie üblicherweise haben.
  */
 export function EinstellungenLink() {
   return (
