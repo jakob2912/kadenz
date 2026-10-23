@@ -102,6 +102,12 @@ describe("briefing", () => {
     expect(b.befund).not.toContain("Cardio ist frei");
   });
 
+  it("rät bei Werten aus der Ablage nicht zum Synchronisieren der Uhr", () => {
+    const b = bau({}, { nachtDatum: "2026-08-17", heuteIso: "2026-08-20", ausAblage: true });
+    expect(b.schlaf).toContain("17.8.");
+    expect(b.schlaf).not.toContain("Uhr");
+  });
+
   it("stellt veralteten Nächten das Datum voran, statt sie als heute auszugeben", () => {
     const b = bau({ sleepMin: 370 }, { nachtDatum: "2026-08-17", heuteIso: "2026-08-20" });
     expect(b.schlaf).toContain("17.8.");

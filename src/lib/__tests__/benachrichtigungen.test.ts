@@ -98,6 +98,17 @@ describe("abendNachricht", () => {
   });
 });
 
+describe("morgenNachricht bei einer Störung", () => {
+  it("rät nicht zum neuen Verbinden, wenn Google nur gestört ist", () => {
+    const n = morgenNachricht(
+      { verbunden: false, grund: "503", neuVerbinden: false },
+      { art: "training", einheit: "push" }
+    );
+    expect(n.title).toBe("Google Health antwortet nicht");
+    expect(n.body).not.toContain("nach dem Verbinden");
+  });
+});
+
 describe("offeneDinge (Zahl am App-Symbol)", () => {
   const training = { art: "training", einheit: "push" } as const;
   const pause = { art: "pause", naechste: "pull" } as const;

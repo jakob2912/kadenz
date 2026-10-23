@@ -17,7 +17,8 @@ import type { Nachricht } from "./push";
 type Einheit = "push" | "pull";
 
 export type MorgenLage =
-  | { verbunden: false; grund: string }
+  /** neuVerbinden false: Google ist gestört, ein neuer Login hilft nicht. */
+  | { verbunden: false; grund: string; neuVerbinden?: boolean }
   | {
       verbunden: true;
       /** Null, wenn die Nacht keine vollständige Messung hat. */
@@ -47,10 +48,21 @@ export function morgenNachricht(lage: MorgenLage, plan: Plan): Nachricht {
       ? `Heute ${einheitText(plan.einheit)}.`
       : `Heute Rest Day, als Nächstes ${SESSIONS[plan.naechste].focus.split(" · ")[0]}.`;
 
+  if (!lage.verbunden && lage.neuVerbinden === false) {
+    return {
+      title: "Google Health antwortet nicht",
+      body: `${heute} Die Nacht kommt nach, sobald Google wieder liefert — verbinden musst du nichts.`,
+      url: "/",
+      tag: "morgen",
+    };
+  }
+
   if (!lage.verbunden) {
     return {
       title: "Google Health neu verbinden",
-      body: `${heute} Schlaf, HRV und Gewicht fehlen, bis Kadenz wieder verbunden ist — ein Tipp auf die Startseite.`,
+      // Das Gewicht fehlt nicht mehr: es lässt sich auch ohne Google eintragen
+      // und liegt dann in Kadenz' eigener Ablage.
+      body: `${heute} Neue Nächte (Schlaf, HRV) kommen erst nach dem Verbinden — ein Tipp auf die Startseite.`,
       url: "/",
       tag: "morgen",
     };

@@ -109,6 +109,7 @@ async function Inhalt({ params }: { params: Promise<{ uebung: string }> }) {
         <ReihenChart
           reihe={reihe.map((p) => ({ datum: p.datum, wert: p.e1rm }))}
           bezeichnung={`Kraftverlauf ${uebung}`}
+          zeitraeume={[90, 365, 3650]}
           leer="Keiner der geloggten Sätze taugt zur Schätzung — über zehn Wiederholungen rechnet Kadenz kein Maximum aus."
           einzeln="Erst ein Trainingstag mit verwertbaren Sätzen. Ab dem zweiten steht hier eine Kurve."
         />

@@ -687,6 +687,12 @@ export type BriefingEingabe = {
   trainingHeute: boolean;
   /** Stunde in Wiener Zeit, 0–23. */
   stunde: number;
+  /**
+   * Die Werte kommen aus der eigenen Ablage, weil Google gerade nichts
+   * liefert. Dann liegt eine alte Nacht nicht an der Uhr, und der Rat, sie
+   * zu synchronisieren, wäre falsch.
+   */
+  ausAblage?: boolean;
 };
 
 /**
@@ -772,7 +778,7 @@ export function briefing(e: BriefingEingabe): Briefing {
   }
 
   return {
-    schlaf: schlafSatz(heute, baseline, schlafDelta, tiefDelta, tageAlt, e.nachtDatum),
+    schlaf: schlafSatz(heute, baseline, schlafDelta, tiefDelta, tageAlt, e.nachtDatum, e.ausAblage ?? false),
     befund: befundSatz(urteil, e.trainingHeute),
     vorschlaege,
   };
@@ -784,16 +790,19 @@ function schlafSatz(
   schlafDelta: number,
   tiefDelta: number,
   tageAlt: number,
-  nachtDatum: string
+  nachtDatum: string,
+  ausAblage: boolean
 ): string {
   /* Bei veralteten Daten steht das Datum vorne, nicht als Fußnote. "Du hast
      6 h 10 geschlafen" ist schlicht falsch, wenn die Nacht drei Tage her ist,
      und wer den Satz liest, bezieht ihn sonst auf heute. */
   const [, monat, tag] = nachtDatum.split("-").map(Number);
   const kopf =
-    tageAlt >= 1
-      ? `Nacht auf ${tag}.${monat}., nicht heute Nacht — Uhr synchronisieren lassen. Damals: `
-      : "";
+    tageAlt < 1
+      ? ""
+      : ausAblage
+        ? `Nacht auf ${tag}.${monat}., die letzte, die Google übertragen hat. Damals: `
+        : `Nacht auf ${tag}.${monat}., nicht heute Nacht — Uhr synchronisieren lassen. Damals: `;
 
   const dauer =
     Math.abs(schlafDelta) < 15

@@ -10,7 +10,7 @@ import Link from "next/link";
 import { wienerStunde } from "@/lib/datum";
 import { GewichtEingabe } from "@/components/gewicht-eingabe";
 import { InstallHinweis } from "@/components/pwa";
-import { EinstellungenLink } from "@/components/ui";
+import { AbgelaufenHinweis, EinstellungenLink } from "@/components/ui";
 import {
   Card,
   Eyebrow,
@@ -166,6 +166,7 @@ async function Dashboard() {
           heuteIso,
           trainingHeute,
           stunde: wienerStunde(),
+          ausAblage: data.abgelaufen !== undefined,
         })
       : null;
 
@@ -174,6 +175,7 @@ async function Dashboard() {
       {kopf}
 
       <InstallHinweis className="mt-6" />
+      {data.abgelaufen && <AbgelaufenHinweis lage={data.abgelaufen} className="mt-6" />}
 
       {/* Die eine Karte, die morgens zählt: wie erholt, was heute ansteht,
           und der Knopf dorthin. Vorher verteilte sich das auf drei Karten

@@ -55,8 +55,24 @@ Push-Nachrichten, Bildschirm anlassen, offline weiterloggen.
 - **Notizen**: je Übung (bleibt fürs nächste Mal stehen, etwa „Sitz Stufe 4“)
   und je Einheit. Eine Einheit lässt sich auch **vorzeitig beenden**, wenn
   eine Übung ausfällt.
+- **Logger fürs Gym**: Plus/Minus für Gewicht und Wiederholungen, Rahmen um
+  die Übung, die dran ist, Fortschrittsbalken, Weiterrücken zur nächsten
+  Übung; Satz dazu oder weglassen, Übung nur heute oder dauerhaft tauschen;
+  nach jedem Satz kurz „Noch drin?“ (Wiederholungen in Reserve), was die
+  Progression mitrechnet.
+- **Zahl am App-Symbol**: wie viele Dinge heute offen sind — die geplante
+  Einheit, solange sie nicht begonnen hat, und ein wartender
+  Kalorienvorschlag.
 - **Verlauf**: Trainingskalender über zwölf Wochen, Serie, jede Einheit mit
   allen Sätzen und Notiz; **CSV-Export** aller Sätze unter Einstellungen.
+  Diagramme sind antippbar (Wert und Datum) und zeigen 30 Tage, 90 Tage oder
+  ein Jahr — Gewicht, Schlaf, Ruhepuls, HRV und das geschätzte Maximum je
+  Übung. Bankdrücken steht als zweite Ansicht unter Verlauf.
+- **Eigene Ablage der Google-Werte**: Schlaf, Ruhepuls, HRV und Gewicht
+  liegen zusätzlich in der eigenen Datenbank (beim ersten Aufruf wird ein
+  Jahr nachgeholt). Läuft die Google-Verbindung ab, zeigt Kadenz die Werte
+  bis zur letzten Nacht weiter an, und ein eingetragenes Morgengewicht geht
+  nicht verloren.
 
 ## Umgebungsvariablen (Vercel → Settings → Environment Variables)
 

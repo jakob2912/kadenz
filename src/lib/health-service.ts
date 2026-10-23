@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { after } from "next/server";
 import { cacheLife, cacheTag } from "next/cache";
 import { refreshTokenLesen } from "./auth-store";
 import {
@@ -29,13 +30,21 @@ import {
   type WeightEntry,
 } from "./coach";
 import { datenbankKonfiguriert, fehlendeGoogleVariablen } from "./konfiguration";
+import {
+  ablegen,
+  gewichteLesen,
+  gewichteVereinen,
+  rueckfuellenWennNoetig,
+  tageswerteLesen,
+  vorTagen,
+} from "./gesundheit-ablage";
 
 /**
  * Eine Quelle für Dashboard und API-Route — sonst driften die beiden
  * Auswertungen auseinander und die Seite zeigt etwas anderes als der Endpunkt.
  */
 export type Dashboard =
-  | { verbunden: false; grund: string }
+  | { verbunden: false; grund: string; neuVerbinden?: boolean }
   | {
       verbunden: true;
       baseline: DailyReadiness | null;
@@ -48,6 +57,14 @@ export type Dashboard =
       };
       tagesreihe: DailyReadiness[];
       unvollstaendig: string[];
+      /**
+       * Gesetzt, wenn Google gerade nicht antwortet und die Werte aus der
+       * eigenen Ablage kommen (lib/gesundheit-ablage.ts): der Grund, und ob
+       * neu Verbinden hilft (abgelaufener Zugang) oder nur Warten (Google
+       * oder das Netz streikt). Die Seiten zeigen die Daten bis zur letzten
+       * Nacht und daneben den passenden Hinweis.
+       */
+      abgelaufen?: { grund: string; neuVerbinden: boolean };
     };
 
 /**
@@ -74,14 +91,22 @@ export type Dashboard =
  * — der MCP-Server liest sie schon immer.
  *
  * Der Preis, und er ist eine bewusste Entscheidung: die ausgewerteten
- * Gesundheitsdaten liegen jetzt bis zu fünf Minuten in Vercels Datencache
- * statt ausschließlich im Browser. Wer das nicht will, hat nur einen Weg
- * unter zwei Sekunden — die Tagesreihe in der eigenen Supabase ablegen und
- * von dort lesen. Siehe die Notiz am Ende dieser Datei.
+ * Gesundheitsdaten liegen bis zu fünf Minuten in Vercels Datencache. Seit
+ * Oktober 2026 liegt zusätzlich eine Abschrift in der eigenen Supabase
+ * (lib/gesundheit-ablage.ts) — für die Zeit, in der Google nicht antwortet,
+ * und für Diagramme über ein Jahr.
  */
 
 /** Trägt den Grund, warum keine Daten kommen, aus dem Cache heraus. */
-class NichtVerbundenFehler extends Error {}
+class NichtVerbundenFehler extends Error {
+  /** Hilft es, Google neu zu verbinden — oder ist es eine Störung, die vorbeigeht? */
+  constructor(
+    message: string,
+    readonly neuVerbinden = true
+  ) {
+    super(message);
+  }
+}
 
 export async function loadDashboard(days = 30): Promise<Dashboard> {
   // Fehlende Variablen zuerst, und mit Namen: auf Vercel ist das der
@@ -109,7 +134,23 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
     });
   }
 
-  return gesundheitsdaten(days);
+  const lage = await gesundheitsdaten(days);
+
+  /* Einmal das Jahr vor dem ersten Abruf nachholen, damit die Diagramme
+     über 90 und 365 Tage nicht erst in einem Jahr voll sind. Nach der
+     Antwort, und nur wenn Google gerade antwortet. */
+  if (lage.verbunden && !lage.abgelaufen) {
+    after(() =>
+      rueckfuellenWennNoetig(async () => {
+        const refresh = await refreshTokenLesen();
+        if (!refresh) throw new Error("Kein Google-Zugang für die Rückfüllung.");
+        const roh = await abrufen(refresh, 365);
+        await ablegen(roh.series, roh.reihe, vorTagen(365));
+      }).catch((e) => console.error("Rückfüllung aus Google Health fehlgeschlagen:", e))
+    );
+  }
+
+  return lage;
 }
 
 /**
@@ -133,7 +174,9 @@ async function alsLage(ermitteln: () => Promise<Dashboard>): Promise<Dashboard> 
   try {
     return await ermitteln();
   } catch (e) {
-    if (e instanceof NichtVerbundenFehler) return { verbunden: false, grund: e.message };
+    if (e instanceof NichtVerbundenFehler) {
+      return { verbunden: false, grund: e.message, neuVerbinden: e.neuVerbinden };
+    }
     throw e;
   }
 }
@@ -166,16 +209,19 @@ async function gesundheitsdaten(days: number): Promise<Dashboard> {
       throw new NichtVerbundenFehler(
         `Die Datenbank ist gerade nicht erreichbar: ${
           e instanceof Error ? e.message : String(e)
-        }`
+        }`,
+        false
       );
     }
 
     if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
     return auswerten(refresh, days);
-  });
+  }).then((l) => (l.verbunden ? l : ausAblage(days, l.grund, l.neuVerbinden ?? true)));
 
-  // Genau ein cacheLife je Aufruf, je nach Ausgang.
-  if (lage.verbunden) {
+  // Genau ein cacheLife je Aufruf, je nach Ausgang. Werte aus der Ablage
+  // zählen als Fehlschlag: nach dem neuen Verbinden sollen sofort die
+  // frischen kommen.
+  if (lage.verbunden && !lage.abgelaufen) {
     cacheLife({ stale: 300, revalidate: 300, expire: 900 });
   } else {
     cacheLife({ stale: 30, revalidate: 30, expire: 60 });
@@ -184,8 +230,10 @@ async function gesundheitsdaten(days: number): Promise<Dashboard> {
   return lage;
 }
 
-/** OAuth-Refresh, die vier Abrufe, die Auswertung. */
-async function auswerten(refresh: string, days: number): Promise<Dashboard> {
+type Rohdaten = { series: DailyReadiness[]; unvollstaendig: string[]; reihe: WeightEntry[] };
+
+/** OAuth-Refresh und die vier Abrufe, zu Tagesreihe und Gewichten aufbereitet. */
+async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
   let accessToken: string;
   try {
     accessToken = (await refreshAccessToken(refresh)).access_token;
@@ -207,7 +255,8 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
       );
     }
 
-    throw new NichtVerbundenFehler(text);
+    // Netz weg oder Google gestört: neu verbinden hilft da nicht.
+    throw new NichtVerbundenFehler(text, false);
   }
 
   const to = new Date();
@@ -230,10 +279,12 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
       listDataPoints<ApiWeightPoint>(accessToken, "weight", range),
     ]);
   } catch (e) {
+    /* Ein 401/403 heißt: Zugang oder Berechtigung weg, neu verbinden hilft.
+       Alles andere (5xx, Netz) geht von selbst vorbei. */
+    const text = e instanceof Error ? e.message : String(e);
     throw new NichtVerbundenFehler(
-      `Google Health hat die Abfrage abgelehnt: ${
-        e instanceof Error ? e.message : String(e)
-      }`
+      `Google Health hat die Abfrage abgelehnt: ${text}`,
+      /\b(401|403)\b|PERMISSION_DENIED|UNAUTHENTICATED/.test(text)
     );
   }
   const [sleepRes, hrRes, hrvRes, weightRes] = ergebnisse;
@@ -245,7 +296,51 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
     nightlyHrv(hrvRes.points, nights)
   );
 
-  const reihe = mapWeight(weightRes.points);
+  return { series, unvollstaendig, reihe: mapWeight(weightRes.points) };
+}
+
+/**
+ * Abrufen, in die eigene Ablage schreiben, auswerten.
+ *
+ * Das Ablegen darf scheitern, ohne dass die Seite es merkt — es ist ein
+ * Vorrat für später, nicht Teil dessen, was jetzt angezeigt wird. Gewichte,
+ * die nur in der Ablage liegen (eingetragen, während Google abgelaufen war),
+ * kommen in die Reihe dazu.
+ */
+async function auswerten(refresh: string, days: number): Promise<Dashboard> {
+  const roh = await abrufen(refresh, days);
+  let reihe = roh.reihe;
+  if (datenbankKonfiguriert()) {
+    try {
+      await ablegen(roh.series, roh.reihe, vorTagen(days));
+      reihe = gewichteVereinen(roh.reihe, await gewichteLesen(days, true));
+    } catch (e) {
+      console.error("Gesundheitswerte nicht abgelegt:", e);
+    }
+  }
+  return bauen(roh.series, roh.unvollstaendig, reihe);
+}
+
+/**
+ * Google antwortet nicht — dann die Werte aus der eigenen Ablage, solange es
+ * dort welche gibt. Sonst bleibt es bei "nicht verbunden" mit dem Grund.
+ */
+async function ausAblage(days: number, grund: string, neuVerbinden: boolean): Promise<Dashboard> {
+  if (!datenbankKonfiguriert()) return { verbunden: false, grund, neuVerbinden };
+  try {
+    const [series, reihe] = await Promise.all([tageswerteLesen(days), gewichteLesen(days)]);
+    if (series.length === 0 && reihe.length === 0) return { verbunden: false, grund, neuVerbinden };
+    return { ...bauen(series, [], reihe), abgelaufen: { grund, neuVerbinden } };
+  } catch {
+    return { verbunden: false, grund, neuVerbinden };
+  }
+}
+
+function bauen(
+  series: DailyReadiness[],
+  unvollstaendig: string[],
+  reihe: WeightEntry[]
+): Dashboard & { verbunden: true } {
   const baseline = deriveBaseline(series);
   const latest = series.at(-1) ?? null;
 
@@ -266,18 +361,3 @@ async function auswerten(refresh: string, days: number): Promise<Dashboard> {
     unvollstaendig,
   };
 }
-
-/*
- * Offen, und der nächste sinnvolle Schritt: die Tagesreihe in der eigenen
- * Datenbank ablegen.
- *
- * Der Cache oben löst den Tab-Wechsel, aber er läuft alle fünf Minuten ab, und
- * eine kalt gestartete Funktion auf Vercel findet ihn gar nicht vor — dann
- * kostet der erste Aufruf wieder den vollen Abruf bei Google. Schlaf,
- * Ruhepuls und HRV eines vergangenen Tages ändern sich aber nie mehr. Sie
- * gehören einmal geschrieben und danach gelesen: eine Tabelle neben Workout
- * und SetLog, ein Abgleich, der nur das Fenster seit dem letzten Eintrag holt.
- * Lesen wäre dann eine Abfrage in der Größenordnung von 50 Millisekunden
- * statt eines Abrufs von anderthalb Sekunden, unabhängig vom Cache, und die
- * Daten lägen in Jakobs eigener Supabase statt in Vercels Datencache.
- */

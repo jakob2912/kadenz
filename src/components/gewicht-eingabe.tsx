@@ -29,7 +29,7 @@ const ERSATZ_START = 80;
 
 type Status =
   | { art: "ruhe" }
-  | { art: "erfolg"; kg: number }
+  | { art: "erfolg"; kg: number; nurKadenz?: string }
   | { art: "fehler"; text: string };
 
 export function GewichtEingabe({
@@ -73,7 +73,11 @@ export function GewichtEingabe({
       // Der eingegebene Wert bleibt in jedem Fall stehen. Schlägt die
       // Übertragung fehl, soll Jakob nur nochmal tippen müssen, nicht die
       // Waage nochmal suchen.
-      setStatus(r.ok ? { art: "erfolg", kg: r.kg } : { art: "fehler", text: r.fehler });
+      setStatus(
+        r.ok
+          ? { art: "erfolg", kg: r.kg, nurKadenz: r.nurKadenz }
+          : { art: "fehler", text: r.fehler }
+      );
     });
   }
 
@@ -179,7 +183,9 @@ export function GewichtEingabe({
               }`}
             >
               {status.art === "erfolg"
-                ? `${de(status.kg, 2)} kg an Google Health übertragen.`
+                ? status.nurKadenz
+                  ? `${de(status.kg, 2)} kg in Kadenz gespeichert. Google nimmt gerade nichts an — Trend und Kalorien rechnen trotzdem damit.`
+                  : `${de(status.kg, 2)} kg an Google Health übertragen.`
                 : `Nicht übertragen: ${status.text} Der Wert steht noch da — nochmal versuchen.`}
             </motion.p>
           )}
