@@ -163,7 +163,8 @@ function Stand({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Gültig seit {kurzDatum(tm.gueltigAb)}. {tm.begruendung}
+        {/* kurzDatum endet auf "Okt." — ein weiterer Punkt dahinter wäre doppelt. */}
+        Gültig seit {kurzDatum(tm.gueltigAb).replace(/\.$/, "")}. {tm.begruendung}
       </p>
     </Card>
   );

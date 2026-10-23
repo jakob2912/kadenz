@@ -76,7 +76,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         </Suspense>
 
         <SwRegistrierung />
-        <AppAbzeichen />
+        {/* Liest ebenfalls die URL — dieselbe Grenze wie die Tab-Leiste. */}
+        <Suspense fallback={null}>
+          <AppAbzeichen />
+        </Suspense>
       </body>
     </html>
   );

@@ -81,30 +81,7 @@ async function Dashboard() {
     console.error("Trainingsstatus nicht lesbar:", e);
   }
 
-  if (!data.verbunden) {
-    /* Training hängt nicht an Google — die Karte bleibt auch dann, wenn die
-       Verbindung abgelaufen ist. Sonst stünde morgens nach dem wöchentlichen
-       Ablauf gar nichts mehr darüber da, was heute ansteht. */
-    return (
-      <>
-        <div className="mx-auto max-w-[520px]">
-          <HeuteKarte
-            rotation={rotation}
-            schonHeute={schonHeute}
-            regeneration={null}
-            befund={null}
-            veraltet={false}
-            heuteIso={heuteWien()}
-          />
-        </div>
-        <NichtVerbunden titel="Google Health verbinden" grund={data.grund} />
-      </>
-    );
-  }
-
-  const { heute, baseline, gewicht } = data;
   const heuteIso = heuteWien();
-
   // timeZone ausdrücklich gesetzt: ohne sie nimmt toLocaleDateString die
   // Serverzeit, und auf Vercel (UTC) steht ab 22:00 Wiener Zeit der Vortag da.
   const heuteDatum = new Date().toLocaleDateString("de-AT", {
@@ -129,6 +106,44 @@ async function Dashboard() {
   // Nächte tragen den Aufwachtag als Datum. Ist der nicht von heute, hat die
   // Uhr nicht synchronisiert — dann stehen oben ältere Werte, und ohne diesen
   // Abgleich liest man sie als die von heute Nacht.
+  const kopf = (
+    <header className="flex items-start justify-between gap-4 pt-10 md:pt-14">
+      <div className="min-w-0">
+        <Eyebrow>
+          {heuteDatum} · {phasenText}
+        </Eyebrow>
+        <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em] md:text-[33px]">
+          {gruss()}, Jakob
+        </h1>
+      </div>
+      <EinstellungenLink />
+    </header>
+  );
+
+  if (!data.verbunden) {
+    /* Training hängt nicht an Google — die Karte bleibt auch dann, wenn die
+       Verbindung abgelaufen ist. Sonst stünde morgens nach dem wöchentlichen
+       Ablauf gar nichts mehr darüber da, was heute ansteht. */
+    return (
+      <>
+        {kopf}
+        <div className="mx-auto max-w-[520px]">
+          <HeuteKarte
+            rotation={rotation}
+            schonHeute={schonHeute}
+            regeneration={null}
+            befund={null}
+            veraltet={false}
+            heuteIso={heuteIso}
+          />
+        </div>
+        <NichtVerbunden titel="Google Health verbinden" grund={data.grund} />
+      </>
+    );
+  }
+
+  const { heute, baseline, gewicht } = data;
+
   const tageAlt =
     heute === null
       ? 0
@@ -153,17 +168,7 @@ async function Dashboard() {
 
   return (
     <>
-      <header className="flex items-start justify-between gap-4 pt-10 md:pt-14">
-        <div className="min-w-0">
-          <Eyebrow>
-            {heuteDatum} · {phasenText}
-          </Eyebrow>
-          <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em] md:text-[33px]">
-            {gruss()}, Jakob
-          </h1>
-        </div>
-        <EinstellungenLink />
-      </header>
+      {kopf}
 
       <InstallHinweis className="mt-6" />
 
@@ -249,8 +254,8 @@ async function Dashboard() {
             <Card>
               <Eyebrow>Regeneration</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-                Noch keine vollständige Nacht mit Ruhepuls und HRV. Für die persönliche
-                Referenz braucht es fünf solche Nächte.
+                Noch keine vollständige Nacht mit Ruhepuls und HRV — für die Referenz
+                braucht es fünf.
               </p>
             </Card>
           )}
@@ -385,9 +390,9 @@ function deltaLabel(diff: number, unit: string): string {
 function Tagesbriefing({ briefing }: { briefing: Briefing }) {
   return (
     <>
-      <p>
-        <b className="font-semibold text-fg">{briefing.befund}</b> {briefing.schlaf}
-      </p>
+      {/* Der Befund steht schon groß in der Heute-Karte; hier folgt, was die
+          Nacht dazu sagt. */}
+      <p>{briefing.schlaf}</p>
 
       {briefing.vorschlaege.length > 0 ? (
         <ul className="mt-3 flex flex-col gap-2.5">
@@ -402,8 +407,7 @@ function Tagesbriefing({ briefing }: { briefing: Briefing }) {
         </ul>
       ) : (
         <p className="mt-2.5 text-[13px] leading-relaxed text-fg-faint">
-          Nichts zu verbessern — kein Wert liegt weit genug daneben, um daraus einen Rat zu
-          machen. Weiter wie gestern.
+          Kein Wert liegt weit daneben. Weiter wie gestern.
         </p>
       )}
     </>
