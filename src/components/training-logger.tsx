@@ -12,10 +12,18 @@ import {
   trainingStarten,
 } from "@/lib/workouts";
 import type { GeloggterSatz } from "@/lib/training-lesen";
-import { BESTWERT_TEXT, bestwertArt, staerke, type Bestwert, type BestwertArt } from "@/lib/bestwerte";
+import {
+  BESTWERT_TEXT,
+  bestwertArt,
+  staerke,
+  wdhFuerBestwert,
+  type Bestwert,
+  type BestwertArt,
+} from "@/lib/bestwerte";
 import { Card, Eyebrow, Tag, anzahl, de, uebungsVorschau } from "@/components/ui";
 import { eigenesPushAbo, geraetLesen, pauseVorbeiSignal, tonVorbereiten } from "@/lib/geraet";
 import { satzpauseAnkuendigen } from "@/lib/push-actions";
+import { uebungNotizSetzen } from "@/lib/uebung-actions";
 import {
   ausgangAblegen,
   ausgangErledigt,
@@ -25,7 +33,7 @@ import {
   type OffenerSatz,
 } from "@/lib/ablage";
 import { wienerDatum } from "@/lib/datum";
-import { aufwaermen, beladung, beladungText } from "@/lib/hantel";
+import { aufwaermen } from "@/lib/hantel";
 
 const PAUSE_SEKUNDEN = 180;
 
@@ -548,11 +556,14 @@ export function TrainingLogger({
                 </span>
                 <span className="min-w-0 flex-1">
                   <b className="block text-[15px] font-semibold tracking-[-0.015em]">{ex.name}</b>
-                  {(ex.grund ?? ex.note) && (
-                    <span className="mt-0.5 block text-xs text-fg-faint">
-                      {ex.grund ?? ex.note}
-                    </span>
+                  {/* Begründung der Progression und Notiz stehen getrennt.
+                      Vorher verdrängte die eine die andere — an jedem Tag mit
+                      Gewichtsänderung war die Notiz ("Sitz Stufe 4") weg,
+                      genau dann, wenn man neu einstellt. */}
+                  {ex.grund && (
+                    <span className="mt-0.5 block text-xs text-fg-faint">{ex.grund}</span>
                   )}
+                  <UebungsNotiz einheit={session.key} name={ex.name} anfang={ex.note ?? null} />
                 </span>
                 {alleFertig ? (
                   <Tag tone="gut">fertig</Tag>
@@ -579,14 +590,21 @@ export function TrainingLogger({
                 ))}
               </div>
 
-              {langhantel(ex) && saetze.length > 0 && (
+              {/* Aufwärmen nur, wo ein Programm die Sätze vorgibt (Bankdrücken
+                  5/3/1): dort beginnt die Einheit direkt mit 65–85 % des
+                  Trainingsmax, und die Treppe davor rechnet man sonst im Kopf. */}
+              {ex.programmSaetze.length > 0 && saetze.length > 0 && (
                 <Aufwaermen arbeitsKg={saetze[0].kg} />
               )}
 
               {saetze.map((satz, si) => (
                 <SatzZeile
                   key={si}
-                  langhantel={langhantel(ex)}
+                  bestwertZiel={
+                    satz.amrap && !logged[`${i}-${si}`]
+                      ? wdhFuerBestwert(satz.kg, bestwerte[ex.name])
+                      : null
+                  }
                   rekord={rekorde.get(`${i}-${si}`) ?? null}
                   nummer={si + 1}
                   prev={ex.prev[si]}
@@ -635,6 +653,22 @@ export function TrainingLogger({
           <Card>
             <Notiz einheit={session.key} tag={tag} anfang={notiz} />
           </Card>
+        )}
+
+        {!alleSaetzeFertig && fertigSeit === null && saetzeFertig > 0 && (
+          <EinheitBeenden
+            offen={saetzeGesamt - saetzeFertig}
+            onBeenden={async () => {
+              const r = await trainingBeenden(session.key, undefined, Date.now());
+              if (r.ok) {
+                setFertigSeit(r.finishedAtMs);
+                setPauseEnde(null);
+                pauseSchreiben(null);
+                satzpauseAnkuendigen(null).catch(() => {});
+              }
+              return r.ok ? null : r.fehler;
+            }}
+          />
         )}
 
         {(alleSaetzeFertig || fertigSeit !== null) && (
@@ -696,14 +730,18 @@ function SatzZeile({
   vorgegeben = false,
   logged,
   hervorgehoben,
-  langhantel = false,
+  bestwertZiel = null,
   rekord = null,
   onLog,
   onKorrigieren,
 }: {
   nummer: number;
-  /** Langhantelübung: dann steht unter dem Satz, welche Scheiben drauf gehören. */
-  langhantel?: boolean;
+  /**
+   * Beim AMRAP-Satz: so viele Wiederholungen wären ein Bestwert. Das ist beim
+   * 5/3/1 der eigentliche Antrieb des letzten Satzes — Wendler nennt genau
+   * diese Zahl als Ziel, über das Minimum hinaus.
+   */
+  bestwertZiel?: number | null;
   /** Bestwert-Art dieses Satzes, falls es der Rekord-Satz des Tages ist. */
   rekord?: BestwertArt | null;
   prev?: string;
@@ -823,12 +861,8 @@ function SatzZeile({
         </svg>
       </button>
 
-      {(langhantel || rekord !== null) && (
-        <ScheibenZeile
-          kg={fertig ? logged!.kg : Number((kg || String(zielKg)).replace(",", ".")) || 0}
-          langhantel={langhantel}
-          rekord={rekord}
-        />
+      {(rekord !== null || bestwertZiel !== null) && (
+        <SatzHinweis rekord={rekord} ziel={bestwertZiel} />
       )}
 
       {repsUngueltig && (
@@ -843,41 +877,16 @@ function SatzZeile({
 }
 
 /**
- * Ist das eine Langhantelübung? Beim 5/3/1-Bankdrücken immer, sonst wenn die
- * Notiz im Katalog es sagt ("Langhantel, Flachbank"). Maschinen und Kurzhanteln
- * brauchen keinen Scheibenrechner.
+ * Die Zeile unter einem Satz: Bestwert erreicht, oder beim offenen
+ * AMRAP-Satz, wie viele Wiederholungen dafür nötig wären.
  */
-function langhantel(ex: PlannedExercise): boolean {
-  return ex.programmSaetze.length > 0 || /langhantel/i.test(ex.note ?? "");
-}
-
-/**
- * Die Zeile unter einem Satz: Scheiben je Seite, und ob es ein Bestwert ist.
- *
- * Steht unter dem Satz statt in einem eigenen Rechner: das Gewicht kommt
- * beim 5/3/1 aus dem Programm und ist für jeden Satz ein anderes. Ein Rechner,
- * in den man es erst eintippt, wäre wieder die Kopfrechnung, die er
- * abnehmen soll.
- */
-function ScheibenZeile({
-  kg,
-  langhantel,
-  rekord,
-}: {
-  kg: number;
-  langhantel: boolean;
-  rekord: BestwertArt | null;
-}) {
-  const b = langhantel ? beladung(kg) : null;
-  /* 13 px auf fg-dim statt 11 px blass: genau diese Zeile liest man auf
-     Armlänge, während man die Scheiben vom Ständer nimmt. */
+function SatzHinweis({ rekord, ziel }: { rekord: BestwertArt | null; ziel: number | null }) {
   return (
     <p className="col-span-5 -mt-0.5 flex items-center justify-between gap-2 pb-1.5 pl-[34px] text-[13px] leading-relaxed text-fg-dim">
       <span>
-        {b && (
+        {ziel !== null && (
           <>
-            je Seite <b className="font-semibold text-fg">{beladungText(b)}</b>
-            {b.rest > 0 && <> (+{de(b.rest, 2)} kg gehen nicht auf)</>}
+            Bestwert ab <b className="font-semibold text-accent">{ziel} Wdh</b>
           </>
         )}
       </span>
@@ -907,17 +916,11 @@ function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
         <span aria-hidden className="text-fg-faint transition group-open:rotate-90">›</span>
       </summary>
       <ol className="mt-1.5 flex flex-col gap-1 pb-1">
-        {saetze.map((s, i) => {
-          const b = beladung(s.kg);
-          return (
-            <li key={i} className="flex items-baseline justify-between gap-3 text-[14px] tabular-nums">
-              <span className="text-fg">
-                {de(s.kg, 1)} kg × {s.wdh}
-              </span>
-              <span className="text-fg-dim">{b ? beladungText(b) : ""}</span>
-            </li>
-          );
-        })}
+        {saetze.map((s, i) => (
+          <li key={i} className="text-[14px] tabular-nums text-fg">
+            {de(s.kg, 1)} kg × {s.wdh}
+          </li>
+        ))}
       </ol>
     </details>
   );
@@ -1046,6 +1049,162 @@ function Notiz({
               : ""}
       </p>
     </div>
+  );
+}
+
+/**
+ * Die Einheit beenden, obwohl nicht alles abgehakt ist.
+ *
+ * Bisher endete eine Einheit nur über den letzten Haken. War ein Gerät
+ * belegt und die Übung fiel aus, kam der nie: die Laufzeit lief bis in den
+ * Abend weiter, die Dauer im Verlauf war Unsinn, und die Einheit sah am
+ * nächsten Morgen noch offen aus.
+ *
+ * Zwei Tipps statt einem, weil der Knopf unter dem letzten Satz liegt — ein
+ * versehentlicher Tipp beim Scrollen soll keine Einheit beenden, in der noch
+ * drei Übungen anstehen.
+ */
+function EinheitBeenden({
+  offen,
+  onBeenden,
+}: {
+  offen: number;
+  onBeenden: () => Promise<string | null>;
+}) {
+  const [fragen, setFragen] = useState(false);
+  const [laeuft, setLaeuft] = useState(false);
+  const [fehler, setFehler] = useState<string | null>(null);
+
+  if (!fragen) {
+    return (
+      <button
+        type="button"
+        onClick={() => setFragen(true)}
+        className="flex min-h-[48px] items-center justify-center rounded-md border border-hair text-sm font-semibold text-fg-dim transition active:scale-[0.98] md:hover:text-fg"
+      >
+        Einheit beenden
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-hair p-3.5">
+      <p className="text-[13px] leading-relaxed text-fg-dim">
+        {anzahl(offen, "Satz ist", "Sätze sind")} noch offen. Trotzdem beenden? Die offenen
+        Sätze fallen dann weg; beim nächsten Mal plant Kadenz wieder alle.
+      </p>
+      <div className="mt-3 flex gap-2.5">
+        <button
+          type="button"
+          disabled={laeuft}
+          onClick={async () => {
+            setLaeuft(true);
+            setFehler(await onBeenden());
+            setLaeuft(false);
+          }}
+          className="flex min-h-[48px] flex-1 items-center justify-center rounded-md bg-accent text-sm font-semibold text-on-accent transition active:scale-[0.98] disabled:opacity-60"
+        >
+          {laeuft ? "Beendet…" : "Ja, beenden"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFragen(false)}
+          className="flex min-h-[48px] flex-1 items-center justify-center rounded-md bg-surface-2 text-sm font-semibold text-fg transition active:scale-[0.98]"
+        >
+          Weitertrainieren
+        </button>
+      </div>
+      {fehler && <p className="mt-2 text-xs text-strain">Nicht beendet: {fehler}</p>}
+    </div>
+  );
+}
+
+/**
+ * Die Notiz einer Übung, im Logger änderbar.
+ *
+ * Gehört zur Übung, nicht zur Einheit — sie steht beim nächsten Training
+ * wieder da. Ein Tipp öffnet das Feld; gespeichert wird mit "Fertig" oder
+ * Enter. Hier mit Knopf statt automatisch wie bei der Einheitsnotiz: die
+ * Zeile ist kurz, und ein halb getipptes "Sitz Stu" soll nicht schon beim
+ * nächsten Training dastehen.
+ */
+function UebungsNotiz({
+  einheit,
+  name,
+  anfang,
+}: {
+  einheit: "push" | "pull";
+  name: string;
+  anfang: string | null;
+}) {
+  const [notiz, setNotiz] = useState(anfang);
+  const [entwurf, setEntwurf] = useState<string | null>(null);
+  const [fehler, setFehler] = useState<string | null>(null);
+  const [speichert, setSpeichert] = useState(false);
+  const id = useId();
+
+  async function sichern() {
+    if (entwurf === null) return;
+    setSpeichert(true);
+    const r = await uebungNotizSetzen(einheit, name, entwurf).catch(
+      (e: unknown) => ({ ok: false as const, fehler: e instanceof Error ? e.message : "Server nicht erreichbar" })
+    );
+    setSpeichert(false);
+    if (r.ok) {
+      setNotiz(r.notiz);
+      setEntwurf(null);
+      setFehler(null);
+    } else {
+      setFehler(r.fehler);
+    }
+  }
+
+  if (entwurf !== null) {
+    return (
+      <span className="mt-1.5 flex flex-col gap-1.5">
+        <label htmlFor={id} className="sr-only">
+          Notiz zu {name}
+        </label>
+        <span className="flex gap-2">
+          <input
+            id={id}
+            value={entwurf}
+            onChange={(e) => setEntwurf(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") void sichern();
+              if (e.key === "Escape") setEntwurf(null);
+            }}
+            maxLength={200}
+            autoFocus
+            placeholder="z. B. Sitz Stufe 4, Griff eng"
+            className="min-h-[40px] min-w-0 flex-1 rounded-sm border border-transparent bg-surface-3 px-2.5 text-base outline-none focus:border-accent"
+          />
+          <button
+            type="button"
+            onClick={() => void sichern()}
+            disabled={speichert}
+            className="min-h-[40px] shrink-0 rounded-sm bg-accent px-3 text-[13px] font-semibold text-on-accent disabled:opacity-60"
+          >
+            Fertig
+          </button>
+        </span>
+        {fehler && <span className="text-[11px] text-strain">{fehler}</span>}
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEntwurf(notiz ?? "")}
+      className="-ml-1 mt-0.5 flex min-h-[32px] items-center gap-1.5 rounded-sm px-1 text-left text-xs text-fg-faint active:bg-surface-2"
+      aria-label={notiz ? `Notiz zu ${name} ändern: ${notiz}` : `Notiz zu ${name} hinzufügen`}
+    >
+      <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+      </svg>
+      <span className={notiz ? "text-fg-dim" : ""}>{notiz ?? "Notiz"}</span>
+    </button>
   );
 }
 

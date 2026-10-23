@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestwertArt, bestwertAus } from "../bestwerte";
+import { bestwertArt, bestwertAus, wdhFuerBestwert } from "../bestwerte";
 
 const bisher = bestwertAus([
   { kg: 80, reps: 5 },
@@ -58,5 +58,21 @@ describe("bestwertAus", () => {
 
   it("null ohne Sätze", () => {
     expect(bestwertAus([])).toBeNull();
+  });
+});
+
+describe("wdhFuerBestwert", () => {
+  it("nennt die kleinste Wiederholungszahl, die das Maximum übertrifft", () => {
+    // Bisher bestes Maximum 80 × 5 = 93,3. Bei 75 kg: 75 × (1 + 7/30) = 92,5,
+    // 75 × (1 + 8/30) = 95 — also 8.
+    expect(wdhFuerBestwert(75, bisher)).toBe(8);
+  });
+
+  it("schwerer als je zuvor: schon eine Wiederholung", () => {
+    expect(wdhFuerBestwert(85, bisher)).toBe(1);
+  });
+
+  it("ohne Historie keine Zahl", () => {
+    expect(wdhFuerBestwert(75, null)).toBeNull();
   });
 });

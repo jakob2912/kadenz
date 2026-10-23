@@ -48,9 +48,13 @@ Push-Nachrichten, Bildschirm anlassen, offline weiterloggen.
   heutige Einheit, ob das Gewicht fehlt, ob Google neu verbunden werden muss)
   · Abend-Erinnerung (nur wenn die geplante Einheit noch offen ist oder ein
   Kalorienvorschlag wartet). Einzeln abschaltbar unter Einstellungen.
-- **Bestwerte** werden beim Abhaken markiert, **Scheiben je Seite** stehen
-  unter jedem Langhantel-Satz, vor dem Bankdrücken gibt es eine
-  **Aufwärmtreppe**.
+- **Bestwerte** werden beim Abhaken markiert (schwerstes Gewicht,
+  geschätztes Maximum, lange AMRAP-Sätze); beim offenen AMRAP-Satz steht,
+  ab wie vielen Wiederholungen es ein Bestwert wäre. Vor dem Bankdrücken
+  gibt es eine **Aufwärmtreppe**.
+- **Notizen**: je Übung (bleibt fürs nächste Mal stehen, etwa „Sitz Stufe 4“)
+  und je Einheit. Eine Einheit lässt sich auch **vorzeitig beenden**, wenn
+  eine Übung ausfällt.
 - **Verlauf**: Trainingskalender über zwölf Wochen, Serie, jede Einheit mit
   allen Sätzen und Notiz; **CSV-Export** aller Sätze unter Einstellungen.
 

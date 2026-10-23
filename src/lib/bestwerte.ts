@@ -94,3 +94,17 @@ export function bestwertArt(
 export function staerke(satz: { kg: number; reps: number }): number {
   return e1rm(satz) ?? satz.kg * (1 + satz.reps / 30);
 }
+
+/**
+ * Wie viele Wiederholungen bei diesem Gewicht ein Bestwert wären — für den
+ * AMRAP-Satz, bevor er gehoben ist. Null, wenn es keine Historie gibt oder
+ * selbst dreißig Wiederholungen nicht reichten (dann ist das Gewicht für
+ * diese Frage zu leicht).
+ */
+export function wdhFuerBestwert(kg: number, bisher: Bestwert | null | undefined): number | null {
+  if (!bisher || kg <= 0) return null;
+  for (let wdh = 1; wdh <= 30; wdh++) {
+    if (bestwertArt({ kg, reps: wdh }, bisher) !== null) return wdh;
+  }
+  return null;
+}

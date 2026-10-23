@@ -1,5 +1,9 @@
 # Kadenz für andere öffnen — Einschätzung
 
+> **Entscheidung 23.10.2026:** vorerst nicht. Kadenz bleibt eine App für
+> Jakob allein. Diese Einschätzung bleibt als Grundlage stehen, falls sich
+> das ändert.
+
 Stand 22.10.2026. Frage: Kann Kadenz für andere Leute mit Google-/Fitbit-Uhr
 zugänglich werden?
 
