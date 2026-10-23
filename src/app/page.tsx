@@ -136,8 +136,8 @@ async function Dashboard() {
             veraltet={false}
             heuteIso={heuteIso}
           />
+          <VerbindenKarte grund={data.grund} />
         </div>
-        <VerbindenKarte grund={data.grund} />
       </>
     );
   }
