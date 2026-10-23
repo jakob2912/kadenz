@@ -3,6 +3,9 @@
 import { cookies } from "next/headers";
 import { updateTag } from "next/cache";
 import { refreshAccessToken, writeWeight } from "./google-health";
+import { gewichtAblegen } from "./gesundheit-ablage";
+import { datenbankKonfiguriert } from "./konfiguration";
+import { heuteWien } from "./datum";
 
 /**
  * Morgengewicht aus dem Dashboard zurück nach Google Health.
@@ -21,7 +24,8 @@ const MAX_KG = 250;
 const MAX_FEHLERLAENGE = 160;
 
 export type EintragErgebnis =
-  | { ok: true; kg: number }
+  /** `nurKadenz`: Google hat den Wert nicht angenommen, er liegt nur in der eigenen Ablage. */
+  | { ok: true; kg: number; nurKadenz?: string }
   | { ok: false; fehler: string };
 
 export async function gewichtEintragen(kg: number): Promise<EintragErgebnis> {
@@ -40,26 +44,41 @@ export async function gewichtEintragen(kg: number): Promise<EintragErgebnis> {
     };
   }
 
+  /* Zuerst in die eigene Ablage: läuft die Google-Verbindung gerade ab (im
+     Testmodus jede Woche), ist das Morgengewicht trotzdem festgehalten und
+     steht in Trend und Kalorienrechnung. */
+  let abgelegt = false;
+  if (datenbankKonfiguriert()) {
+    try {
+      await gewichtAblegen(heuteWien(), gerundet);
+      abgelegt = true;
+    } catch (e) {
+      console.error("Gewicht nicht abgelegt:", e);
+    }
+  }
+  const nurKadenz = (grund: string): EintragErgebnis => {
+    if (!abgelegt) return { ok: false, fehler: grund };
+    updateTag("gesundheit");
+    return { ok: true, kg: gerundet, nurKadenz: grund };
+  };
+
   const jar = await cookies();
   const refreshToken = jar.get("kadenz_google_refresh")?.value;
   if (!refreshToken) {
-    return {
-      ok: false,
-      fehler: "Nicht mit Google Health verbunden. Bitte erst über /api/auth/google anmelden.",
-    };
+    return nurKadenz("Nicht mit Google Health verbunden.");
   }
 
   let accessToken: string;
   try {
     accessToken = (await refreshAccessToken(refreshToken)).access_token;
   } catch (e) {
-    return { ok: false, fehler: `Google-Zugang ließ sich nicht erneuern: ${kurz(e)}` };
+    return nurKadenz(`Google-Zugang ließ sich nicht erneuern: ${kurz(e)}`);
   }
 
   try {
     await writeWeight(accessToken, gerundet, new Date());
   } catch (e) {
-    return { ok: false, fehler: `Google Health hat den Wert nicht angenommen: ${kurz(e)}` };
+    return nurKadenz(`Google Health hat den Wert nicht angenommen: ${kurz(e)}`);
   }
 
   /* Dashboard und Verlauf lesen Gewicht, 7-Tage-Schnitt und Trend aus

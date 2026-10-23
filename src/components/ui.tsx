@@ -73,6 +73,32 @@ export function NichtVerbunden({
 }
 
 /**
+ * Google antwortet nicht, die Werte kommen aus der eigenen Ablage.
+ *
+ * Kein ganzseitiges "verbinden" mehr wie in NichtVerbunden: die Zahlen bis
+ * zur letzten Nacht sind da und brauchbar. Der Hinweis sagt, warum nichts
+ * Neues kommt, und gibt den Weg zurück.
+ */
+export function AbgelaufenHinweis({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-md border border-caution/30 bg-caution/10 px-3.5 py-2.5 ${className}`}
+    >
+      <p className="text-xs leading-relaxed text-caution">
+        Google-Verbindung abgelaufen — die Werte kommen aus der eigenen Ablage.
+      </p>
+      {/* <a> statt <Link>, aus demselben Grund wie in NichtVerbunden. */}
+      <a
+        href="/api/auth/google"
+        className="flex min-h-[44px] items-center text-[13px] font-semibold text-fg active:text-accent"
+      >
+        Neu verbinden
+      </a>
+    </div>
+  );
+}
+
+/**
  * Zahnrad zu den Einstellungen.
  *
  * Kein fünfter Tab: Einstellungen öffnet man selten. Oben rechts auf der

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { loadDashboard } from "@/lib/health-service";
 import {
+  AbgelaufenHinweis,
   Card,
   Eyebrow,
   Metric,
@@ -17,6 +18,8 @@ import { ReihenChart } from "@/components/reihen-chart";
 import { Kraftverlauf } from "@/components/kraftverlauf";
 import { Einheitenverlauf } from "@/components/einheitenverlauf";
 import { Wochenueberblick } from "@/components/wochenueberblick";
+import { NaechteChart } from "@/components/naechte-chart";
+import { gewichteLesen, gewichteVereinen, tageswerteLesen } from "@/lib/gesundheit-ablage";
 import { VerlaufUmschalter } from "@/components/verlauf-umschalter";
 import {
   ENDZIEL_KG,
@@ -97,6 +100,22 @@ async function Gewichtsteil() {
   const { gewicht, tagesreihe, baseline, unvollstaendig } = data;
   const heuteIso = heuteWien();
 
+  /* Für die Diagramme ein Jahr aus der eigenen Ablage, die letzten dreißig
+     Tage frisch von Google darübergelegt. Fehlt die Ablage, bleibt es bei
+     den dreißig Tagen. */
+  let jahrGewicht = gewicht.reihe;
+  let jahrNaechte = tagesreihe;
+  try {
+    const [g, n] = await Promise.all([gewichteLesen(365), tageswerteLesen(365)]);
+    jahrGewicht = gewichteVereinen(g, gewicht.reihe);
+    const frisch = new Map(tagesreihe.map((t) => [t.date, t]));
+    jahrNaechte = [...n.filter((t) => !frisch.has(t.date)), ...tagesreihe].sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+  } catch (e) {
+    console.error("Ablage nicht lesbar:", e);
+  }
+
   return (
     <>
       <header className="pt-6 md:pt-8">
@@ -115,6 +134,8 @@ async function Gewichtsteil() {
         </p>
       </header>
 
+      {data.abgelaufen && <AbgelaufenHinweis className="mt-5" />}
+
       <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
         <Card>
           <div className="flex items-baseline justify-between gap-3">
@@ -123,9 +144,9 @@ async function Gewichtsteil() {
                 acht Tagen vorlagen — der Titel behauptete einen Zeitraum, den
                 die Kurve nie gezeigt hat. */}
             <span className="text-[11px] text-fg-faint">
-              {gewicht.reihe.length === 0
+              {jahrGewicht.length === 0
                 ? "keine Messung"
-                : `${gewicht.reihe.length} Messungen · ab ${kurzDatum(gewicht.reihe[0].date)}`}
+                : `${jahrGewicht.length} Messungen · ab ${kurzDatum(jahrGewicht[0].date)}`}
             </span>
           </div>
           {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
@@ -135,10 +156,11 @@ async function Gewichtsteil() {
               ich gerade richtig", nicht "wo endet das". Letzteres beantwortet
               die Zielkurven-Karte darunter. */}
           <ReihenChart
-            reihe={gewicht.reihe.map((r) => ({ datum: r.date, wert: r.kg }))}
-            soll={sollAusschnitt(gewicht.reihe[0]?.date ?? heuteIso, 4)}
+            reihe={jahrGewicht.map((r) => ({ datum: r.date, wert: r.kg }))}
+            soll={sollAusschnitt(jahrGewicht[0]?.date ?? heuteIso, 4)}
             sollBezeichnung="Plan"
             bezeichnung="Gewichtsverlauf"
+            zeitraeume={[30, 90, 365]}
             leer="Noch keine Messung. Trag dein Morgengewicht auf der Startseite ein — ab zwei Messungen steht hier eine Kurve."
             einzeln="Erst eine Messung. Ab der zweiten steht hier eine Kurve."
           />
@@ -206,7 +228,9 @@ async function Gewichtsteil() {
         </div>
       </div>
 
-      <Zielkurve reihe={gewicht.reihe.map((r) => ({ datum: r.date, wert: r.kg }))} heuteIso={heuteIso} />
+      <NaechteChart naechte={jahrNaechte} />
+
+      <Zielkurve reihe={jahrGewicht.map((r) => ({ datum: r.date, wert: r.kg }))} heuteIso={heuteIso} />
     </>
   );
 }

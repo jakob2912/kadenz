@@ -1,8 +1,9 @@
 // Kadenz — Datenmodell
 //
-// Bewusst schlank: Gewicht, Schlaf, Ruhepuls und HRV bleiben in Google Health,
-// das ist dort die Quelle der Wahrheit und wird nicht dupliziert. Hier liegt
-// nur, was Google Health nicht kennt — die Trainingslogs und die Ernährung.
+// Quelle der Wahrheit für Gewicht, Schlaf, Ruhepuls und HRV bleibt Google
+// Health. Seit Oktober 2026 liegt eine Abschrift davon hier (Tageswert,
+// Gewichtsmessung): schneller zu lesen, über ein Jahr statt dreißig Tage, und
+// noch da, wenn die Google-Verbindung wieder einmal abgelaufen ist.
 
 generator client {
   provider = "prisma-client-js"
@@ -391,12 +392,35 @@ model BankTrainingsmax {
 /// Antwortet der Push-Dienst mit 404 oder 410, ist das Abo tot (App gelöscht,
 /// Berechtigung entzogen) und die Zeile wird gelöscht — siehe lib/push.ts.
 model PushAbo {
-  endpoint String @id
-  p256dh   String
-  auth     String
+  endpoint          String    @id
+  p256dh            String
+  auth              String
   /// Kurzbeschreibung aus dem User-Agent ("iPhone", "Mac"), nur zum Anzeigen.
-  geraet   String?
-  angelegt DateTime @default(now())
+  geraet            String?
+  angelegt          DateTime  @default(now())
   /// Letzte Nachricht, die der Push-Dienst angenommen hat.
   zuletztZugestellt DateTime?
+}
+
+/// Eine vollständige Nacht aus Google Health — Abschrift, nicht Quelle.
+///
+/// Geschrieben bei jedem erfolgreichen Abruf (lib/gesundheit-ablage.ts),
+/// gelesen, wenn Google gerade nicht antwortet, und für Diagramme über mehr
+/// als die dreißig Tage, die jeder Abruf holt. Nur vollständige Tage, wie
+/// buildDailySeries() sie liefert: ein fehlender Ruhepuls darf auch hier nicht
+/// als 0 dastehen.
+model Tageswert {
+  datum         DateTime @id @db.Date
+  schlafMin     Int
+  tiefschlafMin Int
+  ruhepuls      Float
+  hrv           Float
+  aktualisiert  DateTime @updatedAt
+}
+
+/// Ein Gewicht je Tag aus Google Health — Abschrift, wie Tageswert.
+model Gewichtsmessung {
+  datum        DateTime @id @db.Date
+  kg           Float
+  aktualisiert DateTime @updatedAt
 }
