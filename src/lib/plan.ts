@@ -60,7 +60,7 @@ export type Session = {
 export const SESSIONS: Record<"push" | "pull", Session> = {
   pull: {
     key: "pull",
-    title: "Rücken, Bizeps, Hamstrings",
+    title: "Back, biceps, hamstrings",
     focus: "Pull · Posterior",
     exercises: [
       {
@@ -133,7 +133,7 @@ export const SESSIONS: Record<"push" | "pull", Session> = {
   },
   push: {
     key: "push",
-    title: "Brust, Schulter, Trizeps, Quads",
+    title: "Chest, shoulders, triceps, quads",
     focus: "Push · Anterior",
     exercises: [
       {
@@ -758,6 +758,19 @@ export function offenePlaetze(
   return freiePlaetze(montagVon(iso), wahlen, eintraege)
     .filter((p) => p.datum > iso)
     .map(({ datum, einheit }) => ({ datum, einheit }));
+}
+
+/** Wie viele Einheiten die Woche dieses Tages vorsieht und wie viele gelaufen sind. */
+export function wochenbilanz(
+  iso: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): { geplant: number; erledigt: number } {
+  const montag = montagVon(iso);
+  return {
+    geplant: plaetzeDerWoche(montag, wahlen).length,
+    erledigt: zuordnung(montag, wahlen, eintraege).size,
+  };
 }
 
 /** Ab diesem Tag gilt die Zuordnung über Plätze (die festen Wochentage). */

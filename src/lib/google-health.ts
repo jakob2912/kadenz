@@ -280,19 +280,3 @@ export async function listDataPoints<T = unknown>(
 
   throw lastFilterError ?? new Error(`Kein gültiger Filter für ${key}`);
 }
-
-/** Schreibt ein Gewicht zurück nach Google Health, damit dort alles zusammenläuft. */
-export async function writeWeight(
-  accessToken: string,
-  kg: number,
-  at: Date = new Date()
-): Promise<void> {
-  await apiFetch(accessToken, `/users/me/dataTypes/${DATA_TYPES.weight.path}/dataPoints`, {
-    method: "POST",
-    body: JSON.stringify({
-      startTime: at.toISOString(),
-      endTime: at.toISOString(),
-      value: { weight: { kilograms: kg } },
-    }),
-  });
-}

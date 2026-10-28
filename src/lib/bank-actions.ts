@@ -6,7 +6,7 @@ import { trainingsmaxSetzen } from "./bank";
 /**
  * Den Trainingsmax fürs Bankdrücken eintragen oder korrigieren.
  *
- * Eigene Datei wie gewicht-actions.ts: bank.ts wird auch vom MCP-Server
+ * Eigene Datei wie ernaehrung-actions.ts: bank.ts wird auch vom MCP-Server
  * geladen, und der kennt weder "use server" noch revalidatePath.
  */
 export async function trainingsmaxEintragen(

@@ -185,9 +185,9 @@ async function alsLage(ermitteln: () => Promise<Dashboard>): Promise<Dashboard> 
  * Der teure Teil, serverseitig zwischengespeichert.
  *
  * Fünf Minuten, wenn es geklappt hat: Schlaf und Ruhepuls stehen nach der
- * Nacht fest, und das Morgengewicht wird einmal am Tag eingetragen. Wer es
- * einträgt, soll es trotzdem sofort sehen — dafür ruft gewichtEintragen()
- * updateTag("gesundheit") auf.
+ * Nacht fest, und das Morgengewicht trägt Jakob einmal am Tag in Google
+ * Health ein. Seit dem 28.10.2026 gibt es in Kadenz keine eigene
+ * Gewichtseingabe mehr.
  *
  * Dreißig Sekunden, wenn nicht. Ein Fehlschlag wird ebenfalls abgelegt,
  * aber nur kurz (bedingte cacheLife, siehe Next-Doku "Conditional cache

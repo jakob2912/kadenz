@@ -13,8 +13,8 @@ import { heuteWien } from "./datum";
  * Deshalb hat auch der MCP-Server keinen Zugriff auf diese Datei — ein
  * Werkzeugaufruf ist kein Ja.
  *
- * Die Fehlerform ist dieselbe wie bei satzSpeichern in workouts.ts und
- * gewichtEintragen in gewicht-actions.ts: { ok } statt geworfener Fehler.
+ * Die Fehlerform ist dieselbe wie bei satzSpeichern in workouts.ts:
+ * { ok } statt geworfener Fehler.
  */
 
 export type EntscheidungErgebnis =
