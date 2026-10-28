@@ -133,7 +133,7 @@ describe("bankcoach", () => {
     });
     expect(coach.lage).toBe("steht");
     expect(coach.vorschlag).toMatchObject({ art: "tm_zurueck", tmNeuKg: 90 });
-    expect(coach.vorschlag.text).toContain("Reset");
+    expect(coach.vorschlag.text).toContain("reset");
   });
 
   it("schlägt bei Stillstand mit passendem Trainingsmax First Set Last vor", () => {
@@ -148,7 +148,7 @@ describe("bankcoach", () => {
       art: "volumen",
       fslKg: { 1: 57.5, 2: 62.5, 3: 65 },
     });
-    expect(coach.vorschlag.text).toContain("Keine Joker-Sätze");
+    expect(coach.vorschlag.text).toContain("No joker sets");
   });
 
   it("rät bei Rückschritt mit passendem Trainingsmax zur Erholung", () => {
@@ -179,7 +179,7 @@ describe("bankcoach", () => {
     });
     expect(coach.lage).toBe("unklar");
     expect(coach.vorschlag.art).toBe("abwarten");
-    expect(coach.vorschlag.text).toContain("1 von 4");
+    expect(coach.vorschlag.text).toContain("1 of 4");
   });
 
   it("schaut nur acht Wochen zurück", () => {
@@ -219,7 +219,7 @@ describe("prognose140", () => {
   it("warnt bei kurzer Spanne", () => {
     const p = prognose140(steigend, "2026-10-14");
     expect(p.verwertbar && p.belastbar).toBe(false);
-    if (p.verwertbar) expect(p.text).toContain("Vorsicht");
+    if (p.verwertbar) expect(p.text).toContain("Careful");
   });
 
   it("nennt kein Datum, wenn es nicht steigt", () => {
@@ -234,13 +234,13 @@ describe("prognose140", () => {
     if (!p.verwertbar) return;
     expect(p.erreichtAm).toBeNull();
     expect(p.imPlan).toBe(false);
-    expect(p.text).toContain("nie");
+    expect(p.text).toContain("never");
   });
 
   it("rechnet nicht, wenn der Trend nicht verwertbar ist", () => {
     const p = prognose140(kraftTrend([{ datum: "2026-10-01", e1rm: 100 }]), "2026-10-14");
     expect(p).toMatchObject({ verwertbar: false });
-    if (!p.verwertbar) expect(p.grund).toContain("Keine Hochrechnung");
+    if (!p.verwertbar) expect(p.grund).toContain("No projection");
   });
 });
 
@@ -276,15 +276,15 @@ describe("Neustart", () => {
     // Vier Tage, aber nur elf Tage Spanne: noch kein Urteil statt "fällt".
     expect(urteil.verwertbar).toBe(false);
     if (!urteil.verwertbar) {
-      expect(urteil.grund).toContain("noch 10 Tage");
-      expect(urteil.grund).toContain("Gewertet ab dem 02.10.2026");
+      expect(urteil.grund).toContain("10 days to go");
+      expect(urteil.grund).toContain("Counted from 02/10/2026");
     }
   });
 
   it("schreibt den Hinweis auch in ein verwertbares Urteil", () => {
     const urteil = kraftTrend(e1rmReihe(LEG_EXTENSION), "2026-09-01");
     expect(urteil.verwertbar).toBe(true);
-    if (urteil.verwertbar) expect(urteil.text).toContain("Gewertet ab dem 01.09.2026");
+    if (urteil.verwertbar) expect(urteil.text).toContain("Counted from 01/09/2026");
   });
 
   it("greift in der Rangliste je Übung", () => {

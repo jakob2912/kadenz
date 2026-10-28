@@ -58,7 +58,7 @@ export function lageHeute(e: {
 
   if (e.bank) {
     if (e.bank.lage === "steht" || e.bank.lage === "faellt") {
-      schritte.push(`Bench is ${e.bank.lage === "steht" ? "stalling" : "going down"}: ${e.bank.vorschlag}`);
+      schritte.push(`Bench: ${e.bank.vorschlag}`);
     } else if (e.bank.zielImPlan === false) {
       schritte.push(`Bench: 140 kg by the end of 2027 is out of reach at the current pace. ${e.bank.vorschlag}`);
     }

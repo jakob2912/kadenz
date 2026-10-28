@@ -86,7 +86,7 @@ export function assessTrend(
     return {
       usable: false,
       reason: "zu-wenig-daten",
-      detail: `${entries.length} von 7 Messungen — für einen Wochenschnitt zu wenig.`,
+      detail: `${entries.length} of 7 measurements — too few for a weekly average.`,
     };
   }
 
@@ -109,8 +109,8 @@ export function assessTrend(
         usable: false,
         reason: "luecke",
         detail:
-          `${missing} Tage ohne Messung, danach noch keine drei stabilen Tage. ` +
-          `Was du gerade siehst, ist Wasser und Glykogen — kein Gewebe. Ich rechne noch nicht.`,
+          `${missing} days without a measurement, and no three stable days since. ` +
+          `What you see right now is water and glycogen — not tissue. Not calculating yet.`,
       };
     }
     // Stabilisiert: nur die neue Messreihe zählt.
@@ -122,7 +122,7 @@ export function assessTrend(
       usable: false,
       reason: "nicht-stabilisiert",
       detail:
-        "Sprung im Verlauf, der physiologisch kein Gewebe sein kann. Ich warte drei stabile Tage ab.",
+        "A jump in the data that can't physiologically be tissue. Waiting for three stable days.",
     };
   }
 
@@ -179,7 +179,7 @@ const MIN_SPAN_DAYS = 14;
 function rate(entries: WeightEntry[]): TrendVerdict {
   const half = Math.floor(entries.length / 2);
   if (half < 1) {
-    return { usable: false, reason: "zu-wenig-daten", detail: "Zu kurze Messreihe." };
+    return { usable: false, reason: "zu-wenig-daten", detail: "Too few measurements." };
   }
 
   const totalSpan = daysBetween(entries[0].date, entries[entries.length - 1].date);
@@ -188,9 +188,9 @@ function rate(entries: WeightEntry[]): TrendVerdict {
       usable: false,
       reason: "zu-kurz",
       detail:
-        `Erst ${totalSpan} Tage seit der letzten belastbaren Basis. ` +
-        `Unter ${MIN_SPAN_DAYS} Tagen ist die Tagesschwankung größer als der Trend — ` +
-        `jede Rate wäre geraten. Noch ${MIN_SPAN_DAYS - totalSpan} Tage.`,
+        `Only ${totalSpan} days since the last reliable baseline. ` +
+        `Below ${MIN_SPAN_DAYS} days the daily fluctuation is bigger than the trend — ` +
+        `any rate would be a guess. ${MIN_SPAN_DAYS - totalSpan} days to go.`,
     };
   }
 
@@ -232,10 +232,10 @@ export function readiness(
   const drivers: string[] = [];
 
   const sleep = clamp((now.sleepMin / base.sleepMin) * 100, 0, 110);
-  if (now.sleepMin < base.sleepMin - 45) drivers.push("zu wenig Schlaf");
+  if (now.sleepMin < base.sleepMin - 45) drivers.push("too little sleep");
 
   const deep = clamp((now.deepMin / base.deepMin) * 100, 0, 110);
-  if (now.deepMin < base.deepMin - 20) drivers.push("wenig Tiefschlaf");
+  if (now.deepMin < base.deepMin - 20) drivers.push("little deep sleep");
 
   // Ruhepuls: jeder Schlag über Baseline kostet 8 Punkte
   const hrElevation = now.restingHr - base.restingHr;
@@ -243,13 +243,13 @@ export function readiness(
   if (hrElevation > 2) {
     // Baseline ist ein Mittelwert und damit fast immer gebrochen —
     // ohne Rundung steht hier "12.100000000000001 über Normal".
-    drivers.push(`Ruhepuls ${hrElevation.toFixed(1)} über Normal`);
+    drivers.push(`resting HR ${hrElevation.toFixed(1)} above normal`);
   }
 
   // HRV reagiert am empfindlichsten auf Systembelastung — entsprechend steil bewertet
   const hrvRatio = now.hrv / base.hrv;
   const hrv = clamp(100 + (hrvRatio - 1) * 140, 0, 110);
-  if (hrvRatio < 0.85) drivers.push("HRV gedrückt");
+  if (hrvRatio < 0.85) drivers.push("HRV suppressed");
 
   let score = Math.round(sleep * 0.25 + deep * 0.15 + hr * 0.3 + hrv * 0.3);
 
@@ -307,7 +307,7 @@ export function progression(
     return {
       kg: current + delta,
       delta,
-      reason: `Ein Satz lief mit ${belowFloor.reps} Wiederholungen — unter deiner Untergrenze von ${minReps}.`,
+      reason: `One set had ${belowFloor.reps} reps — below your floor of ${minReps}.`,
     };
   }
 
@@ -315,7 +315,7 @@ export function progression(
     return {
       kg: current + step,
       delta: step,
-      reason: `${lastSets[0].reps} Wiederholungen im ersten Satz — Obergrenze erreicht.`,
+      reason: `${lastSets[0].reps} reps in the first set — top of the range reached.`,
     };
   }
 
@@ -336,7 +336,7 @@ export function progression(
     return {
       kg: current + step,
       delta: step,
-      reason: `${lastSets[0].reps} Wiederholungen mit ${rir} in Reserve im ersten Satz — die Obergrenze war drin.`,
+      reason: `${lastSets[0].reps} reps with ${rir} in reserve in the first set — the top of the range was there.`,
     };
   }
 
@@ -535,9 +535,9 @@ export function kalorienAnpassung(opts: {
       return {
         art: "kein-vorschlag",
         grund:
-          `Das Ziel steht seit ${tage === 1 ? "einem Tag" : `${tage} Tagen`}. ` +
-          `Unter ${MIN_TAGE_ZWISCHEN_ANPASSUNGEN} Tagen ist nicht zu erkennen, ob die Änderung ` +
-          `gewirkt hat oder ob das nur Wasser war — noch ${rest === 1 ? "ein Tag" : `${rest} Tage`}.`,
+          `The target has been in place for ${tage === 1 ? "one day" : `${tage} days`}. ` +
+          `Below ${MIN_TAGE_ZWISCHEN_ANPASSUNGEN} days you can't tell whether the change ` +
+          `worked or whether it was just water — ${rest === 1 ? "one more day" : `${rest} more days`}.`,
       };
     }
     reihe = opts.gewicht.filter((e) => e.date >= letzteAnpassung);
@@ -550,15 +550,15 @@ export function kalorienAnpassung(opts: {
 
   /* "steigt" stimmt nur im Aufbau. Im Mini-Cut ist der Korridor negativ, und
      ein Satz wie "steigt mit -0,60 kg pro Woche" wäre schlicht falsch. */
-  const bewegung = rate >= 0 ? "steigt" : "fällt";
+  const bewegung = rate >= 0 ? "is rising" : "is falling";
   const betrag = komma(Math.abs(rate), 2);
 
   if (rate >= korridor.unten && rate <= korridor.oben) {
     return {
       art: "kein-vorschlag",
       grund:
-        `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — im Zielkorridor von ` +
-        `${komma(korridor.unten, 2)} bis ${komma(korridor.oben, 2)}. Am Ziel ist nichts zu ändern.`,
+        `Your average ${bewegung} by ${betrag} kg per week — within the target corridor of ` +
+        `${komma(korridor.unten, 2)} to ${komma(korridor.oben, 2)}. Nothing to change.`,
     };
   }
 
@@ -575,18 +575,18 @@ export function kalorienAnpassung(opts: {
 
   const kopf =
     richtung === "hoch"
-      ? `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — unter dem Zielkorridor ` +
-        `von ${komma(korridor.unten, 2)} bis ${komma(korridor.oben, 2)}.`
-      : `Dein Schnitt ${bewegung} mit ${betrag} kg pro Woche — über deiner Obergrenze ` +
-        `von ${komma(korridor.oben, 2)}.` +
-        (korridor.oben > 0 ? " Ab hier geht der Überschuss vor allem ins Fett." : "");
+      ? `Your average ${bewegung} by ${betrag} kg per week — below the target corridor ` +
+        `of ${komma(korridor.unten, 2)} to ${komma(korridor.oben, 2)}.`
+      : `Your average ${bewegung} by ${betrag} kg per week — above your upper limit ` +
+        `of ${komma(korridor.oben, 2)}.` +
+        (korridor.oben > 0 ? " From here the surplus mostly goes to fat." : "");
 
   const rechnung =
-    `${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "mehr" : "weniger"} ` +
-    `bringen dich rechnerisch auf ${komma(erwarteteRate, 2)} kg pro Woche. ` +
-    `Sie ${richtung === "hoch" ? "gehen in die" : "kommen aus den"} Kohlenhydrate` +
-    `${richtung === "hoch" ? "" : "n"}: ${aktuell.kohlenhydrateG} → ${kohlenhydrateNeu} g. ` +
-    `Eiweiß und Fett bleiben.`;
+    `${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "more" : "less"} ` +
+    `should take you to ${komma(erwarteteRate, 2)} kg per week. ` +
+    `${richtung === "hoch" ? "They go into" : "They come out of"} carbs` +
+    `: ${aktuell.kohlenhydrateG} → ${kohlenhydrateNeu} g. ` +
+    `Protein and fat stay the same.`;
 
   return {
     art: "vorschlag",
@@ -627,9 +627,9 @@ function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string
   if (proKg >= EIWEISS_G_PRO_KG_UNTERGRENZE) return null;
 
   return (
-    `Eiweiß bleibt bei ${eiweissG} g — bei ${komma(koerpergewichtKg, 1)} kg sind das nur noch ` +
-    `${komma(proKg, 2)} g/kg. Ab hier gehört der nächste Schritt ins Eiweiß statt in die ` +
-    `Kohlenhydrate. Das ist eine Frage an Fitnessbell, nicht an mich.`
+    `Protein stays at ${eiweissG} g — at ${komma(koerpergewichtKg, 1)} kg that's only ` +
+    `${komma(proKg, 2)} g/kg. From here the next step belongs in protein rather than ` +
+    `carbs. That's a question for Fitnessbell, not for me.`
   );
 }
 
@@ -722,18 +722,18 @@ export function briefing(e: BriefingEingabe): Briefing {
      Treiber nennt, zu dem darunter kein Vorschlag steht. */
   if (schlafDelta < -45) {
     vorschlaege.push({
-      text: `Geh heute rund ${Math.round(-schlafDelta / 5) * 5} Minuten früher ins Bett als gestern.`,
-      grund: `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)}.`,
+      text: `Go to bed about ${Math.round(-schlafDelta / 5) * 5} minutes earlier than yesterday.`,
+      grund: `${hm(heute.sleepMin)} instead of your usual ${hm(baseline.sleepMin)}.`,
     });
   }
 
   if (tiefDelta < -20) {
     vorschlaege.push({
-      text: "Heute nichts Schweres mehr in den letzten drei Stunden vor dem Schlafen, und das Training nicht in den späten Abend schieben.",
+      text: "Nothing heavy to eat in the last three hours before bed today, and don't push training into the late evening.",
       grund:
-        `${Math.round(heute.deepMin)} statt ${Math.round(baseline.deepMin)} Minuten Tiefschlaf. ` +
-        `Woran es lag, misst die Uhr nicht — Alkohol, spätes Essen und ein spätes Training ` +
-        `sind die drei üblichen, und alle drei kannst du heute anders machen.`,
+        `${Math.round(heute.deepMin)} instead of ${Math.round(baseline.deepMin)} minutes of deep sleep. ` +
+        `The watch doesn't measure why — alcohol, late meals and late training ` +
+        `are the usual three, and you can change all three today.`,
     });
   }
 
@@ -743,21 +743,21 @@ export function briefing(e: BriefingEingabe): Briefing {
          herausnehmen ließe. Der Wert ist trotzdem eine Ansage — nur eine für
          die nächste Einheit. */
       text: e.trainingHeute
-        ? "Nimm heute Volumen raus statt Gewicht — einen Satz weniger je Übung, die Gewichte lässt du stehen."
-        : "Geh die nächste Einheit mit einem Satz weniger je Übung an, die Gewichte lässt du stehen.",
+        ? "Cut volume today, not weight — one set less per exercise, keep the weights."
+        : "Do the next session with one set less per exercise, keep the weights.",
       grund:
-        `HRV bei ${Math.round(hrvAnteil * 100)} % deines Normalwerts. Das ist der Marker, der ` +
-        `am empfindlichsten auf Gesamtbelastung reagiert. Weniger Sätze senken sie, ` +
-        `leichtere Gewichte kosten dich nur den Reiz.`,
+        `HRV at ${Math.round(hrvAnteil * 100)} % of your normal. It's the marker that ` +
+        `reacts most sensitively to overall load. Fewer sets bring it down; ` +
+        `lighter weights only cost you the stimulus.`,
     });
   }
 
   if (e.trainingHeute && e.stunde >= KOFFEIN_CUTOFF_STUNDE) {
     vorschlaege.push({
-      text: "Heute ohne Koffein trainieren.",
+      text: "Train without caffeine today.",
       grund:
-        `Es ist nach ${KOFFEIN_CUTOFF_STUNDE}:00, deinem Cutoff. Jetzt noch genommen steht es ` +
-        `dir nachts im Weg — und der Schlaf ist der Hebel, an dem alles andere hängt.`,
+        `It's past ${KOFFEIN_CUTOFF_STUNDE}:00, your cutoff. Taken now it gets in your way ` +
+        `tonight — and sleep is the lever everything else depends on.`,
     });
   }
 
@@ -785,22 +785,22 @@ function schlafSatz(
     tageAlt < 1
       ? ""
       : ausAblage
-        ? `Nacht auf ${tag}.${monat}., die letzte, die Google übertragen hat. Damals: `
-        : `Nacht auf ${tag}.${monat}., nicht heute Nacht — Uhr synchronisieren lassen. Damals: `;
+        ? `Night of ${tag}/${monat}, the last one Google transferred. Back then: `
+        : `Night of ${tag}/${monat}, not last night — let the watch sync. Back then: `;
 
   const dauer =
     Math.abs(schlafDelta) < 15
-      ? `${hm(heute.sleepMin)}, praktisch genau deine übliche Länge`
+      ? `${hm(heute.sleepMin)}, practically your usual length`
       : schlafDelta < 0
-        ? `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)} — ${Math.round(-schlafDelta)} Minuten weniger`
-        : `${hm(heute.sleepMin)} statt deiner üblichen ${hm(baseline.sleepMin)} — ${Math.round(schlafDelta)} Minuten mehr`;
+        ? `${hm(heute.sleepMin)} instead of your usual ${hm(baseline.sleepMin)} — ${Math.round(-schlafDelta)} minutes less`
+        : `${hm(heute.sleepMin)} instead of your usual ${hm(baseline.sleepMin)} — ${Math.round(schlafDelta)} minutes more`;
 
   const tief =
     Math.abs(tiefDelta) < 10
-      ? `Tiefschlaf ${Math.round(heute.deepMin)} Minuten, auf Referenzniveau.`
+      ? `Deep sleep ${Math.round(heute.deepMin)} minutes, at baseline.`
       : tiefDelta < 0
-        ? `Tiefschlaf ${Math.round(heute.deepMin)} statt ${Math.round(baseline.deepMin)} Minuten.`
-        : `Tiefschlaf ${Math.round(heute.deepMin)} Minuten, ${Math.round(tiefDelta)} über Referenz.`;
+        ? `Deep sleep ${Math.round(heute.deepMin)} instead of ${Math.round(baseline.deepMin)} minutes.`
+        : `Deep sleep ${Math.round(heute.deepMin)} minutes, ${Math.round(tiefDelta)} above baseline.`;
 
   return `${kopf}${dauer}. ${tief}`;
 }
@@ -817,12 +817,12 @@ function schlafSatz(
 function befundSatz(urteil: ReadinessVerdict, trainingHeute: boolean): string {
   if (!trainingHeute) {
     if (urteil.band === "gut") {
-      return "Rest Day, und deine Werte sind auf Normalniveau.";
+      return "Rest day, and your values are at normal level.";
     }
     if (urteil.allowLifting) {
-      return "Rest Day — trifft sich gut, deine Werte liegen unter deinem Normalwert.";
+      return "Rest day — good timing, your values are below your normal.";
     }
-    return "Rest Day, und deine Werte sagen dasselbe: heute nichts draufpacken.";
+    return "Rest day, and your values say the same: don't add anything today.";
   }
 
   if (urteil.band === "gut") {

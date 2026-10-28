@@ -121,7 +121,7 @@ export function EinstellungenLink() {
   return (
     <Link
       href="/einstellungen"
-      aria-label="Einstellungen"
+      aria-label="Settings"
       className="-mr-2 grid h-11 w-11 shrink-0 place-items-center rounded-md text-fg-dim transition
                  active:bg-surface-2 active:text-fg md:hover:text-fg"
     >

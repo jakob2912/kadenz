@@ -178,7 +178,7 @@ export function kraftTrend(reihe: E1rmPunkt[], neustartAb?: string): KraftUrteil
      Urteil sagt es dazu. */
   const ab = reihe.filter((p) => p.datum >= neustartAb);
   const urteil = trendOhneNeustart(ab);
-  const zusatz = ` Gewertet ab dem ${deutschesDatum(neustartAb)} — davor lief die Übung mit anderer Technik oder anderem Gerät.`;
+  const zusatz = ` Counted from ${deutschesDatum(neustartAb)} — before that the exercise used a different technique or machine.`;
 
   return urteil.verwertbar
     ? { ...urteil, text: urteil.text + zusatz, neustartAb }
@@ -186,7 +186,7 @@ export function kraftTrend(reihe: E1rmPunkt[], neustartAb?: string): KraftUrteil
 }
 
 function deutschesDatum(iso: string): string {
-  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
 }
 
 function trendOhneNeustart(reihe: E1rmPunkt[]): KraftUrteil {
@@ -194,8 +194,8 @@ function trendOhneNeustart(reihe: E1rmPunkt[]): KraftUrteil {
     return {
       verwertbar: false,
       grund:
-        `${reihe.length} von ${MIN_PUNKTE} Trainingstagen mit verwertbaren Sätzen. ` +
-        `Für einen Trend zu wenig.`,
+        `${reihe.length} of ${MIN_PUNKTE} training days with usable sets. ` +
+        `Too few for a trend.`,
     };
   }
 
@@ -206,9 +206,9 @@ function trendOhneNeustart(reihe: E1rmPunkt[]): KraftUrteil {
     return {
       verwertbar: false,
       grund:
-        `Erst ${spanneTage} Tage Historie. Unter ${MIN_SPANNE_TAGE} Tagen ist die ` +
-        `Schwankung von Einheit zu Einheit größer als der Trend — ` +
-        `noch ${MIN_SPANNE_TAGE - spanneTage} Tage.`,
+        `Only ${spanneTage} days of history. Below ${MIN_SPANNE_TAGE} days the ` +
+        `session-to-session fluctuation is bigger than the trend — ` +
+        `${MIN_SPANNE_TAGE - spanneTage} days to go.`,
     };
   }
 
@@ -252,17 +252,17 @@ function urteilsText(
   const betrag = komma(Math.abs(prozent), 1);
 
   if (richtung === "steigt") {
-    return `Läuft. ${betrag} % mehr geschätztes Maximum auf vier Wochen gerechnet.`;
+    return `Rising. ${betrag} % more estimated max, projected over four weeks.`;
   }
   if (richtung === "faellt") {
     return (
-      `Geht zurück — ${betrag} % auf vier Wochen. Entweder ist das Gewicht zu ` +
-      `früh gestiegen, oder die Erholung trägt es gerade nicht.`
+      `Going down — ${betrag} % over four weeks. Either the weight went up too ` +
+      `early, or recovery isn't supporting it right now.`
     );
   }
   return (
-    `Steht. ${betrag} % auf vier Wochen, das ist innerhalb der Schwankung. ` +
-    `Hier passiert im Moment nichts.`
+    `Stalling. ${betrag} % over four weeks, which is within the fluctuation. ` +
+    `Nothing is happening here at the moment.`
   );
 }
 
@@ -368,11 +368,11 @@ export function neustartVorschlaege(
           nachherKg: reihe[i].e1rm,
           prozent,
           text:
-            `Am ${deutschesDatum(reihe[i].datum)} lag das geschätzte Maximum ` +
-            `${komma(Math.abs(prozent), 1)} % unter dem Besten der drei Einheiten davor ` +
-            `(${komma(reihe[i].e1rm, 1)} statt ${komma(vorher, 1)} kg). War das eine ` +
-            `Umstellung von Technik oder Gerät, gehört hier ein Neustart hin — sonst ` +
-            `liest der Trend den bewussten Schritt zurück als Kraftverlust.`,
+            `On ${deutschesDatum(reihe[i].datum)} the estimated max was ` +
+            `${komma(Math.abs(prozent), 1)} % below the best of the three sessions before ` +
+            `(${komma(reihe[i].e1rm, 1)} instead of ${komma(vorher, 1)} kg). If that was a ` +
+            `change of technique or machine, a restart belongs here — otherwise ` +
+            `the trend reads the deliberate step back as lost strength.`,
         };
         /* Die nächsten Einheiten vergleichen noch gegen die Zeit vor dem
            Einbruch und lägen ebenfalls tief. Vorgeschlagen wird aber der
@@ -792,8 +792,8 @@ export function naechsterTm(
       tmNeu: tmAlt,
       richtung: "bleibt",
       begruendung:
-        "Kein AMRAP-Satz geloggt. Ohne den fehlt die Grundlage, den Trainingsmax zu " +
-        "bewegen — er bleibt, bis wieder einer dasteht.",
+        "No AMRAP set logged. Without it there's no basis for moving the training max " +
+        "— it stays until there is one again.",
     };
   }
 
@@ -802,8 +802,8 @@ export function naechsterTm(
       tmNeu: tmAlt,
       richtung: "bleibt",
       begruendung:
-        `Der AMRAP-Satz lief mit ${amrapSatz.reps} statt ${sollWdh} Wiederholungen. ` +
-        `Der Trainingsmax bleibt bei ${komma(tmAlt, 1)} kg — noch ein Zyklus auf demselben Stand.`,
+        `The AMRAP set had ${amrapSatz.reps} instead of ${sollWdh} reps. ` +
+        `The training max stays at ${komma(tmAlt, 1)} kg — one more cycle at the same level.`,
     };
   }
 
@@ -814,8 +814,8 @@ export function naechsterTm(
       tmNeu: tmAlt,
       richtung: "bleibt",
       begruendung:
-        `${amrapSatz.reps} Wiederholungen sind zu viele, um daraus ein Maximum zu schätzen. ` +
-        `Der Trainingsmax bleibt stehen — wenn das öfter vorkommt, ist er zu niedrig angesetzt.`,
+        `${amrapSatz.reps} reps are too many to estimate a max from. ` +
+        `The training max stays — if that happens more often, it's set too low.`,
     };
   }
 
@@ -825,10 +825,10 @@ export function naechsterTm(
       tmNeu,
       richtung: "zurueck",
       begruendung:
-        `Aus ${komma(amrapSatz.kg, 1)} kg × ${amrapSatz.reps} rechnet sich ein Maximum von ` +
-        `${komma(gemessen, 1)} kg — weniger als der Trainingsmax von ${komma(tmAlt, 1)} kg. ` +
-        `Der soll deutlich unter dem liegen, was einmal geht, nicht darüber. Zurück auf ` +
-        `${komma(tmNeu, 1)} kg, damit die Prozente wieder stimmen.`,
+        `${komma(amrapSatz.kg, 1)} kg × ${amrapSatz.reps} works out to a max of ` +
+        `${komma(gemessen, 1)} kg — less than the training max of ${komma(tmAlt, 1)} kg. ` +
+        `It should sit well below what you can do once, not above it. Back to ` +
+        `${komma(tmNeu, 1)} kg so the percentages are right again.`,
     };
   }
 
@@ -837,7 +837,7 @@ export function naechsterTm(
     tmNeu,
     richtung: "hoch",
     begruendung:
-      `${amrapSatz.reps} Wiederholungen bei ${komma(amrapSatz.kg, 1)} kg — Soll waren ` +
-      `${sollWdh}. Trainingsmax ${komma(tmAlt, 1)} → ${komma(tmNeu, 1)} kg.`,
+      `${amrapSatz.reps} reps at ${komma(amrapSatz.kg, 1)} kg — target was ` +
+      `${sollWdh}. Training max ${komma(tmAlt, 1)} → ${komma(tmNeu, 1)} kg.`,
   };
 }

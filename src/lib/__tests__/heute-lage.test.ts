@@ -29,6 +29,6 @@ describe("lageHeute", () => {
       sollKg: 84,
       bank: { lage: "steht", vorschlag: "Add First Set Last.", zielImPlan: true },
     });
-    expect(l.schritte).toEqual(["Bench is stalling: Add First Set Last."]);
+    expect(l.schritte).toEqual(["Bench: Add First Set Last."]);
   });
 });

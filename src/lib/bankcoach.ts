@@ -272,8 +272,8 @@ export function bankcoach(eingabe: {
       vorschlag: {
         art: "abwarten",
         text:
-          `Für ein Urteil zu wenig schwere Tage: ${urteil.grund} Bis dahin nach Plan ` +
-          `weiter — gezählt werden nur die Tage mit der Welle, nicht die leichten dazwischen.`,
+          `Too few heavy days for a verdict: ${urteil.grund} Until then keep following the plan ` +
+          `— only the days with the wave count, not the light days in between.`,
       },
     };
   }
@@ -288,17 +288,17 @@ export function bankcoach(eingabe: {
       vorschlag: {
         art: "weiter",
         text:
-          `Die schweren Tage legen zu — ${zahl(urteil.prozentPro4Wochen)} % auf vier Wochen, ` +
-          `von ${zahl(urteil.von)} auf ${zahl(urteil.auf)} kg geschätztes Maximum. ` +
-          `Nichts ändern, das Programm tut, wofür es da ist.`,
+          `The heavy days are improving — ${zahl(urteil.prozentPro4Wochen)} % over four weeks, ` +
+          `from ${zahl(urteil.von)} to ${zahl(urteil.auf)} kg estimated max. ` +
+          `Change nothing, the program is doing its job.`,
       },
     };
   }
 
   const wie =
     lage === "steht"
-      ? `Die schweren Tage stehen seit ${urteil.spanneTage} Tagen (${zahl(urteil.prozentPro4Wochen)} % auf vier Wochen).`
-      : `Die schweren Tage gehen zurück — ${zahl(Math.abs(urteil.prozentPro4Wochen))} % auf vier Wochen über ${urteil.spanneTage} Tage.`;
+      ? `The heavy days have stalled for ${urteil.spanneTage} days (${zahl(urteil.prozentPro4Wochen)} % over four weeks).`
+      : `The heavy days are going down — ${zahl(Math.abs(urteil.prozentPro4Wochen))} % over four weeks across ${urteil.spanneTage} days.`;
 
   if (tmKg !== null && schaetzungKg !== null) {
     const passend = schaetzungKg * TM_ANTEIL;
@@ -311,12 +311,12 @@ export function bankcoach(eingabe: {
           art: "tm_zurueck",
           tmNeuKg,
           text:
-            `${wie} Der Trainingsmax von ${zahl(tmKg)} kg behauptet ein Maximum von ` +
-            `${zahl(tmKg / TM_ANTEIL)} kg, die schweren Sätze der letzten Wochen tragen ` +
-            `${zahl(schaetzungKg)} kg. 5/3/1 rechnet mit 90 % davon, also ${zahl(tmNeuKg)} kg. ` +
-            `Wendlers Antwort auf einen Stillstand ist der Reset: mit ${zahl(tmNeuKg)} kg neu ` +
-            `ansetzen, dann tragen die AMRAP-Sätze wieder Wiederholungen über dem Soll. ` +
-            `Gesetzt wird erst nach deinem Ja.`,
+            `${wie} The training max of ${zahl(tmKg)} kg implies a max of ` +
+            `${zahl(tmKg / TM_ANTEIL)} kg; the heavy sets of recent weeks support ` +
+            `${zahl(schaetzungKg)} kg. 5/3/1 works with 90 % of that, i.e. ${zahl(tmNeuKg)} kg. ` +
+            `Wendler's answer to a stall is the reset: start again at ${zahl(tmNeuKg)} kg, ` +
+            `and the AMRAP sets carry reps above target again. ` +
+            `Only set after your yes.`,
         },
       };
     }
@@ -334,12 +334,12 @@ export function bankcoach(eingabe: {
           art: "volumen",
           fslKg,
           text:
-            `${wie} Der Trainingsmax passt zu den Sätzen (${Math.round((tmAnteil ?? 0) * 100)} % ` +
-            `vom geschätzten Maximum), also fehlt Reiz, nicht Erholung. Trainingsmax halten und ` +
-            `am TM-Tag nach dem AMRAP-Satz 5 × 5 mit dem Gewicht des ersten Satzes anhängen ` +
-            `(First Set Last): ${zahl(fslKg[1])} kg in Woche 1, ${zahl(fslKg[2])} kg in Woche 2, ` +
-            `${zahl(fslKg[3])} kg in Woche 3. Keine Joker-Sätze — Kadenz liest den schwersten ` +
-            `Satz des TM-Tags als AMRAP-Satz.`,
+            `${wie} The training max fits the sets (${Math.round((tmAnteil ?? 0) * 100)} % ` +
+            `of the estimated max), so it's missing stimulus, not recovery. Keep the training max and ` +
+            `on TM day add 5 × 5 with the first set's weight after the AMRAP set ` +
+            `(First Set Last): ${zahl(fslKg[1])} kg in week 1, ${zahl(fslKg[2])} kg in week 2, ` +
+            `${zahl(fslKg[3])} kg in week 3. No joker sets — Kadenz reads the heaviest ` +
+            `set of the TM day as the AMRAP set.`,
         },
       };
     }
@@ -352,15 +352,15 @@ export function bankcoach(eingabe: {
       lage === "steht"
         ? {
             art: "abwarten",
-            text: `${wie} Ohne Trainingsmax lässt sich nicht sagen, ob er zu hoch liegt — erst eintragen.`,
+            text: `${wie} Without a training max there's no telling whether it's too high — enter it first.`,
           }
         : {
             art: "erholung",
             text:
-              `${wie} Der Trainingsmax liegt nicht zu hoch, also eher Erholung als Programm: ` +
-              `Trainingsmax halten, keine Zusatzsätze, den Single am leichten Tag weglassen, ` +
-              `bis die schweren Tage wieder stehen. Schlaf und Kalorien prüfen — im Aufbau ` +
-              `sollte die Kraft nicht fallen.`,
+              `${wie} The training max isn't too high, so it's recovery rather than the program: ` +
+              `keep the training max, no extra sets, skip the single on the light day ` +
+              `until the heavy days hold again. Check sleep and calories — in a bulk ` +
+              `strength shouldn't drop.`,
           },
   };
 }
@@ -414,7 +414,7 @@ export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
   if (!urteil.verwertbar) {
     return {
       verwertbar: false,
-      grund: `Keine Hochrechnung: ${urteil.grund}`,
+      grund: `No projection: ${urteil.grund}`,
     };
   }
 
@@ -435,21 +435,21 @@ export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
   }
   const imPlan = erreichtAm !== null && erreichtAm <= ZIEL_DATUM;
 
-  const tempo = `Gemessen: ${zahl(kgPro4Wochen)} kg auf vier Wochen (${zahl(urteil.prozentPro4Wochen)} %), geschätztes Maximum derzeit ${zahl(aktuellKg)} kg.`;
-  const noetig = `Für ${ZIEL_KG} kg bis Ende 2027 braucht es ${zahl(noetigKgProMonat)} kg im Monat, also ${zahl(noetigProzentPro4Wochen)} % auf vier Wochen.`;
+  const tempo = `Measured: ${zahl(kgPro4Wochen)} kg over four weeks (${zahl(urteil.prozentPro4Wochen)} %), estimated max currently ${zahl(aktuellKg)} kg.`;
+  const noetig = `${ZIEL_KG} kg by the end of 2027 needs ${zahl(noetigKgProMonat)} kg per month, i.e. ${zahl(noetigProzentPro4Wochen)} % over four weeks.`;
   const wann =
     fehlt === 0
-      ? `Das geschätzte Maximum liegt schon bei ${ZIEL_KG} kg — fehlt nur noch der saubere Single.`
+      ? `The estimated max is already at ${ZIEL_KG} kg — only the clean single is missing.`
       : erreichtAm === null
         ? kgPro4Wochen <= 0
-          ? `Bei diesem Tempo kommen ${ZIEL_KG} kg nie — die schweren Tage steigen gerade nicht.`
-          : `Bei diesem Tempo liegen ${ZIEL_KG} kg mehr als zehn Jahre entfernt.`
+          ? `At this pace ${ZIEL_KG} kg never comes — the heavy days aren't rising right now.`
+          : `At this pace ${ZIEL_KG} kg is more than ten years away.`
         : imPlan
-          ? `Bei diesem Tempo stünden ${ZIEL_KG} kg um den ${erreichtAm.slice(8, 10)}.${erreichtAm.slice(5, 7)}.${erreichtAm.slice(0, 4)} — vor dem Zieldatum. Kraft wächst aber mit der Zeit langsamer; die Gerade ist eher zu optimistisch.`
-          : `Bei diesem Tempo stünden ${ZIEL_KG} kg erst um den ${erreichtAm.slice(8, 10)}.${erreichtAm.slice(5, 7)}.${erreichtAm.slice(0, 4)} — nach dem Zieldatum.`;
+          ? `At this pace ${ZIEL_KG} kg would come around ${erreichtAm.slice(8, 10)}/${erreichtAm.slice(5, 7)}/${erreichtAm.slice(0, 4)} — before the target date. Strength grows more slowly over time though; the straight line is rather optimistic.`
+          : `At this pace ${ZIEL_KG} kg would only come around ${erreichtAm.slice(8, 10)}/${erreichtAm.slice(5, 7)}/${erreichtAm.slice(0, 4)} — after the target date.`;
   const vorsicht = belastbar
     ? ""
-    : ` Vorsicht: gerechnet aus nur ${urteil.spanneTage} Tagen — auf ${Math.round(restTage / 30.44)} Monate hochgerechnet ist das eine grobe Richtung, keine Vorhersage.`;
+    : ` Careful: calculated from only ${urteil.spanneTage} days — projected over ${Math.round(restTage / 30.44)} months that's a rough direction, not a prediction.`;
 
   return {
     verwertbar: true,

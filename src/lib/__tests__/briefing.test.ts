@@ -33,19 +33,19 @@ describe("briefing", () => {
     const b = bau({ sleepMin: 370 });
     expect(b.schlaf).toContain("6 h 10");
     expect(b.schlaf).toContain("7 h 05");
-    expect(b.schlaf).toContain("55 Minuten weniger");
+    expect(b.schlaf).toContain("55 minutes less");
   });
 
   it("beziffert, wie viel früher ins Bett — statt 'schlaf mehr'", () => {
     const b = bau({ sleepMin: 370 });
-    const schlafRat = b.vorschlaege.find((v) => v.text.includes("ins Bett"));
-    expect(schlafRat?.text).toContain("55 Minuten früher");
+    const schlafRat = b.vorschlaege.find((v) => v.text.includes("to bed"));
+    expect(schlafRat?.text).toContain("55 minutes earlier");
   });
 
   it("sagt beim Tiefschlaf dazu, dass die Uhr die Ursache nicht misst", () => {
     const b = bau({ deepMin: 40 });
-    const tief = b.vorschlaege.find((v) => v.grund.includes("Tiefschlaf"));
-    expect(tief?.grund).toContain("misst die Uhr nicht");
+    const tief = b.vorschlaege.find((v) => v.grund.includes("deep sleep"));
+    expect(tief?.grund).toContain("doesn't measure why");
   });
 
   it("spricht am Rest Day keine Freigabe fürs Krafttraining aus", () => {
@@ -54,9 +54,9 @@ describe("briefing", () => {
        den Rest Day zu überspringen. */
     for (const werte of [{}, { restingHr: 56 }, { hrv: 40, restingHr: 60, sleepMin: 300 }]) {
       const b = bau(werte, { trainingHeute: false });
-      expect(b.befund).toContain("Rest Day");
-      expect(b.befund).not.toContain("Krafttraining");
-      expect(b.befund).not.toContain("Freigabe");
+      expect(b.befund).toContain("Rest day");
+      expect(b.befund).not.toContain("lifting");
+      expect(b.befund).not.toContain("train as planned");
     }
   });
 
@@ -64,25 +64,25 @@ describe("briefing", () => {
     // Heute gibt es kein Volumen, aus dem sich etwas herausnehmen ließe.
     const b = bau({ hrv: 54 }, { trainingHeute: false });
     const hrvRat = b.vorschlaege.find((v) => v.grund.includes("HRV"));
-    expect(hrvRat?.text).toContain("nächste Einheit");
-    expect(hrvRat?.text).not.toContain("Heute");
+    expect(hrvRat?.text).toContain("next session");
+    expect(hrvRat?.text).not.toContain("today");
   });
 
   it("nimmt bei gedrückter HRV Volumen raus, nicht Gewicht", () => {
     const b = bau({ hrv: 54 });
     const hrvRat = b.vorschlaege.find((v) => v.grund.includes("HRV"));
-    expect(hrvRat?.text).toContain("Volumen raus statt Gewicht");
+    expect(hrvRat?.text).toContain("Cut volume today, not weight");
   });
 
   it("meldet den Koffein-Cutoff nur an Trainingstagen nach 15 Uhr", () => {
     const ohne = bau({}, { trainingHeute: true, stunde: 14 });
-    expect(ohne.vorschlaege.some((v) => v.text.includes("Koffein"))).toBe(false);
+    expect(ohne.vorschlaege.some((v) => v.text.includes("caffeine"))).toBe(false);
 
     const ruhetag = bau({}, { trainingHeute: false, stunde: 17 });
-    expect(ruhetag.vorschlaege.some((v) => v.text.includes("Koffein"))).toBe(false);
+    expect(ruhetag.vorschlaege.some((v) => v.text.includes("caffeine"))).toBe(false);
 
     const faellig = bau({}, { trainingHeute: true, stunde: 16 });
-    expect(faellig.vorschlaege.some((v) => v.text.includes("Koffein"))).toBe(true);
+    expect(faellig.vorschlaege.some((v) => v.text.includes("caffeine"))).toBe(true);
   });
 
   it("sagt nichts mehr über Cardio, auch bei gutem Band", () => {
@@ -93,13 +93,13 @@ describe("briefing", () => {
 
   it("rät bei Werten aus der Ablage nicht zum Synchronisieren der Uhr", () => {
     const b = bau({}, { nachtDatum: "2026-08-17", heuteIso: "2026-08-20", ausAblage: true });
-    expect(b.schlaf).toContain("17.8.");
-    expect(b.schlaf).not.toContain("Uhr");
+    expect(b.schlaf).toContain("17/8");
+    expect(b.schlaf).not.toContain("sync");
   });
 
   it("stellt veralteten Nächten das Datum voran, statt sie als heute auszugeben", () => {
     const b = bau({ sleepMin: 370 }, { nachtDatum: "2026-08-17", heuteIso: "2026-08-20" });
-    expect(b.schlaf).toContain("17.8.");
-    expect(b.schlaf).toContain("nicht heute Nacht");
+    expect(b.schlaf).toContain("17/8");
+    expect(b.schlaf).toContain("not last night");
   });
 });
