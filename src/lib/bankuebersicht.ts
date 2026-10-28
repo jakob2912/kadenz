@@ -24,7 +24,7 @@ import {
   datumFuerPushIndex,
   planVorschau,
   pushIndexAbDatum,
-  tagFuerPushIndex,
+  pushTageAb,
   type Vorschautag,
 } from "./plan";
 import { kalenderLesen } from "./wochenplan";
@@ -234,20 +234,23 @@ function vorschauAb(
   anker: Zyklusanker,
   tmKg: number,
   schaetzung: number | null,
-  tagVon: (pushIndex: number) => string
+  tagVon: (pushIndex: number) => string | null
 ): Wochenvorschau[] {
   const out: Wochenvorschau[] = [];
 
-  for (let n = 0; out.length < 2 && n < 6; n++) {
+  for (let n = 0; out.length < 2 && n < 10; n++) {
     const index = pushIndex + n;
     const pos = bankPosition(index, anker);
     if (pos.art !== "tm" && pos.art !== "test") continue;
+    // Ein verfallener Platz kommt nicht mehr dran — siehe pushTageAb().
+    const datum = tagVon(index);
+    if (datum === null) continue;
 
     const test = pos.art === "test";
     out.push({
       zyklus: pos.zyklus,
       woche: pos.woche,
-      datum: tagVon(index),
+      datum,
       saetze: test ? testPlan(tmKg, schaetzung) : bankPlan(tmKg, pos.woche),
       deload: !test && pos.woche === 4,
       test,
@@ -261,7 +264,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
   const heute = heuteWien();
   const { wahlen, eintraege } = await kalenderLesen();
   const plan = planVorschau(heute, wahlen, eintraege, VORSCHAU_TAGE);
-  const tagVon = (pushIndex: number) => tagFuerPushIndex(pushIndex, wahlen, eintraege, plan);
+  const tagVon = pushTageAb(heute, wahlen, eintraege, VORSCHAU_TAGE);
   const naechster = naechsterPushTag(plan);
 
   const [historie, saetze] = await Promise.all([
@@ -320,7 +323,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
     for (let n = 0; n < TEST_SUCHE_PUSH_TAGE; n++) {
       if (bankPosition(naechster.pushIndex + n, anker).art === "test") {
         naechsterTest = tagVon(naechster.pushIndex + n);
-        break;
+        if (naechsterTest !== null) break;
       }
     }
 

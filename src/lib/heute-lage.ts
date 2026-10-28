@@ -57,16 +57,21 @@ export function lageHeute(e: {
   }
 
   /* Auf Kurs heißt bei der Bank: die schweren Tage legen zu und das Ziel ist
-     noch drin. "Zu wenig Daten" oder gar kein Coach ist keine Aussage — dann
-     behauptet die Zeile auch nichts über die Bank. */
+     noch drin. Beides sind getrennte Quellen — die Lage kommt vom Coach, ob
+     das Ziel drin ist, aus der Trainingsmax-Projektion. Sagt der Coach "zu
+     wenig Daten", fehlt nur seine Hälfte; die Projektion warnt trotzdem. */
   let bankBekannt = false;
-  if (e.bank && e.bank.lage !== "unklar") {
-    bankBekannt = true;
+  if (e.bank) {
     if (e.bank.lage === "steht" || e.bank.lage === "faellt") {
       schritte.push(`Bench: ${e.bank.vorschlag}`);
     } else if (e.bank.zielImPlan === false) {
-      schritte.push(`Bench: 140 kg by the end of 2027 is out of reach at the current pace. ${e.bank.vorschlag}`);
+      schritte.push(
+        `Bench: 140 kg by the end of 2027 is out of reach at the current pace.${
+          e.bank.lage === "laeuft" ? ` ${e.bank.vorschlag}` : ""
+        }`
+      );
     }
+    bankBekannt = e.bank.lage !== "unklar";
   }
   const gewichtBekannt = e.gewichtKg !== null && e.sollKg !== null;
 

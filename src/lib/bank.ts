@@ -382,9 +382,9 @@ export async function bankstandFuer(
   wahlen: readonly Wochenwahl[],
   /* Wann ein Push-Index trainiert wird. Ohne Angabe der planmäßige Tag; wer
      die geloggten Einheiten kennt, reicht den tatsächlichen herein
-     (tagFuerPushIndex() in plan.ts) — sonst nennt die Seite für einen
-     vorgezogenen TM-Tag den alten Wochentag. */
-  tagVon: (pushIndex: number) => string = (i) => datumFuerPushIndex(i, wahlen)
+     (pushTageAb() in plan.ts) — sonst nennt die Seite für einen vorgezogenen
+     TM-Tag den alten Wochentag. Null: dieser Platz verfällt. */
+  tagVon: (pushIndex: number) => string | null = (i) => datumFuerPushIndex(i, wahlen)
 ): Promise<Bankstand> {
   let tm = await aktuellerTrainingsmax();
 
@@ -410,14 +410,17 @@ export async function bankstandFuer(
   const anker = (await zyklusanker(wahlen)) ?? { pushIndex, zyklus: tm.zyklus, tmKg: tm.tmKg };
   const position = bankPosition(pushIndex, anker);
 
-  /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
-     sonst die nächste. Nach der Deload-Zusatzeinheit — art "keiner" bei
-     bereits laufendem Programm — gilt dasselbe: der TM-Tag liegt eine
-     Push-Einheit weiter. */
-  const naechsterBankTag =
-    position.art === "tm" || position.art === "test"
-      ? null
-      : tagVon(pushIndex + 1);
+  /* Der nächste TM-Tag: die nächste Push-Einheit, deren Position einer ist
+     und deren Platz nicht verfällt. Meist die gleich folgende — nach dem
+     leichten Tag und nach der Deload-Zusatzeinheit liegt er eine Push-Einheit
+     weiter. Ist heute selbst einer, gibt es nichts anzukündigen. */
+  let naechsterBankTag: string | null = null;
+  if (position.art !== "tm" && position.art !== "test") {
+    for (let k = 1; k <= 8 && naechsterBankTag === null; k++) {
+      const art = bankPosition(pushIndex + k, anker).art;
+      if (art === "tm" || art === "test") naechsterBankTag = tagVon(pushIndex + k);
+    }
+  }
 
   if (tm.zyklus < position.zyklus) {
     tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, wahlen);

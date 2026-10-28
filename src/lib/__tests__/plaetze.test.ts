@@ -141,4 +141,18 @@ describe("Plätze statt fester Wochentage", () => {
     expect(pushTageAb("2026-10-28", wahlen, log)(index)).toBe("2026-10-30");
     expect(pushTageAb("2026-10-29", wahlen, [...log, push("2026-10-29")])(index)).toBe("2026-10-29");
   });
+
+  it("ein verfallener Platz bekommt kein Datum", () => {
+    // Bis Fr nichts trainiert: der Fr holt den Mo-Push nach, der Fr-Platz verfällt.
+    const mo = rotationFor(tag("2026-10-26"), wahlen);
+    const fr = rotationFor(tag("2026-10-30"), wahlen);
+    const moIndex = mo.art === "training" ? mo.pushIndex! : -1;
+    const frIndex = fr.art === "training" ? fr.pushIndex! : -1;
+    expect(pushTageAb("2026-10-30", wahlen, [])(moIndex)).toBe("2026-10-30");
+    expect(pushTageAb("2026-10-30", wahlen, [])(frIndex)).toBeNull();
+    // Am Sa danach: weiterhin kein Datum, kein vergangenes.
+    expect(pushTageAb("2026-10-31", wahlen, [push("2026-10-30")])(frIndex)).toBeNull();
+    // Weit hinter der Vorschau gilt der planmäßige Tag.
+    expect(pushTageAb("2026-10-30", wahlen, [], 7)(frIndex + 6)).not.toBeNull();
+  });
 });

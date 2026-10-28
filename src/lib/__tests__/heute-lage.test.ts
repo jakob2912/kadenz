@@ -41,4 +41,14 @@ describe("lageHeute", () => {
     ).toBe("Weight on track — not enough bench data yet.");
     expect(lageHeute({ gewichtKg: null, sollKg: 84, bank: null }).titel).toBe("Not enough data yet to judge.");
   });
+
+  it("warnt vor dem verfehlten Ziel auch ohne Coach-Urteil", () => {
+    const l = lageHeute({
+      gewichtKg: 84,
+      sollKg: 84,
+      bank: { lage: "unklar", vorschlag: "Too few heavy days.", zielImPlan: false },
+    });
+    expect(l.aufKurs).toBe(false);
+    expect(l.schritte).toEqual(["Bench: 140 kg by the end of 2027 is out of reach at the current pace."]);
+  });
 });

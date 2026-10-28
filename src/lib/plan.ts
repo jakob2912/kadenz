@@ -540,7 +540,15 @@ function plaetzeDerWoche(montag: string, wahlen: readonly Wochenwahl[]): Platz[]
   let jeWoche = PLAETZE.get(wahlen);
   if (!jeWoche) PLAETZE.set(wahlen, (jeWoche = new Map()));
   let plaetze = jeWoche.get(montag);
-  if (!plaetze) jeWoche.set(montag, (plaetze = plaetzeBerechnen(montag, wahlen)));
+  /* Eingefroren: die Ablage hängt an der Identität von `wahlen` und teilt
+     die Platz-Objekte. Wer sie verändert, soll es sofort merken, statt
+     später veraltete Plätze zu bekommen. Ebenso darf `wahlen` selbst nach
+     dem ersten Aufruf nicht mehr verändert werden — niemand tut das, die
+     Listen kommen frisch aus wochenwahlenLesen(). */
+  if (!plaetze) {
+    plaetze = Object.freeze(plaetzeBerechnen(montag, wahlen).map((p) => Object.freeze(p)));
+    jeWoche.set(montag, plaetze);
+  }
   // Kopie: zuordnung() nimmt belegte Plätze aus der Liste.
   return [...plaetze];
 }
@@ -833,35 +841,36 @@ export function planVorschau(
 }
 
 /**
- * Der Tag, an dem ein Push-Index trainiert wurde oder nach Plan wird.
+ * An welchem Tag ein Push-Index trainiert wurde oder nach Plan wird — für
+ * mehrere Abfragen, die Vorschau ab `iso` wird einmal gerechnet.
  *
  * Belegt: der Tag der Einheit, die ihn belegt hat (`eintraege` muss seine
- * Woche abdecken). Offen: der Tag aus der Vorschau (planVorschau() ab heute)
- * — vorgezogen oder nachgeholt, nicht der starre Wochentag. Liegt er
- * außerhalb von beidem, der planmäßige Tag.
+ * Woche abdecken). Offen: der Tag aus der Vorschau — vorgezogen oder
+ * nachgeholt, nicht der starre Wochentag. Liegt sein planmäßiger Tag hinter
+ * dem Ende der Vorschau, dieser.
+ *
+ * Null heißt: der Platz verfällt. Fallen in einer Woche zu viele Tage aus,
+ * kommt ein späterer Platz nie mehr dran (Plätze wandern nicht in die
+ * nächste Woche). Sein planmäßiges Datum zu nennen wäre falsch — es liegt
+ * dann in der Vergangenheit oder auf dem Tag, an dem ein anderer Index läuft.
  */
-export function tagFuerPushIndex(
-  pushIndex: number,
-  wahlen: readonly Wochenwahl[],
-  eintraege: readonly Eintrag[],
-  vorschau: readonly Vorschautag[]
-): string {
-  const belegt = tageFuerPushIndex(pushIndex, wahlen, eintraege);
-  if (belegt.length > 0) return belegt[0];
-  return (
-    vorschau.find((v) => v.pushIndex === pushIndex)?.datum ?? datumFuerPushIndex(pushIndex, wahlen)
-  );
-}
-
-/** tagFuerPushIndex() mit einer Vorschau ab `iso` — für mehrere Abfragen, gerechnet wird einmal. */
 export function pushTageAb(
   iso: string,
   wahlen: readonly Wochenwahl[],
   eintraege: readonly Eintrag[],
   tage = 42
-): (pushIndex: number) => string {
+): (pushIndex: number) => string | null {
   const vorschau = planVorschau(iso, wahlen, eintraege, tage);
-  return (pushIndex) => tagFuerPushIndex(pushIndex, wahlen, eintraege, vorschau);
+  const bis = isoTag(Date.parse(`${iso}T00:00:00Z`) + (tage - 1) * TAG_MS);
+
+  return (pushIndex) => {
+    const belegt = tageFuerPushIndex(pushIndex, wahlen, eintraege);
+    if (belegt.length > 0) return belegt[0];
+    const geplant = vorschau.find((v) => v.pushIndex === pushIndex)?.datum;
+    if (geplant) return geplant;
+    const laut = datumFuerPushIndex(pushIndex, wahlen);
+    return laut > bis ? laut : null;
+  };
 }
 
 /**
