@@ -26,7 +26,7 @@ describe("briefing", () => {
        schlechten. */
     const b = bau({});
     expect(b.vorschlaege).toEqual([]);
-    expect(b.befund).toContain("Volle Freigabe");
+    expect(b.befund).toContain("Fully recovered");
   });
 
   it("nennt die Schlafdauer gegen die persönliche Referenz", () => {
@@ -68,12 +68,6 @@ describe("briefing", () => {
     expect(hrvRat?.text).not.toContain("Heute");
   });
 
-  it("rät bei erhöhtem Ruhepuls von Cardio ab, nicht vom Krafttraining", () => {
-    const b = bau({ restingHr: 56 });
-    const puls = b.vorschlaege.find((v) => v.grund.includes("Ruhepuls"));
-    expect(puls?.text).toContain("keine zusätzliche Ausdauerbelastung");
-  });
-
   it("nimmt bei gedrückter HRV Volumen raus, nicht Gewicht", () => {
     const b = bau({ hrv: 54 });
     const hrvRat = b.vorschlaege.find((v) => v.grund.includes("HRV"));
@@ -91,15 +85,10 @@ describe("briefing", () => {
     expect(faellig.vorschlaege.some((v) => v.text.includes("Koffein"))).toBe(true);
   });
 
-  it("gibt Cardio nicht frei, wenn das Urteil es sperrt, auch bei gutem Band", () => {
-    const werte = { ...baseline, restingHr: baseline.restingHr + 2.5 };
-    const urteil = readiness(werte, baseline);
-    // Voraussetzung des Falls: oben im Band, aber ohne Cardio.
-    expect(urteil.band).toBe("gut");
-    expect(urteil.allowCardio).toBe(false);
+  it("sagt nichts mehr über Cardio, auch bei gutem Band", () => {
     const b = bau({ restingHr: baseline.restingHr + 2.5 });
-    expect(b.befund).toContain("Cardio heute nicht");
-    expect(b.befund).not.toContain("Cardio ist frei");
+    expect(b.befund).not.toMatch(/cardio/i);
+    expect(b.befund).toContain("train as planned");
   });
 
   it("rät bei Werten aus der Ablage nicht zum Synchronisieren der Uhr", () => {

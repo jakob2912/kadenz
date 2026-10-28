@@ -245,7 +245,7 @@ server.registerTool(
   {
     title: "Regeneration heute",
     description:
-      "Regenerations-Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV, verglichen mit Jakobs persönlicher Baseline. Sagt außerdem, ob Krafttraining und Cardio vertretbar sind.",
+      "Regenerations-Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV, verglichen mit Jakobs persönlicher Baseline. Sagt außerdem, ob schweres Krafttraining vertretbar ist.",
   },
   async () => {
     try {
@@ -1053,7 +1053,7 @@ server.registerTool(
   {
     title: "Briefing heute",
     description:
-      "Wie die Nacht war und was daraus folgt: Schlafdauer und Tiefschlaf gegen Jakobs persönliche Referenz, die Freigabe für Kraft und Cardio und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer, und genau das ist die Aussage. Dieselbe Funktion erzeugt den Text auf der Startseite.",
+      "Wie die Nacht war und was daraus folgt: Schlafdauer und Tiefschlaf gegen Jakobs persönliche Referenz, die Freigabe fürs Krafttraining und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer, und genau das ist die Aussage. Dieselbe Funktion erzeugt den Text auf der Startseite.",
   },
   async () => {
     try {

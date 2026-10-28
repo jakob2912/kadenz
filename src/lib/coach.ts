@@ -216,9 +216,8 @@ function rate(entries: WeightEntry[]): TrendVerdict {
 export type ReadinessVerdict = {
   score: number;
   band: "gut" | "mittel" | "schlecht";
-  /** Krafttraining ist deutlich robuster gegen schlechte Erholung als Cardio. */
+  /** Ob schweres Krafttraining heute vertretbar ist. */
   allowLifting: boolean;
-  allowCardio: boolean;
   drivers: string[];
 };
 
@@ -265,12 +264,10 @@ export function readiness(
   score = clamp(score, 0, 100);
   const band = score >= 75 ? "gut" : score >= 55 ? "mittel" : "schlecht";
 
-  /* Krafttraining verträgt schlechte Erholung deutlich besser als Cardio:
-     es belastet primär lokal, nicht das Herz-Kreislauf-System. Deshalb hat
-     Cardio zusätzlich zum Score harte Kriterien an den autonomen Markern. */
-  const allowCardio = score >= 72 && hrElevation <= 2 && hrvRatio >= 0.9;
-
-  return { score, band, allowLifting: score >= 45, allowCardio, drivers };
+  /* Bis zum 28.10.2026 stand hier zusätzlich eine Cardio-Freigabe mit harten
+     Grenzen an Ruhepuls und HRV. Jakob macht kein Cardio, und die Freigabe
+     las sich bei 98/100 als "Cardio heute nicht" — sie ist ersatzlos weg. */
+  return { score, band, allowLifting: score >= 45, drivers };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -712,7 +709,6 @@ export function briefing(e: BriefingEingabe): Briefing {
 
   const schlafDelta = heute.sleepMin - baseline.sleepMin;
   const tiefDelta = heute.deepMin - baseline.deepMin;
-  const hrElevation = heute.restingHr - baseline.restingHr;
   const hrvAnteil = heute.hrv / baseline.hrv;
 
   const tageAlt = Math.round(
@@ -738,18 +734,6 @@ export function briefing(e: BriefingEingabe): Briefing {
         `${Math.round(heute.deepMin)} statt ${Math.round(baseline.deepMin)} Minuten Tiefschlaf. ` +
         `Woran es lag, misst die Uhr nicht — Alkohol, spätes Essen und ein spätes Training ` +
         `sind die drei üblichen, und alle drei kannst du heute anders machen.`,
-    });
-  }
-
-  if (hrElevation >= 3) {
-    vorschlaege.push({
-      text: e.trainingHeute
-        ? "Heute keine zusätzliche Ausdauerbelastung. Kraft ja, aber ohne Extras drumherum."
-        : "Heute keine zusätzliche Ausdauerbelastung — der Rest Day trifft sich gut.",
-      grund:
-        `Ruhepuls ${komma(hrElevation, 1)} Schläge über deinem Normalwert. Krafttraining ` +
-        `belastet vor allem lokal und verträgt das; Cardio zieht die Erholung in die Länge, ` +
-        `ohne dir im Aufbau etwas zu bringen.`,
     });
   }
 
@@ -841,18 +825,13 @@ function befundSatz(urteil: ReadinessVerdict, trainingHeute: boolean): string {
     return "Rest Day, und deine Werte sagen dasselbe: heute nichts draufpacken.";
   }
 
-  /* Das Band allein reicht nicht: ein Ruhepuls leicht über Normal kann den
-     Score oben lassen und trotzdem gegen Cardio sprechen. Diese Aussage
-     stand früher auf dem Coach-Tab und darf mit ihm nicht verschwinden. */
   if (urteil.band === "gut") {
-    return urteil.allowCardio
-      ? "Volle Freigabe. Deine Werte liegen auf Normalniveau — Training läuft wie geplant, Cardio ist frei."
-      : "Training wie geplant, Cardio heute nicht.";
+    return "Fully recovered — train as planned.";
   }
   if (urteil.allowLifting) {
-    return "Krafttraining ja, Cardio nein.";
+    return "Train as planned, but no extra sets on top.";
   }
-  return "Heute nur locker.";
+  return "Keep it light today.";
 }
 
 /** Minuten als "7 h 05". Eigene Fassung, damit das Modul rein bleibt. */

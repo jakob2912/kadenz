@@ -1205,15 +1205,18 @@ function SatzZeile({
            rechnet die Progression wie immer. */
         <div className="col-span-5 flex items-center gap-1.5 pb-1.5 pl-[34px]">
           <span className="mr-1 text-[12px] text-fg-faint">Noch drin?</span>
-          {[0, 1, 2, 3].map((r) => (
+          {/* Nur 0 und 1: Jakob trainiert jeden Satz bis ans Limit oder eine
+              davor (28.10.2026) — 2 und 3+ waren Knöpfe, die nie gedrückt
+              werden. Ältere Angaben über 1 bleiben gespeichert und zählen. */}
+          {[0, 1].map((r) => (
             <button
               key={r}
               type="button"
               onClick={() => onReserve(r)}
-              aria-label={`${r === 3 ? "Drei oder mehr" : r} Wiederholungen in Reserve`}
+              aria-label={`${r} ${r === 1 ? "rep" : "reps"} in reserve`}
               className="min-h-[44px] min-w-[44px] rounded-sm bg-surface-2 text-[13px] font-semibold text-fg-dim transition active:scale-95 active:bg-accent/15 active:text-accent"
             >
-              {r === 3 ? "3+" : r}
+              {r}
             </button>
           ))}
         </div>
@@ -1221,7 +1224,7 @@ function SatzZeile({
 
       {fertig && logged!.rir != null && !reserveFrage && hervorgehoben && (
         <p className="col-span-5 pb-1 pl-[34px] text-[12px] text-fg-faint">
-          {logged!.rir === 0 ? "Bis ans Limit." : `${logged!.rir >= 3 ? "3+" : logged!.rir} in Reserve.`}
+          {logged!.rir === 0 ? "To failure." : `${logged!.rir} in reserve.`}
         </p>
       )}
 
