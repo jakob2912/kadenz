@@ -379,7 +379,12 @@ export type Bankstand = {
  */
 export async function bankstandFuer(
   pushIndex: number,
-  wahlen: readonly Wochenwahl[]
+  wahlen: readonly Wochenwahl[],
+  /* Wann ein Push-Index trainiert wird. Ohne Angabe der planmäßige Tag; wer
+     die geloggten Einheiten kennt, reicht den tatsächlichen herein
+     (tagFuerPushIndex() in plan.ts) — sonst nennt die Seite für einen
+     vorgezogenen TM-Tag den alten Wochentag. */
+  tagVon: (pushIndex: number) => string = (i) => datumFuerPushIndex(i, wahlen)
 ): Promise<Bankstand> {
   let tm = await aktuellerTrainingsmax();
 
@@ -412,7 +417,7 @@ export async function bankstandFuer(
   const naechsterBankTag =
     position.art === "tm" || position.art === "test"
       ? null
-      : datumFuerPushIndex(pushIndex + 1, wahlen);
+      : tagVon(pushIndex + 1);
 
   if (tm.zyklus < position.zyklus) {
     tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, wahlen);

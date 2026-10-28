@@ -56,19 +56,27 @@ export function lageHeute(e: {
     }
   }
 
-  if (e.bank) {
+  /* Auf Kurs heißt bei der Bank: die schweren Tage legen zu und das Ziel ist
+     noch drin. "Zu wenig Daten" oder gar kein Coach ist keine Aussage — dann
+     behauptet die Zeile auch nichts über die Bank. */
+  let bankBekannt = false;
+  if (e.bank && e.bank.lage !== "unklar") {
+    bankBekannt = true;
     if (e.bank.lage === "steht" || e.bank.lage === "faellt") {
       schritte.push(`Bench: ${e.bank.vorschlag}`);
     } else if (e.bank.zielImPlan === false) {
       schritte.push(`Bench: 140 kg by the end of 2027 is out of reach at the current pace. ${e.bank.vorschlag}`);
     }
   }
+  const gewichtBekannt = e.gewichtKg !== null && e.sollKg !== null;
 
   const aufKurs = schritte.length === 0;
-  const fehlt = e.gewichtKg === null || e.sollKg === null ? "Bench on track — no recent weight to compare." : null;
-  return {
-    aufKurs,
-    titel: aufKurs ? (fehlt ?? "Bench and weight on track.") : "Not quite on plan",
-    schritte,
-  };
+  let titel = "Not quite on plan";
+  if (aufKurs) {
+    if (bankBekannt && gewichtBekannt) titel = "Bench and weight on track.";
+    else if (gewichtBekannt) titel = "Weight on track — not enough bench data yet.";
+    else if (bankBekannt) titel = "Bench on track — no recent weight to compare.";
+    else titel = "Not enough data yet to judge.";
+  }
+  return { aufKurs, titel, schritte };
 }

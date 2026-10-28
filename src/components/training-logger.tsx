@@ -1181,10 +1181,10 @@ function SatzZeile({
         <div className="col-span-5 grid grid-cols-2 gap-3 pb-1.5">
           <span className="grid grid-cols-2 gap-1.5">
             <Schritt onClick={() => kgSchritt(-2.5)} label={`2.5 kg less, set ${nummer}`}>
-              −2,5 kg
+              −2.5 kg
             </Schritt>
             <Schritt onClick={() => kgSchritt(2.5)} label={`2.5 kg more, set ${nummer}`}>
-              +2,5 kg
+              +2.5 kg
             </Schritt>
           </span>
           <span className="grid grid-cols-2 gap-1.5">

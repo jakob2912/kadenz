@@ -21,6 +21,7 @@ import type { SetLog } from "./coach";
 import {
   SESSIONS,
   mitHistorie,
+  pushTageAb,
   rotationFor,
   trainingAls,
   saetzeFuerTag,
@@ -234,7 +235,11 @@ async function trainingsplanFuer(
   let bank: Bankstand | null = null;
   if (einheit === "push" && rotation.pushIndex !== null) {
     try {
-      bank = await bankstandFuer(rotation.pushIndex, wahlen);
+      bank = await bankstandFuer(
+        rotation.pushIndex,
+        wahlen,
+        pushTageAb(wienerDatum(date), wahlen, eintraege)
+      );
     } catch (e) {
       // Ohne Trainingsmax fällt der Bank-Slot weg, der Rest der Einheit steht.
       console.error("Bankstand nicht lesbar:", e);

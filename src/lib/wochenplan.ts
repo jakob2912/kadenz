@@ -11,17 +11,15 @@ import { prisma } from "./db";
 import { heuteWien, wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import {
-  FRUEH_NAMEN,
+  belegtePlaetze,
   montagVon,
   rotationFor,
   schalterSperren,
-  SPAET_NAMEN,
   wocheAm,
   type Frueh,
   type Rotation,
   type Spaet,
   type Eintrag,
-  type Woche,
   type Wochenstand,
   type Wochenwahl,
 } from "./plan";
@@ -127,25 +125,36 @@ export function zielwoche(heute: string): string {
 
 export type { Wochenstand } from "./plan";
 
-/** An welchen Tagen der Woche schon eine Einheit geloggt ist. */
-async function geloggteTage(montag: string): Promise<Set<string>> {
+/**
+ * Welche Plätze der Woche schon trainiert sind — auch vorgezogen oder
+ * nachgeholt (belegtePlaetze() in plan.ts), nicht bloß, an welchen
+ * Wochentagen etwas lief.
+ *
+ * Wirft bei einem Lesefehler, statt eine leere Woche anzunehmen: sonst
+ * ließe sich ein Schalter umlegen, unter dem schon eine Einheit liegt.
+ */
+async function belegteTage(montag: string, wahlen: readonly Wochenwahl[]): Promise<Set<string>> {
   const workouts = await prisma.workout.findMany({
     where: { date: { gte: alsDatum(montag), lt: alsDatum(plusTage(montag, 7)) } },
-    select: { date: true },
+    select: { date: true, kind: true },
   });
-  return new Set(workouts.map((w) => iso(w.date)));
+  const eintraege = workouts.flatMap((w): Eintrag[] =>
+    w.kind === "push" || w.kind === "pull" ? [{ datum: iso(w.date), einheit: w.kind }] : []
+  );
+  return belegtePlaetze(montag, wahlen, eintraege);
 }
 
 /** Die Woche, die der Schalter zeigt, samt dem, was sich noch umlegen lässt. */
 export async function wochenstand(): Promise<Wochenstand> {
   const heute = heuteWien();
   const montag = zielwoche(heute);
-  const woche = wocheAm(montag, await wochenwahlenLesen());
+  const wahlen = await wochenwahlenLesen();
+  const woche = wocheAm(montag, wahlen);
 
   let geloggt = new Set<string>();
   if (datenbankKonfiguriert()) {
     try {
-      geloggt = await geloggteTage(montag);
+      geloggt = await belegteTage(montag, wahlen);
     } catch (e) {
       console.error("Trainingstage der Woche nicht lesbar:", e);
     }
@@ -173,8 +182,9 @@ export async function wochenwahlSetzen(
   try {
     const heute = heuteWien();
     const montag = zielwoche(heute);
-    const woche = wocheAm(montag, await wochenwahlenLesen());
-    const gesperrt = schalterSperren(woche, heute, await geloggteTage(montag));
+    const wahlen = await wochenwahlenLesen();
+    const woche = wocheAm(montag, wahlen);
+    const gesperrt = schalterSperren(woche, heute, await belegteTage(montag, wahlen));
 
     if ("frueh" in aenderung) {
       if (aenderung.frueh !== woche.frueh) {
@@ -201,9 +211,4 @@ export async function wochenwahlSetzen(
     console.error("Wochenwahl nicht speicherbar:", e);
     return { ok: false, fehler: "The switch could not be saved." };
   }
-}
-
-/** Für Texte: "Push Di und Sa, Pull Mi und So". */
-export function wahlBeschreibung(woche: Woche): string {
-  return `${FRUEH_NAMEN[woche.frueh]} · ${SPAET_NAMEN[woche.spaet]}`;
 }

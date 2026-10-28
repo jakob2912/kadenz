@@ -64,7 +64,7 @@ import {
   sollGewichtAm,
   zielKorridor,
 } from "../src/lib/gewichtsplan";
-import { heutigeSaetze, rotationFor, SESSIONS, wochenText } from "../src/lib/plan";
+import { heutigeSaetze, pushTageAb, rotationFor, SESSIONS, wochenText } from "../src/lib/plan";
 import {
   rotationMitPlan,
   wochenstand,
@@ -952,7 +952,11 @@ server.registerTool(
         });
       }
 
-      const stand = await bankstandFuer(rotation.pushIndex, wahlen);
+      const stand = await bankstandFuer(
+        rotation.pushIndex,
+        wahlen,
+        pushTageAb(heuteWien(), wahlen, eintraege)
+      );
       return antwort({
         art: stand.position.art,
         bankTag: stand.position.art === "tm" || stand.position.art === "test",

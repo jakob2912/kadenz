@@ -188,7 +188,7 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                 </span>
               </p>
               {w.deload && <Tag tone="warnung">Deload</Tag>}
-              {w.test && <Tag tone="akzent">Testtag</Tag>}
+              {w.test && <Tag tone="akzent">Test day</Tag>}
             </div>
 
             <ol className="mt-2 flex flex-col gap-1">
@@ -437,7 +437,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
       <div className="mt-3 flex flex-col gap-3.5">
         <div>
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="text-[15px] font-semibold tracking-[-0.015em]">TM-Tag</span>
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">TM day</span>
             <Tag tone="akzent">AMRAP</Tag>
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
@@ -453,7 +453,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
           </div>
           <p className="mt-1.5 text-[13px] tabular-nums text-fg">
             3 × {fuenfer.wdh} at {de(fuenfer.kg, 1)} kg
-            <span className="text-fg-faint"> · {de(ZUSATZ_PROZENT, 1)} %</span>, dann 1 ×{" "}
+            <span className="text-fg-faint"> · {de(ZUSATZ_PROZENT, 1)} %</span>, then 1 ×{" "}
             {de(single.kg, 1)} kg
             <span className="text-fg-faint"> · {de(SINGLE_PROZENT, 0)} %</span>
           </p>

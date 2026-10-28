@@ -31,4 +31,14 @@ describe("lageHeute", () => {
     });
     expect(l.schritte).toEqual(["Bench: Add First Set Last."]);
   });
+
+  it("behauptet ohne Bank-Daten nichts über die Bank", () => {
+    expect(lageHeute({ gewichtKg: 84, sollKg: 84, bank: null }).titel).toBe(
+      "Weight on track — not enough bench data yet."
+    );
+    expect(
+      lageHeute({ gewichtKg: 84, sollKg: 84, bank: { lage: "unklar", vorschlag: "x", zielImPlan: null } }).titel
+    ).toBe("Weight on track — not enough bench data yet.");
+    expect(lageHeute({ gewichtKg: null, sollKg: 84, bank: null }).titel).toBe("Not enough data yet to judge.");
+  });
 });

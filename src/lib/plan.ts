@@ -252,12 +252,13 @@ export type Woche = {
   montagGesperrt: boolean;
 };
 
-export const FRUEH_NAMEN: Record<Frueh, string> = { mo: "Montag", di: "Dienstag" };
-export const SPAET_NAMEN: Record<Spaet, string> = { frsa: "Fr + Sa", saso: "Sa + So" };
 
 function isoTag(tagMs: number): string {
   return new Date(tagMs).toISOString().slice(0, 10);
 }
+
+/** Ab diesem Tag gilt die Zuordnung über Plätze (die festen Wochentage). */
+export const FESTE_TAGE_AB_ISO = isoTag(FESTE_TAGE_AB);
 
 /** Der Montag der Woche (Mo–So), in der dieser Kalendertag liegt. */
 export function montagVon(iso: string): string {
@@ -350,7 +351,8 @@ export type Wochenstand = Woche & {
  * Nicht mehr, wenn ihre Tage vorbei oder schon trainiert sind — sonst verlöre
  * eine geloggte Einheit ihren Platz im Plan, und ihr Push-Index wanderte auf
  * einen anderen Tag. Mo/Di zusätzlich nicht nach einer Sa + So-Woche.
- * `geloggt` sind die Tage der Woche (ISO), an denen eine Einheit steht.
+ * `geloggt` sind die geplanten Tage der Woche (ISO), deren Platz eine
+ * Einheit belegt hat (belegtePlaetze()).
  */
 export function schalterSperren(
   woche: Woche,
@@ -525,8 +527,25 @@ export type Eintrag = { datum: string; einheit: "push" | "pull" };
 /** Ein geplanter Trainingstag einer Woche — ein "Platz". */
 type Platz = { datum: string; einheit: "push" | "pull"; pushIndex: number | null };
 
+/**
+ * Die Plätze je Woche, je Wahlen-Liste zwischengespeichert. planVorschau()
+ * fragt dieselbe Woche für jeden ihrer Tage erneut ab, und jeder Push-Index
+ * zählt vom 16.09.2026 an — ohne Ablage dauerte eine Vorschau über 120 Tage
+ * rund 80 ms, und der Heute- und der Bank-Tab rechnen sie bei jedem Aufruf.
+ */
+const PLAETZE: WeakMap<readonly Wochenwahl[], Map<string, readonly Platz[]>> = new WeakMap();
+
 /** Die geplanten Plätze einer Woche, aufsteigend. Erst ab den festen Tagen. */
 function plaetzeDerWoche(montag: string, wahlen: readonly Wochenwahl[]): Platz[] {
+  let jeWoche = PLAETZE.get(wahlen);
+  if (!jeWoche) PLAETZE.set(wahlen, (jeWoche = new Map()));
+  let plaetze = jeWoche.get(montag);
+  if (!plaetze) jeWoche.set(montag, (plaetze = plaetzeBerechnen(montag, wahlen)));
+  // Kopie: zuordnung() nimmt belegte Plätze aus der Liste.
+  return [...plaetze];
+}
+
+function plaetzeBerechnen(montag: string, wahlen: readonly Wochenwahl[]): Platz[] {
   const mo = Date.parse(`${montag}T00:00:00Z`);
   const plaetze: Platz[] = [];
   for (let n = 0; n < 7; n++) {
@@ -573,8 +592,12 @@ function zuordnung(
   const frei = plaetzeDerWoche(montag, wahlen);
   const ergebnis = new Map<string, Platz | null>();
 
+  /* Die Woche ab dem 14.09.2026 hat erst ab dem 16.09. Plätze. Eine Einheit
+     vom 14. oder 15. gehört noch zum alten Kalender und darf keinen davon
+     belegen. */
+  const ab = montag > FESTE_TAGE_AB_ISO ? montag : FESTE_TAGE_AB_ISO;
   const derWoche = eintraege
-    .filter((e) => e.datum >= montag && e.datum <= sonntag)
+    .filter((e) => e.datum >= ab && e.datum <= sonntag)
     .sort((a, b) => (a.datum === b.datum ? a.einheit.localeCompare(b.einheit) : a.datum < b.datum ? -1 : 1));
 
   for (const e of derWoche) {
@@ -586,9 +609,7 @@ function zuordnung(
 
 /** Die freien Plätze einer Woche nach der Zuordnung. */
 function freiePlaetze(montag: string, wahlen: readonly Wochenwahl[], eintraege: readonly Eintrag[]): Platz[] {
-  const belegt = new Set(
-    [...zuordnung(montag, wahlen, eintraege).values()].flatMap((p) => (p ? [p.datum] : []))
-  );
+  const belegt = belegtePlaetze(montag, wahlen, eintraege);
   return plaetzeDerWoche(montag, wahlen).filter((p) => !belegt.has(p.datum));
 }
 
@@ -596,8 +617,9 @@ function freiePlaetze(montag: string, wahlen: readonly Wochenwahl[], eintraege: 
  * Der Push-Index einer Einheit, die an diesem Tag läuft oder laufen würde.
  *
  * Belegt sie einen Platz, ist es dessen Index. Eine Extra-Einheit wiederholt
- * die Vorgabe des letzten planmäßigen Push-Tags an oder vor diesem Tag — so
- * wie es vor dem 28.10.2026 für jede Einheit außer Plan galt.
+ * die Vorgabe des letzten planmäßigen Push-Tags an oder vor diesem Tag — an
+ * einem planmäßigen Push-Tag also seine eigene, so wie es vor dem 28.10.2026
+ * für jede Einheit außer Plan galt.
  */
 function pushIndexFuer(
   tagMs: number,
@@ -609,7 +631,8 @@ function pushIndexFuer(
     ? eintraege
     : [...eintraege, e];
   const platz = zuordnung(montagVon(e.datum), wahlen, mit).get(eintragsSchluessel(e));
-  return platz?.pushIndex ?? pushTageVor(tagMs, wahlen) - 1;
+  if (platz?.pushIndex != null) return platz.pushIndex;
+  return einheitAm(tagMs, wahlen) === "push" ? pushTageVor(tagMs, wahlen) : pushTageVor(tagMs, wahlen) - 1;
 }
 
 /**
@@ -631,7 +654,10 @@ function einheitMitLog(
 ): { einheit: "push" | "pull"; pushIndex: number | null } | null {
   const heute = isoTag(tagMs);
 
-  const schon = eintraege.find((e) => e.datum === heute);
+  // Push vor Pull, wenn beides an einem Tag lief: dann zählt das Bankprogramm.
+  const schon =
+    eintraege.find((e) => e.datum === heute && e.einheit === "push") ??
+    eintraege.find((e) => e.datum === heute);
   if (schon) {
     return {
       einheit: schon.einheit,
@@ -773,8 +799,87 @@ export function wochenbilanz(
   };
 }
 
-/** Ab diesem Tag gilt die Zuordnung über Plätze (die festen Wochentage). */
-export const FESTE_TAGE_AB_ISO = isoTag(FESTE_TAGE_AB);
+/** Ein Tag der Vorschau: was ansteht, und welcher Push-Index dazugehört. */
+export type Vorschautag = { datum: string; einheit: "push" | "pull"; pushIndex: number | null };
+
+/**
+ * Wie der Plan ab einem Tag weiterläuft, wenn jede vorgeschlagene Einheit
+ * auch stattfindet.
+ *
+ * Jeder Tag wird mit dem gerechnet, was bis dahin gelaufen wäre — sonst
+ * stünde ein offener Platz an jedem Folgetag erneut an, und ein späterer
+ * Platz derselben Woche käme nie dran. Daraus folgt, an welchem Tag ein
+ * Push-Index tatsächlich trainiert wird (tagFuerPushIndex()).
+ */
+export function planVorschau(
+  iso: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[],
+  tage = 42
+): Vorschautag[] {
+  const start = Date.parse(`${iso}T00:00:00Z`);
+  if (start < FESTE_TAGE_AB) return [];
+
+  const sim = [...eintraege];
+  const out: Vorschautag[] = [];
+  for (let t = start; t < start + tage * TAG_MS; t += TAG_MS) {
+    const e = einheitMitLog(t, wahlen, sim);
+    if (e === null) continue;
+    const datum = isoTag(t);
+    out.push({ datum, ...e });
+    if (!sim.some((x) => x.datum === datum)) sim.push({ datum, einheit: e.einheit });
+  }
+  return out;
+}
+
+/**
+ * Der Tag, an dem ein Push-Index trainiert wurde oder nach Plan wird.
+ *
+ * Belegt: der Tag der Einheit, die ihn belegt hat (`eintraege` muss seine
+ * Woche abdecken). Offen: der Tag aus der Vorschau (planVorschau() ab heute)
+ * — vorgezogen oder nachgeholt, nicht der starre Wochentag. Liegt er
+ * außerhalb von beidem, der planmäßige Tag.
+ */
+export function tagFuerPushIndex(
+  pushIndex: number,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[],
+  vorschau: readonly Vorschautag[]
+): string {
+  const belegt = tageFuerPushIndex(pushIndex, wahlen, eintraege);
+  if (belegt.length > 0) return belegt[0];
+  return (
+    vorschau.find((v) => v.pushIndex === pushIndex)?.datum ?? datumFuerPushIndex(pushIndex, wahlen)
+  );
+}
+
+/** tagFuerPushIndex() mit einer Vorschau ab `iso` — für mehrere Abfragen, gerechnet wird einmal. */
+export function pushTageAb(
+  iso: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[],
+  tage = 42
+): (pushIndex: number) => string {
+  const vorschau = planVorschau(iso, wahlen, eintraege, tage);
+  return (pushIndex) => tagFuerPushIndex(pushIndex, wahlen, eintraege, vorschau);
+}
+
+/**
+ * Die Tage einer Woche, deren Platz schon trainiert ist — vorgezogen,
+ * nachgeholt oder planmäßig. Grundlage der Schaltersperre: ein Schalter ist
+ * fest, sobald einer seiner Plätze belegt ist, nicht schon, weil an seinem
+ * Wochentag irgendetwas lief.
+ */
+export function belegtePlaetze(
+  montag: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): Set<string> {
+  return new Set(
+    [...zuordnung(montag, wahlen, eintraege).values()].flatMap((p) => (p ? [p.datum] : []))
+  );
+}
+
 
 /** Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest. */
 export type GeplanterSatz = { kg: number; wdh: number; amrap: boolean };
