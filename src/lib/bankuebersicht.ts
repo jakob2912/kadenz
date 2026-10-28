@@ -264,8 +264,13 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
   const heute = heuteWien();
   const { wahlen, eintraege } = await kalenderLesen();
   const plan = planVorschau(heute, wahlen, eintraege, VORSCHAU_TAGE);
-  const tagVon = pushTageAb(heute, wahlen, eintraege, VORSCHAU_TAGE);
   const naechster = naechsterPushTag(plan);
+  /* Der nächste Push gilt an seinem Tag aus der Vorschau, auch wenn er als
+     Extra-Einheit den Index eines schon trainierten Platzes wiederholt —
+     sonst trüge die erste Karte das Datum jenes früheren Tags. */
+  const tagAusPlan = pushTageAb(heute, wahlen, eintraege, VORSCHAU_TAGE);
+  const tagVon = (pushIndex: number) =>
+    naechster && pushIndex === naechster.pushIndex ? naechster.iso : tagAusPlan(pushIndex);
 
   const [historie, saetze] = await Promise.all([
     trainingsmaxHistorie(24),
