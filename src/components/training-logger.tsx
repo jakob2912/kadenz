@@ -1238,7 +1238,7 @@ function SatzZeile({
 
       {kgUngueltig && (
         <p className="col-span-5 pb-1 text-right text-[11px] text-strain" role="alert">
-          Für diese Übung gibt es noch kein Gewicht — bitte eintragen (0 für ohne).
+          No weight for this exercise yet — please enter one (0 for bodyweight).
         </p>
       )}
     </div>

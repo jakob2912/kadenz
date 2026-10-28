@@ -143,8 +143,8 @@ function Zeile({
         <p className="mt-1.5 text-[11px] leading-relaxed text-fg-faint">
           {best && (
             <>
-              Bestleistung ({FENSTER_TAGE} Tage) {de(best.kg, 1)} kg × {best.reps}
-              {bestesMaximum !== null && <> · geschätztes Maximum {de(bestesMaximum, 1)} kg</>}
+              Best ({FENSTER_TAGE} days) {de(best.kg, 1)} kg × {best.reps}
+              {bestesMaximum !== null && <> · est. max {de(bestesMaximum, 1)} kg</>}
               {" · "}
             </>
           )}

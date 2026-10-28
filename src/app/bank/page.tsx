@@ -519,7 +519,7 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
               <span className="text-[13px] font-semibold tracking-[-0.015em]">
                 {kurzDatum(e.datum)}
               </span>
-              {e.unsauber && <Tag tone="schlecht">nicht sauber</Tag>}
+              {e.unsauber && <Tag tone="schlecht">not clean</Tag>}
               {e.e1rm !== null && (
                 <span className="ml-auto text-[11px] tabular-nums text-fg-faint">
                   e1RM {de(e.e1rm, 1)} kg
