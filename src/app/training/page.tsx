@@ -11,14 +11,11 @@ import {
 import type { Bestwert } from "@/lib/bestwerte";
 import {
   heutigeSaetze,
-  montagVon,
+  offenePlaetze,
   rotationFor,
-  wocheAm,
-  wochenText,
   type Einheitskopf,
-  type Wochenwahl,
 } from "@/lib/plan";
-import { wochenstand, wochenwahlenLesen } from "@/lib/wochenplan";
+import { kalenderLesen, wochenstand, type Kalender } from "@/lib/wochenplan";
 import { WochenplanSchalter } from "@/components/wochenplan-schalter";
 import { behauptetesMaximum, type Bankstand } from "@/lib/bank";
 import { vorTest } from "@/lib/kraft";
@@ -76,8 +73,8 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   await connection();
 
   const { einheit: gewuenscht } = await searchParams;
-  const wahlen = await wochenwahlenLesen();
-  const rotation = rotationFor(new Date(), wahlen);
+  const kalender = await kalenderLesen();
+  const rotation = rotationFor(new Date(), kalender.wahlen, kalender.eintraege);
   const lautPlan: Art | null = rotation.art === "training" ? rotation.einheit : null;
 
   /* Der Kalender schlägt vor, er schreibt nicht vor. Welche Einheit auf dem
@@ -95,9 +92,9 @@ async function Einheit({ searchParams }: { searchParams: Suchparameter }) {
   }
   art ??= lautPlan;
 
-  if (art === null) return <RestDay wahlen={wahlen} />;
+  if (art === null) return <RestDay kalender={kalender} />;
 
-  const plan = await trainingsplanAls(new Date(), art, wahlen);
+  const plan = await trainingsplanAls(new Date(), art, kalender);
   const kopf: Einheitskopf = { key: plan.einheit, title: plan.titel, focus: plan.fokus };
   const wechsel = (
     <>
@@ -204,9 +201,9 @@ function EinheitWechsel({ art, lautPlan }: { art: Art; lautPlan: Art | null }) {
   );
 }
 
-async function RestDay({ wahlen }: { wahlen: readonly Wochenwahl[] }) {
-  const heute = await einheitFuerTag(new Date(), wahlen);
-  const woche = wocheAm(montagVon(heuteIso()), wahlen);
+async function RestDay({ kalender }: { kalender: Kalender }) {
+  const heute = await einheitFuerTag(new Date(), kalender);
+  const offen = offenePlaetze(heuteIso(), kalender.wahlen, kalender.eintraege);
   if (heute.art !== "pause") return null;
 
   const naechste = heute.naechste;
@@ -221,7 +218,11 @@ async function RestDay({ wahlen }: { wahlen: readonly Wochenwahl[] }) {
       <Eyebrow>Heute</Eyebrow>
       <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-        Diese Woche: {wochenText(woche)}.{" "}
+        {offen.length > 0
+          ? `Still open this week: ${offen
+              .map((p) => `${NAME[p.einheit]} ${kurzDatum(p.datum)}`)
+              .join(", ")}. `
+          : "Nothing left open this week. "}
         {istMorgen ? (
           <>
             Als nächstes steht morgen{" "}

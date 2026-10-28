@@ -37,9 +37,13 @@ import {
 /* Weiterhin von hier lesbar: bank.ts war die Heimat dieses Namens, und der
    MCP-Server sowie mehrere Seiten importieren ihn von hier. */
 export { BANK_UEBUNG } from "./kraft";
+import { eintraegeLesen } from "./wochenplan";
 import {
   datumFuerPushIndex,
+  FESTE_TAGE_AB_ISO,
+  montagVon,
   pushIndexAbDatum,
+  tageFuerPushIndex,
   type Wochenwahl,
   type Programmvorgabe,
 } from "./plan";
@@ -176,11 +180,11 @@ export async function trainingsmaxSetzen(
  * falsch — wer einen Aufwärmsatz mitloggt, verschiebt die Nummerierung, und
  * dann zählt Kadenz die falsche Zeile.
  *
- * Zeitraum statt Datum, weil ein ausgefallener Push-Tag nachgeholt wird: der
- * Freitag am Samstag oder Sonntag, der Montag am Dienstag (trainingAls() in
- * plan.ts). Gesucht wird deshalb ab dem planmäßigen Tag bis vor den nächsten
- * Push-Tag. Über das genaue Datum fände Kadenz einen nachgeholten AMRAP-Satz
- * nicht, und der Trainingsmax bliebe stillschweigend stehen.
+ * Nicht über das planmäßige Datum, weil Push-Tage vorgezogen und nachgeholt
+ * werden: gesucht wird an dem Tag, dessen Einheit den Platz belegt hat
+ * (tageFuerPushIndex() in plan.ts). Über das planmäßige Datum fände Kadenz
+ * einen verschobenen AMRAP-Satz nicht, und der Trainingsmax bliebe
+ * stillschweigend stehen.
  *
  * `mindestKg` ist das vorgegebene Gewicht des AMRAP-Satzes. Ein schwerer
  * Single (1 Wiederholung bei 90 %) sähe ohne diese Schranke wie ein
@@ -192,14 +196,33 @@ async function amrapSatzVon(
   mindestKg: number,
   wahlen: readonly Wochenwahl[]
 ): Promise<SetLog | null> {
-  const ab = new Date(`${datumFuerPushIndex(pushIndex, wahlen)}T00:00:00Z`);
-  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1, wahlen)}T00:00:00Z`);
+  const geplant = datumFuerPushIndex(pushIndex, wahlen);
+
+  /* Seit den festen Wochentagen belegt jede Einheit einen Platz der Woche
+     (zuordnung() in plan.ts) — ein vorgezogener Push am Do trägt den Index
+     des Sa. Gesucht wird deshalb an genau den Tagen, die diesen Platz belegt
+     haben. Davor gilt weiter das Zeitfenster bis zum nächsten Push-Tag. */
+  let tage: { date: { in: Date[] } } | { date: { gte: Date; lt: Date } };
+  if (geplant >= FESTE_TAGE_AB_ISO) {
+    const montag = montagVon(geplant);
+    const sonntag = new Date(Date.parse(`${montag}T00:00:00Z`) + 6 * 864e5).toISOString().slice(0, 10);
+    const belegt = tageFuerPushIndex(pushIndex, wahlen, await eintraegeLesen(montag, sonntag));
+    if (belegt.length === 0) return null;
+    tage = { date: { in: belegt.map((d) => new Date(`${d}T00:00:00Z`)) } };
+  } else {
+    tage = {
+      date: {
+        gte: new Date(`${geplant}T00:00:00Z`),
+        lt: new Date(`${datumFuerPushIndex(pushIndex + 1, wahlen)}T00:00:00Z`),
+      },
+    };
+  }
 
   return prisma.setLog.findFirst({
     where: {
       exercise: BANK_UEBUNG,
       kg: { gte: mindestKg },
-      workout: { kind: "push", date: { gte: ab, lt: bis } },
+      workout: { kind: "push", ...tage },
       /* Markieren lässt sich seit dem 11.09.2026 nicht mehr — eine unsaubere
          letzte Wiederholung zählt Jakob einfach nicht mit. Die alten
          Markierungen gelten aber weiter, deshalb bleibt der Filter.

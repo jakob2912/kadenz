@@ -26,7 +26,7 @@ import {
   rotationFor,
   type Wochenwahl,
 } from "./plan";
-import { wochenwahlenLesen } from "./wochenplan";
+import { kalenderLesen, type Kalender } from "./wochenplan";
 import {
   BANK_UEBUNG,
   bankPlan,
@@ -179,13 +179,13 @@ const TEST_SUCHE_PUSH_TAGE = 26;
  */
 function naechsterPushTag(
   heute: string,
-  wahlen: readonly Wochenwahl[]
+  { wahlen, eintraege }: Kalender
 ): { iso: string; pushIndex: number } | null {
   for (let n = 0; n < 8; n++) {
     const iso = new Date(Date.parse(`${heute}T00:00:00Z`) + n * 864e5)
       .toISOString()
       .slice(0, 10);
-    const r = rotationFor(new Date(`${iso}T12:00:00Z`), wahlen);
+    const r = rotationFor(new Date(`${iso}T12:00:00Z`), wahlen, eintraege);
     if (r.art === "training" && r.einheit === "push" && r.pushIndex !== null) {
       return { iso, pushIndex: r.pushIndex };
     }
@@ -265,8 +265,9 @@ function vorschauAb(
 
 export async function bankuebersicht(): Promise<Bankuebersicht> {
   const heute = heuteWien();
-  const wahlen = await wochenwahlenLesen();
-  const naechster = naechsterPushTag(heute, wahlen);
+  const kalender = await kalenderLesen();
+  const { wahlen } = kalender;
+  const naechster = naechsterPushTag(heute, kalender);
 
   const [historie, saetze] = await Promise.all([
     trainingsmaxHistorie(24),

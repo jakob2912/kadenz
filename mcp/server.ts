@@ -68,7 +68,7 @@ import { heutigeSaetze, rotationFor, SESSIONS, wochenText } from "../src/lib/pla
 import {
   rotationMitPlan,
   wochenstand,
-  wochenwahlenLesen,
+  kalenderLesen,
   wochenwahlSetzen,
 } from "../src/lib/wochenplan";
 import {
@@ -940,8 +940,8 @@ server.registerTool(
   async () => {
     try {
       datenbankPruefen();
-      const wahlen = await wochenwahlenLesen();
-      const rotation = rotationFor(new Date(), wahlen);
+      const { wahlen, eintraege } = await kalenderLesen();
+      const rotation = rotationFor(new Date(), wahlen, eintraege);
 
       if (rotation.art !== "training" || rotation.pushIndex === null) {
         return antwort({

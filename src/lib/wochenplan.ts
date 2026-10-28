@@ -8,7 +8,7 @@
  */
 
 import { prisma } from "./db";
-import { heuteWien } from "./datum";
+import { heuteWien, wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import {
   FRUEH_NAMEN,
@@ -20,6 +20,7 @@ import {
   type Frueh,
   type Rotation,
   type Spaet,
+  type Eintrag,
   type Woche,
   type Wochenstand,
   type Wochenwahl,
@@ -68,9 +69,51 @@ export async function wochenwahlenLesen(): Promise<Wochenwahl[]> {
   }
 }
 
-/** rotationFor() mit den gespeicherten Wochenwahlen. */
+/**
+ * Die geloggten Einheiten zwischen zwei Tagen (ISO, beide eingeschlossen).
+ *
+ * Grundlage dafür, dass der Plan sich nach dem richtet, was trainiert wurde
+ * (zuordnung() in plan.ts). Ist die Datenbank nicht erreichbar, ist die Liste
+ * leer — dann gilt der Plan, als wäre noch nichts gelaufen.
+ */
+export async function eintraegeLesen(von: string, bis: string): Promise<Eintrag[]> {
+  if (!datenbankKonfiguriert()) return [];
+  try {
+    const zeilen = await prisma.workout.findMany({
+      where: { date: { gte: alsDatum(von), lte: alsDatum(bis) } },
+      select: { date: true, kind: true },
+      orderBy: { date: "asc" },
+    });
+    return zeilen.flatMap((z) =>
+      z.kind === "push" || z.kind === "pull" ? [{ datum: iso(z.date), einheit: z.kind }] : []
+    );
+  } catch (e) {
+    console.error("Trainingseinheiten nicht lesbar, Plan ohne sie:", e);
+    return [];
+  }
+}
+
+/** Was der Plan für einen Tag braucht: die Wochenwahlen und die geloggten Einheiten. */
+export type Kalender = { wahlen: Wochenwahl[]; eintraege: Eintrag[] };
+
+/**
+ * Wochenwahlen und Einträge rund um einen Tag: ab dem Montag der Vorwoche
+ * (die Zwei-Tage-Pause reicht über den Montag zurück) bis zum Sonntag der
+ * Folgewoche (Vorschau auf den nächsten Trainingstag).
+ */
+export async function kalenderLesen(date: Date = new Date()): Promise<Kalender> {
+  const montag = montagVon(wienerDatum(date));
+  const [wahlen, eintraege] = await Promise.all([
+    wochenwahlenLesen(),
+    eintraegeLesen(plusTage(montag, -7), plusTage(montag, 13)),
+  ]);
+  return { wahlen, eintraege };
+}
+
+/** rotationFor() mit den gespeicherten Wochenwahlen und den geloggten Einheiten. */
 export async function rotationMitPlan(date: Date): Promise<Rotation> {
-  return rotationFor(date, await wochenwahlenLesen());
+  const { wahlen, eintraege } = await kalenderLesen(date);
+  return rotationFor(date, wahlen, eintraege);
 }
 
 /**

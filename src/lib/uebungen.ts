@@ -13,7 +13,7 @@ import { prisma } from "./db";
 import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
-import { wochenwahlenLesen } from "./wochenplan";
+import { kalenderLesen, type Kalender } from "./wochenplan";
 import { NEUSTART_SCHLUESSEL, neustartsAusText } from "./kraftverlauf";
 import { letzteSaetzeFuer } from "./training-lesen";
 import { heutigeTausche } from "./tagestausch";
@@ -24,7 +24,6 @@ import {
   rotationFor,
   trainingAls,
   saetzeFuerTag,
-  type Wochenwahl,
   type PlannedExercise,
   type ZuPlanen,
 } from "./plan";
@@ -148,26 +147,23 @@ export type Tagesplan =
     };
 
 /**
- * `wahlen` reicht mit, wer die Wochenwahl schon geladen hat; sonst liest die
- * Funktion sie selbst.
+ * `kalender` reicht mit, wer Wochenwahlen und Einträge schon geladen hat;
+ * sonst liest die Funktion sie selbst.
  */
-export async function einheitFuerTag(
-  date: Date,
-  wahlen?: readonly Wochenwahl[]
-): Promise<Tagesplan> {
-  wahlen ??= await wochenwahlenLesen();
-  const rotation = rotationFor(date, wahlen);
+export async function einheitFuerTag(date: Date, kalender?: Kalender): Promise<Tagesplan> {
+  kalender ??= await kalenderLesen(date);
+  const rotation = rotationFor(date, kalender.wahlen, kalender.eintraege);
 
   if (rotation.art === "pause") {
-    const naechsterTag = naechsterTrainingstag(date, wahlen);
+    const naechsterTag = naechsterTrainingstag(date, kalender);
     return {
       art: "pause",
-      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), wahlen),
+      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), kalender),
       naechsterTag,
     };
   }
 
-  return { art: "training", ...(await trainingsplanFuer(date, wahlen)) };
+  return { art: "training", ...(await trainingsplanFuer(date, kalender)) };
 }
 
 /**
@@ -178,12 +174,12 @@ export async function einheitFuerTag(
  * also; wird die Schranke erreicht, ist ein Plan kaputt, und ein Fehler ist
  * besser als eine Endlosschleife.
  */
-function naechsterTrainingstag(date: Date, wahlen: readonly Wochenwahl[]): string {
+function naechsterTrainingstag(date: Date, { wahlen, eintraege }: Kalender): string {
   let tag = date;
 
-  for (let n = 0; n < 7; n++) {
+  for (let n = 0; n < 8; n++) {
     tag = morgen(tag);
-    if (rotationFor(tag, wahlen).art === "training") return wienerDatum(tag);
+    if (rotationFor(tag, wahlen, eintraege).art === "training") return wienerDatum(tag);
   }
 
   throw new Error(`Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an.`);
@@ -210,17 +206,19 @@ function morgen(date: Date): Date {
 export async function trainingsplanAls(
   date: Date,
   einheit: Einheit,
-  wahlen?: readonly Wochenwahl[]
+  kalender?: Kalender
 ): Promise<Trainingsplan> {
-  return trainingsplanFuer(date, wahlen ?? (await wochenwahlenLesen()), einheit);
+  return trainingsplanFuer(date, kalender ?? (await kalenderLesen(date)), einheit);
 }
 
 async function trainingsplanFuer(
   date: Date,
-  wahlen: readonly Wochenwahl[],
+  { wahlen, eintraege }: Kalender,
   gewaehlt?: Einheit
 ): Promise<Trainingsplan> {
-  const rotation = gewaehlt ? trainingAls(date, gewaehlt, wahlen) : rotationFor(date, wahlen);
+  const rotation = gewaehlt
+    ? trainingAls(date, gewaehlt, wahlen, eintraege)
+    : rotationFor(date, wahlen, eintraege);
 
   /* Kann nur eintreten, wenn jemand diese Funktion für einen Pausentag
      aufruft. Dann ist der Fehler im Aufrufer, nicht in den Daten — lieber

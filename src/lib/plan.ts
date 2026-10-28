@@ -517,45 +517,192 @@ export type Rotation =
   | { art: "pause"; naechste: "push" | "pull" };
 
 /**
+ * Eine geloggte Einheit, so wie der Kalender sie braucht: Tag (ISO) und Art.
+ * Die Datenbank hält höchstens eine je Tag und Art (Workout @@unique).
+ */
+export type Eintrag = { datum: string; einheit: "push" | "pull" };
+
+/** Ein geplanter Trainingstag einer Woche — ein "Platz". */
+type Platz = { datum: string; einheit: "push" | "pull"; pushIndex: number | null };
+
+/** Die geplanten Plätze einer Woche, aufsteigend. Erst ab den festen Tagen. */
+function plaetzeDerWoche(montag: string, wahlen: readonly Wochenwahl[]): Platz[] {
+  const mo = Date.parse(`${montag}T00:00:00Z`);
+  const plaetze: Platz[] = [];
+  for (let n = 0; n < 7; n++) {
+    const t = mo + n * TAG_MS;
+    if (t < FESTE_TAGE_AB) continue;
+    const einheit = einheitAm(t, wahlen);
+    if (einheit === null) continue;
+    plaetze.push({
+      datum: isoTag(t),
+      einheit,
+      pushIndex: einheit === "push" ? pushTageVor(t, wahlen) : null,
+    });
+  }
+  return plaetze;
+}
+
+function eintragsSchluessel(e: Eintrag): string {
+  return `${e.datum}|${e.einheit}`;
+}
+
+/**
+ * Welche geloggte Einheit einer Woche welchen Platz belegt.
+ *
+ * Seit dem 28.10.2026 hängt der Plan nicht mehr starr am Wochentag: jede
+ * eingetragene Einheit belegt, der Reihe nach, den frühesten noch freien
+ * Platz ihrer Art in dieser Woche. Damit gilt beides zugleich:
+ *
+ *   - Nachholen: fällt der Mo-Push aus und läuft am Di, belegt er den Mo-Platz
+ *     und trainiert dessen 5/3/1-Vorgabe.
+ *   - Vorziehen: läuft am Di "trotzdem Pull", belegt er den Mi-Pull — der
+ *     Mittwoch ist dann frei. Ein Push am Do nimmt den nächsten Push-Platz
+ *     samt Bankprogramm, und dessen Tag wird frei.
+ *
+ * Ist kein Platz dieser Art mehr frei, ist die Einheit eine Extra-Einheit
+ * (null) und verschiebt nichts. Plätze verfallen am Sonntag — offene Plätze
+ * wandern nicht in die nächste Woche.
+ */
+function zuordnung(
+  montag: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): Map<string, Platz | null> {
+  const sonntag = isoTag(Date.parse(`${montag}T00:00:00Z`) + 6 * TAG_MS);
+  const frei = plaetzeDerWoche(montag, wahlen);
+  const ergebnis = new Map<string, Platz | null>();
+
+  const derWoche = eintraege
+    .filter((e) => e.datum >= montag && e.datum <= sonntag)
+    .sort((a, b) => (a.datum === b.datum ? a.einheit.localeCompare(b.einheit) : a.datum < b.datum ? -1 : 1));
+
+  for (const e of derWoche) {
+    const i = frei.findIndex((p) => p.einheit === e.einheit);
+    ergebnis.set(eintragsSchluessel(e), i === -1 ? null : frei.splice(i, 1)[0]);
+  }
+  return ergebnis;
+}
+
+/** Die freien Plätze einer Woche nach der Zuordnung. */
+function freiePlaetze(montag: string, wahlen: readonly Wochenwahl[], eintraege: readonly Eintrag[]): Platz[] {
+  const belegt = new Set(
+    [...zuordnung(montag, wahlen, eintraege).values()].flatMap((p) => (p ? [p.datum] : []))
+  );
+  return plaetzeDerWoche(montag, wahlen).filter((p) => !belegt.has(p.datum));
+}
+
+/**
+ * Der Push-Index einer Einheit, die an diesem Tag läuft oder laufen würde.
+ *
+ * Belegt sie einen Platz, ist es dessen Index. Eine Extra-Einheit wiederholt
+ * die Vorgabe des letzten planmäßigen Push-Tags an oder vor diesem Tag — so
+ * wie es vor dem 28.10.2026 für jede Einheit außer Plan galt.
+ */
+function pushIndexFuer(
+  tagMs: number,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): number {
+  const e: Eintrag = { datum: isoTag(tagMs), einheit: "push" };
+  const mit = eintraege.some((x) => eintragsSchluessel(x) === eintragsSchluessel(e))
+    ? eintraege
+    : [...eintraege, e];
+  const platz = zuordnung(montagVon(e.datum), wahlen, mit).get(eintragsSchluessel(e));
+  return platz?.pushIndex ?? pushTageVor(tagMs, wahlen) - 1;
+}
+
+/**
+ * Was an einem Tag ansteht, wenn man weiß, was schon trainiert wurde.
+ *
+ * In dieser Reihenfolge:
+ *   1. Ist heute schon etwas eingetragen, ist es das.
+ *   2. Wurde gestern und vorgestern trainiert, ist Rest Day — nach zwei Tagen
+ *      am Stück kommt immer mindestens einer Pause.
+ *   3. Sonst steht ein freier Platz an, dessen Tag heute oder schon vorbei
+ *      ist. Sind beide Arten offen, die andere als zuletzt — Push und Pull
+ *      wechseln sich ab —, sonst der früheste.
+ *   4. Sonst Rest Day.
+ */
+function einheitMitLog(
+  tagMs: number,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): { einheit: "push" | "pull"; pushIndex: number | null } | null {
+  const heute = isoTag(tagMs);
+
+  const schon = eintraege.find((e) => e.datum === heute);
+  if (schon) {
+    return {
+      einheit: schon.einheit,
+      pushIndex: schon.einheit === "push" ? pushIndexFuer(tagMs, wahlen, eintraege) : null,
+    };
+  }
+
+  const trainiert = (t: number) => eintraege.some((e) => e.datum === isoTag(t));
+  if (trainiert(tagMs - TAG_MS) && trainiert(tagMs - 2 * TAG_MS)) return null;
+
+  const offen = freiePlaetze(montagVon(heute), wahlen, eintraege).filter((p) => p.datum <= heute);
+  if (offen.length === 0) return null;
+
+  const zuletzt = eintraege
+    .filter((e) => e.datum < heute)
+    .reduce<Eintrag | null>((a, e) => (a === null || e.datum >= a.datum ? e : a), null);
+  const platz = offen.find((p) => zuletzt !== null && p.einheit !== zuletzt.einheit) ?? offen[0];
+  return { einheit: platz.einheit, pushIndex: platz.pushIndex };
+}
+
+/**
  * Welche Einheit an einem Zeitpunkt ansteht.
  *
  * Der Kalendertag wird ausdrücklich in Wiener Zeit bestimmt — lokal läuft der
  * Prozess in Wien, auf Vercel in UTC, und zwischen Mitternacht und 02:00
  * zeigten die beiden sonst verschiedene Tage.
  *
- * Rein und ohne Datenbankzugriff: die Wochenwahlen reicht der Aufrufer herein
- * (wochenwahlenLesen() in wochenplan.ts).
+ * Rein und ohne Datenbankzugriff: die Wochenwahlen und die geloggten
+ * Einheiten reicht der Aufrufer herein (kalenderLesen() in wochenplan.ts).
+ * Ohne `eintraege` gilt der starre Wochenplan — so rechnen die Vorschauen und
+ * der Teil vor dem 16.09.2026.
  */
-export function rotationFor(date: Date, wahlen: readonly Wochenwahl[] = []): Rotation {
+export function rotationFor(
+  date: Date,
+  wahlen: readonly Wochenwahl[] = [],
+  eintraege?: readonly Eintrag[]
+): Rotation {
   const tagMs = tagVon(date);
-  const einheit = einheitAm(tagMs, wahlen);
+  const mitLog = eintraege !== undefined && tagMs >= FESTE_TAGE_AB;
 
-  if (einheit === null) {
-    // Höchstens eine Woche weit: jede Woche hat Trainingstage.
-    for (let t = tagMs + TAG_MS; t <= tagMs + 7 * TAG_MS; t += TAG_MS) {
-      const naechste = einheitAm(t, wahlen);
-      if (naechste !== null) return { art: "pause", naechste };
+  const amTag = (t: number) => {
+    if (!mitLog) {
+      const einheit = einheitAm(t, wahlen);
+      return einheit === null
+        ? null
+        : { einheit, pushIndex: einheit === "push" ? pushTageVor(t, wahlen) : null };
     }
-    throw new Error(`Ab ${isoTag(tagMs)} steht eine Woche lang keine Einheit an.`);
-  }
-
-  return {
-    art: "training",
-    einheit,
-    pushIndex: einheit === "push" ? pushTageVor(tagMs, wahlen) : null,
+    return einheitMitLog(t, wahlen, eintraege);
   };
+
+  const heute = amTag(tagMs);
+  if (heute !== null) return { art: "training", ...heute };
+
+  // Höchstens eine Woche weit: jede Woche hat Trainingstage.
+  for (let t = tagMs + TAG_MS; t <= tagMs + 8 * TAG_MS; t += TAG_MS) {
+    const naechste = amTag(t);
+    if (naechste !== null) return { art: "pause", naechste: naechste.einheit };
+  }
+  throw new Error(`Ab ${isoTag(tagMs)} steht eine Woche lang keine Einheit an.`);
 }
 
 export type Trainingstag = Extract<Rotation, { art: "training" }>;
 
 /**
- * Eine Einheit an einem Tag, an dem der Kalender sie nicht vorsieht —
- * "trotzdem Push" am Dienstag, Training am Sonntag.
+ * Eine Einheit, die man an diesem Tag ausdrücklich wählt — "trotzdem Push"
+ * am Rest Day, Pull statt Push.
  *
- * Fällt ein Tag aus, wird er nachgeholt, der Kalender verschiebt sich dabei
- * nicht. Ein Push außer Plan ist deshalb der letzte Push-Tag an oder vor
- * diesem Tag und trainiert dessen 5/3/1-Vorgabe. Wer den Tag stattdessen
- * verlegt, stellt den Schalter der Woche um (Mo/Di, Fr+Sa/Sa+So).
+ * Mit `eintraege` belegt sie wie jede eingetragene Einheit den frühesten
+ * freien Platz ihrer Art (siehe zuordnung()) und trainiert dessen
+ * 5/3/1-Vorgabe — vorgezogen oder nachgeholt. Ohne `eintraege` gilt die alte
+ * Regel: der letzte Push-Tag an oder vor diesem Tag.
  *
  * An einem Tag, an dem die Einheit ohnehin dran ist, kommt genau dasselbe
  * heraus wie aus rotationFor().
@@ -563,15 +710,58 @@ export type Trainingstag = Extract<Rotation, { art: "training" }>;
 export function trainingAls(
   date: Date,
   einheit: "push" | "pull",
-  wahlen: readonly Wochenwahl[] = []
+  wahlen: readonly Wochenwahl[] = [],
+  eintraege?: readonly Eintrag[]
 ): Trainingstag {
   if (einheit === "pull") return { art: "training", einheit, pushIndex: null };
+
+  const tagMs = tagVon(date);
+  if (eintraege !== undefined && tagMs >= FESTE_TAGE_AB) {
+    return { art: "training", einheit, pushIndex: pushIndexFuer(tagMs, wahlen, eintraege) };
+  }
 
   const heute = rotationFor(date, wahlen);
   if (heute.art === "training" && heute.einheit === "push") return heute;
 
-  return { art: "training", einheit, pushIndex: pushTageVor(tagVon(date), wahlen) - 1 };
+  return { art: "training", einheit, pushIndex: pushTageVor(tagMs, wahlen) - 1 };
 }
+
+/**
+ * Die Tage, an denen ein bestimmter Push-Platz trainiert wurde.
+ *
+ * Gegenstück zur Zuordnung für das 5/3/1: der AMRAP-Satz eines Push-Index
+ * liegt an dem Tag, dessen Einheit diesen Platz belegt hat — vorgezogen,
+ * nachgeholt oder planmäßig. `eintraege` muss die Woche des Platzes abdecken.
+ * Leer, wenn der Platz nicht trainiert wurde.
+ */
+export function tageFuerPushIndex(
+  pushIndex: number,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): string[] {
+  const montag = montagVon(datumFuerPushIndex(pushIndex, wahlen));
+  return [...zuordnung(montag, wahlen, eintraege)]
+    .filter(([, p]) => p?.pushIndex === pushIndex)
+    .map(([k]) => k.split("|")[0]);
+}
+
+/**
+ * Die noch offenen Trainingstage der Woche dieses Tages, als "Push Sat".
+ * Für Texte am Rest Day: was diese Woche noch ansteht, nach Vorziehen und
+ * Nachholen — nicht mehr der starre Wochenplan.
+ */
+export function offenePlaetze(
+  iso: string,
+  wahlen: readonly Wochenwahl[],
+  eintraege: readonly Eintrag[]
+): { datum: string; einheit: "push" | "pull" }[] {
+  return freiePlaetze(montagVon(iso), wahlen, eintraege)
+    .filter((p) => p.datum > iso)
+    .map(({ datum, einheit }) => ({ datum, einheit }));
+}
+
+/** Ab diesem Tag gilt die Zuordnung über Plätze (die festen Wochentage). */
+export const FESTE_TAGE_AB_ISO = isoTag(FESTE_TAGE_AB);
 
 /** Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest. */
 export type GeplanterSatz = { kg: number; wdh: number; amrap: boolean };
