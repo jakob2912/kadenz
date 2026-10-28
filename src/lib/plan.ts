@@ -363,28 +363,28 @@ export function schalterSperren(
 
   let fruehGesperrt: string | null = null;
   if (woche.montagGesperrt) {
-    fruehGesperrt = "Die Woche davor stand auf Sa + So — Mo wäre der dritte Tag am Stück.";
+    fruehGesperrt = "Last week ended Sat + Sun — Monday would be the third day in a row.";
   } else if (geloggt.has(mo) || geloggt.has(di)) {
-    fruehGesperrt = "Der erste Push dieser Woche ist schon trainiert.";
+    fruehGesperrt = "This week's first push is already done.";
   } else if (heute > di) {
-    fruehGesperrt = "Mo und Di sind vorbei.";
+    fruehGesperrt = "Monday and Tuesday are over.";
   }
 
   let spaetGesperrt: string | null = null;
   if (geloggt.has(fr) || geloggt.has(sa) || geloggt.has(so)) {
-    spaetGesperrt = "Das Wochenende dieser Woche ist schon trainiert.";
+    spaetGesperrt = "This week's weekend sessions are already done.";
   } else if (heute > sa) {
-    spaetGesperrt = "Das Wochenende ist vorbei.";
+    spaetGesperrt = "The weekend is over.";
   }
 
   return { fruehGesperrt, spaetGesperrt };
 }
 
-/** Kurzbeschreibung einer Woche, z. B. "Push Mo und Sa, Pull Mi und So". */
+/** Kurzbeschreibung einer Woche, z. B. "Push Mon and Sat, Pull Wed and Sun". */
 export function wochenText(woche: Woche): string {
-  const erster = woche.frueh === "mo" ? "Mo" : "Di";
-  const [push2, pull2] = woche.spaet === "frsa" ? ["Fr", "Sa"] : ["Sa", "So"];
-  return `Push ${erster} und ${push2}, Pull Mi und ${pull2}`;
+  const erster = woche.frueh === "mo" ? "Mon" : "Tue";
+  const [push2, pull2] = woche.spaet === "frsa" ? ["Fri", "Sat"] : ["Sat", "Sun"];
+  return `Push ${erster} and ${push2}, Pull Wed and ${pull2}`;
 }
 
 /**
@@ -809,7 +809,7 @@ export type PlannedExercise = Exercise & {
 };
 
 function baue(ex: ZuPlanen, last: SetLog[]): PlannedExercise {
-  const prev = last.map((s) => `${String(s.kg).replace(".", ",")} × ${s.reps}`);
+  const prev = last.map((s) => `${String(s.kg)} × ${s.reps}`);
 
   /* Gibt ein Programm die Sätze vor, hat progression() hier nichts zu suchen:
      die beiden würden sich widersprechen. Das 5/3/1 rechnet aus dem

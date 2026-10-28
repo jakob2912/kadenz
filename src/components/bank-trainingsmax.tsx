@@ -37,14 +37,14 @@ export function BankTrainingsmax({
 
   function speichern() {
     if (tm === null) {
-      setFehler("Trag ein, was du beim Bankdrücken einmal sicher schaffst.");
+      setFehler("Enter what you can bench for one solid rep.");
       return;
     }
     setFehler(null);
     starte(async () => {
       const r = await trainingsmaxEintragen(
         tm,
-        `Aus einem Maximum von ${de(maximum, 1)} kg, von Jakob eingetragen.`
+        `From a max of ${de(maximum, 1)} kg, entered by Jakob.`
       );
       if (r.ok) {
         setGespeichert(true);
@@ -57,23 +57,22 @@ export function BankTrainingsmax({
 
   return (
     <Card className="mt-3.5">
-      <Eyebrow>Bankdrücken · 5/3/1</Eyebrow>
+      <Eyebrow>Bench press · 5/3/1</Eyebrow>
 
       {aktuellerTm === null ? (
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          Bevor das Programm rechnen kann, braucht es einen Trainingsmax. Der ist nicht dein
-          Tagesrekord, sondern 90 % davon — mit dem Puffer bleiben auch die schweren Wochen
-          machbar.
+          Before the program can calculate anything, it needs a training max. That isn't your
+          best single, but 90 % of it — the buffer keeps the heavy weeks doable.
         </p>
       ) : (
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          Aktuell {de(aktuellerTm, 1)} kg in Zyklus {zyklus}. Korrigier ihn hier, wenn er
-          nicht mehr passt.
+          Currently {de(aktuellerTm, 1)} kg in cycle {zyklus}. Correct it here if it no longer
+          fits.
         </p>
       )}
 
       <label className="mt-3.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
-        Was schaffst du einmal?
+        What can you do for one rep?
         <div className="mt-2 flex gap-2">
           <input
             inputMode="decimal"
@@ -84,7 +83,7 @@ export function BankTrainingsmax({
               setGespeichert(false);
             }}
             placeholder="z. B. 100"
-            aria-label="Maximum beim Bankdrücken in Kilogramm"
+            aria-label="Bench press max in kilograms"
             className="num min-h-[48px] w-full rounded-sm border border-hair bg-surface-2 px-3
                        text-base text-fg outline-none focus:border-accent"
           />
@@ -95,15 +94,15 @@ export function BankTrainingsmax({
             className="min-h-[48px] shrink-0 rounded-sm bg-accent px-4 text-sm font-semibold
                        text-on-accent transition active:scale-[0.98] disabled:opacity-50"
           >
-            {laeuft ? "…" : "Übernehmen"}
+            {laeuft ? "…" : "Apply"}
           </button>
         </div>
       </label>
 
       {tm !== null && (
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-          Trainingsmax daraus: <b className="font-semibold text-fg-dim">{de(tm, 1)} kg</b>. Mit
-          dem rechnet das Programm alle Prozente.
+          Training max from that: <b className="font-semibold text-fg-dim">{de(tm, 1)} kg</b>. The
+          program calculates all percentages from it.
         </p>
       )}
 
@@ -115,7 +114,7 @@ export function BankTrainingsmax({
 
       {gespeichert && !fehler && (
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint" role="status">
-          Gespeichert. Die Sätze stehen gleich darüber.
+          Saved. The sets appear right above.
         </p>
       )}
     </Card>

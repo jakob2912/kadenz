@@ -243,7 +243,7 @@ export function readiness(
   if (hrElevation > 2) {
     // Baseline ist ein Mittelwert und damit fast immer gebrochen —
     // ohne Rundung steht hier "12.100000000000001 über Normal".
-    drivers.push(`Ruhepuls ${hrElevation.toFixed(1).replace(".", ",")} über Normal`);
+    drivers.push(`Ruhepuls ${hrElevation.toFixed(1)} über Normal`);
   }
 
   // HRV reagiert am empfindlichsten auf Systembelastung — entsprechend steil bewertet
@@ -640,7 +640,7 @@ function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string
  * darf keine Komponentendatei importieren — ui.tsx zieht next/link nach.
  */
 function komma(n: number, digits: number): string {
-  return n.toFixed(digits).replace(".", ",");
+  return n.toFixed(digits);
 }
 
 // ─────────────────────────────────────────────────────────────

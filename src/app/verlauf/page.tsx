@@ -92,7 +92,7 @@ async function Gewichtsteil() {
        damit von selbst sichtbar. */
     return (
       <NichtVerbunden
-        titel="Verlauf braucht Google Health"
+        titel="History needs Google Health"
         grund={data.grund}
         className="pt-6 md:pt-8"
       />
@@ -126,8 +126,8 @@ async function Gewichtsteil() {
             keine Frage. Wie alt der angezeigte Wert ist, entscheidet dagegen,
             ob man ihm überhaupt glauben darf. */}
         <Eyebrow>
-          Körpergewicht
-          {gewicht.aktuell ? ` · gemessen ${alterLabel(gewicht.aktuell.date, heuteIso)}` : ""}
+          Body weight
+          {gewicht.aktuell ? ` · measured ${alterLabel(gewicht.aktuell.date, heuteIso)}` : ""}
         </Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em] md:text-[33px]">
           {gewicht.aktuell ? `${de(gewicht.aktuell.kg, 1)} kg` : "—"}
@@ -142,14 +142,14 @@ async function Gewichtsteil() {
       <div className="mt-7 grid items-start gap-4 md:grid-cols-2">
         <Card>
           <div className="flex items-baseline justify-between gap-3">
-            <Eyebrow>Gewichtsverlauf</Eyebrow>
+            <Eyebrow>Weight trend</Eyebrow>
             {/* "30 Tage" stand hier fest, auch wenn nur sechs Messungen aus
                 acht Tagen vorlagen — der Titel behauptete einen Zeitraum, den
                 die Kurve nie gezeigt hat. */}
             <span className="text-[11px] text-fg-faint">
               {jahrGewicht.length === 0
-                ? "keine Messung"
-                : `${jahrGewicht.length} Messungen seit ${langDatum(jahrGewicht[0].date)}`}
+                ? "no measurement"
+                : `${jahrGewicht.length} measurements since ${langDatum(jahrGewicht[0].date)}`}
             </span>
           </div>
           {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
@@ -162,21 +162,21 @@ async function Gewichtsteil() {
             reihe={jahrGewicht.map((r) => ({ datum: r.date, wert: r.kg }))}
             soll={sollAusschnitt(jahrGewicht[0]?.date ?? heuteIso, 4)}
             sollBezeichnung="Plan"
-            bezeichnung="Gewichtsverlauf"
+            bezeichnung="Weight trend"
             zeitraeume={[30, 90, 365]}
-            leer="Noch keine Messung. Trag dein Morgengewicht auf der Startseite ein — ab zwei Messungen steht hier eine Kurve."
-            einzeln="Erst eine Messung. Ab der zweiten steht hier eine Kurve."
+            leer="No measurement yet. Log your morning weight in Google Health — from two measurements on, a curve appears here."
+            einzeln="Only one measurement so far. A curve appears from the second one."
           />
         </Card>
 
         <div className="flex flex-col gap-3.5">
           <Card>
-            <Eyebrow>Trendurteil</Eyebrow>
+            <Eyebrow>Trend</Eyebrow>
             {gewicht.trend.usable ? (
               <p className="num mt-2 text-[27px]">
                 {gewicht.trend.kgPerWeek > 0 ? "+" : ""}
                 {de(gewicht.trend.kgPerWeek, 2)}
-                <span className="ml-1 text-xs font-medium text-fg-faint">kg / Woche</span>
+                <span className="ml-1 text-xs font-medium text-fg-faint">kg / week</span>
               </p>
             ) : (
               <>
@@ -194,16 +194,16 @@ async function Gewichtsteil() {
 
           {baseline ? (
             <Card>
-              <Eyebrow>Deine Referenzwerte</Eyebrow>
+              <Eyebrow>Your baselines</Eyebrow>
               <div className="mt-3 flex flex-col gap-2.5">
-                <Metric label="Schlaf" value={minToHm(baseline.sleepMin)} />
-                <Metric label="Tiefschlaf" value={`${Math.round(baseline.deepMin)} min`} />
-                <Metric label="Ruhepuls" value={`${de(baseline.restingHr)} bpm`} />
+                <Metric label="Sleep" value={minToHm(baseline.sleepMin)} />
+                <Metric label="Deep sleep" value={`${Math.round(baseline.deepMin)} min`} />
+                <Metric label="Resting HR" value={`${de(baseline.restingHr)} bpm`} />
                 <Metric label="HRV" value={`${de(baseline.hrv)} ms`} />
               </div>
               <p className="mt-3.5 text-xs leading-relaxed text-fg-faint">
-                Aus der jeweils besseren Hälfte von {tagesreihe.length} Nächten — nicht der
-                Mittelwert, sonst würde eine Ausreißerwoche die Referenz mitverschieben.
+                From the better half of {tagesreihe.length} nights each — not the average,
+                otherwise one outlier week would drag the baseline along.
                 {/* unvollstaendig wurde bisher berechnet und weggeworfen. Ohne
                     diese Zeile wirkt es, als hätte die Uhr nur so wenige Nächte
                     aufgezeichnet — tatsächlich fehlt bei den anderen nur ein
@@ -212,18 +212,18 @@ async function Gewichtsteil() {
                   <>
                     {" "}
                     {unvollstaendig.length}{" "}
-                    {unvollstaendig.length === 1 ? "weitere Nacht" : "weitere Nächte"} ohne
-                    Ruhepuls oder HRV — die zählen nicht mit.
+                    {unvollstaendig.length === 1 ? "more night" : "more nights"} without
+                    resting HR or HRV — those don't count.
                   </>
                 )}
               </p>
             </Card>
           ) : (
             <Card>
-              <Eyebrow>Deine Referenzwerte</Eyebrow>
+              <Eyebrow>Your baselines</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-                Noch keine Referenz. Dafür braucht Kadenz fünf Nächte, in denen Schlaf,
-                Ruhepuls und HRV zusammen aufgezeichnet wurden — bisher sind es{" "}
+                No baseline yet. Kadenz needs five nights with sleep, resting HR and HRV
+                all recorded — so far there are{" "}
                 {tagesreihe.length}.
               </p>
             </Card>
@@ -285,9 +285,9 @@ function Zielkurve({
   return (
     <Card className="mt-4">
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Zielkurve · bis {ENDZIEL_KG} kg</Eyebrow>
+        <Eyebrow>Target curve · to {ENDZIEL_KG} kg</Eyebrow>
         <span className="text-[11px] text-fg-faint">
-          Phase {jetzt.nummer} von {laeufe.length} · {jetzt.phase.label}
+          Phase {jetzt.nummer} of {laeufe.length} · {jetzt.phase.label}
         </span>
       </div>
 
@@ -295,10 +295,10 @@ function Zielkurve({
         reihe={reihe}
         soll={sollKurve().map((p) => ({ datum: p.datum, wert: p.kg }))}
         sollBezeichnung="Plan"
-        bezeichnung="Gewichtsplanung"
+        bezeichnung="Weight plan"
         lueckeTage={9999}
-        leer="Noch keine Messung."
-        einzeln="Erst eine Messung."
+        leer="No measurement yet."
+        einzeln="Only one measurement so far."
       />
 
       <ol className="mt-4 flex flex-col gap-2.5">
@@ -318,9 +318,9 @@ function Zielkurve({
                   {de(lauf.vonKg, 1)} → {de(lauf.bisKg, 1)} kg
                 </span>
                 <span className="block text-[11px] leading-relaxed text-fg-faint">
-                  {kurzDatum(lauf.vonIso)} bis {kurzDatum(lauf.bisIso)} ·{" "}
+                  {kurzDatum(lauf.vonIso)} to {kurzDatum(lauf.bisIso)} ·{" "}
                   {lauf.phase.rateProWoche > 0 ? "+" : ""}
-                  {de(lauf.phase.rateProWoche, 3).replace(/0$/, "")} kg/Woche · {lauf.phase.zweck}
+                  {de(lauf.phase.rateProWoche, 3).replace(/0$/, "")} kg/week · {lauf.phase.zweck}
                 </span>
               </span>
             </li>
@@ -329,10 +329,10 @@ function Zielkurve({
       </ol>
 
       <p className="mt-4 text-[11px] leading-relaxed text-fg-faint">
-        Die Kurve ist am {kurzDatum("2026-08-25")} bei 82,5 kg verankert und wandert nicht mit —
-        nur so ist eine Abweichung überhaupt zu sehen. Ändern lässt sie sich an einer Stelle:
-        GEWICHTSPLAN in src/lib/gewichtsplan.ts. Der Kalorien-Coach liest den Korridor aus
-        derselben Liste und schlägt im Mini-Cut deshalb Senkungen statt Erhöhungen vor.
+        The curve is anchored at 82.5 kg on {kurzDatum("2026-08-25")} and doesn't move along —
+        that's the only way to see a deviation at all. It can be changed in one place:
+        GEWICHTSPLAN in src/lib/gewichtsplan.ts. The calorie coach reads the corridor from
+        the same list, which is why it suggests cuts instead of increases during the mini-cut.
       </p>
     </Card>
   );
@@ -353,26 +353,26 @@ function Zielkurve({
 function zielSatz(aktuellKg: number | null, heuteIso: string): string {
   const jetzt = aktuellePhase(heuteIso);
   const soll = sollGewichtAm(heuteIso);
-  const marke = `${jetzt.phase.label} bis ${de(jetzt.bisKg, 1)} kg (${kurzDatum(jetzt.bisIso)})`;
+  const marke = `${jetzt.phase.label} to ${de(jetzt.bisKg, 1)} kg (${kurzDatum(jetzt.bisIso)})`;
 
-  if (aktuellKg === null) return `${marke} · noch keine Messung.`;
+  if (aktuellKg === null) return `${marke} · no measurement yet.`;
 
-  if (soll === null) return `${marke} · du liegst bei ${de(aktuellKg, 1)} kg.`;
+  if (soll === null) return `${marke} · you're at ${de(aktuellKg, 1)} kg.`;
 
   const abweichung = aktuellKg - soll;
   const lage =
     Math.abs(abweichung) < 0.5
-      ? "das ist auf Plan"
+      ? "that's on plan"
       : abweichung > 0
-        ? `das sind ${de(abweichung, 1)} kg über Plan`
-        : `das sind ${de(-abweichung, 1)} kg unter Plan`;
+        ? `that's ${de(abweichung, 1)} kg over plan`
+        : `that's ${de(-abweichung, 1)} kg under plan`;
 
   const fehlend = jetzt.bisKg - aktuellKg;
   const rest =
     fehlend <= 0
-      ? " Die Marke dieser Phase ist erreicht."
-      : ` Bis zur Marke fehlen ${de(fehlend, 1)} kg.`;
+      ? " This phase's mark is reached."
+      : ` ${de(fehlend, 1)} kg to go to the mark.`;
 
-  return `${marke} · heute wären ${de(soll, 1)} kg vorgesehen, ${lage}.${rest}`;
+  return `${marke} · today's plan is ${de(soll, 1)} kg, ${lage}.${rest}`;
 }
 

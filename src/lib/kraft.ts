@@ -19,7 +19,7 @@ function tageZwischen(a: string, b: string): number {
 
 /** Deutsches Dezimalkomma — eigene Fassung, damit das Modul rein bleibt. */
 function komma(n: number, stellen: number): string {
-  return n.toFixed(stellen).replace(".", ",");
+  return n.toFixed(stellen);
 }
 
 export function aufZweiKommaFuenf(kg: number): number {

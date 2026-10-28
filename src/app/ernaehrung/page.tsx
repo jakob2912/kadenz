@@ -75,8 +75,8 @@ async function Inhalt() {
   if (!datenbankKonfiguriert()) {
     return (
       <Meldung
-        titel="Ernährungsplan braucht die Datenbank"
-        text="DATABASE_URL ist nicht gesetzt. Plan, Ziel und Historie liegen in der Datenbank; ohne sie kann diese Seite nichts anzeigen."
+        titel="The nutrition plan needs the database"
+        text="DATABASE_URL isn't set. Plan, target and history live in the database; without it this page can't show anything."
       />
     );
   }
@@ -95,7 +95,7 @@ async function Inhalt() {
     // der nackten Fehlerseite genauso aus wie ein kaputter Build.
     return (
       <Meldung
-        titel="Die Datenbank ist gerade nicht erreichbar"
+        titel="The database can't be reached right now"
         text={e instanceof Error ? e.message : String(e)}
       />
     );
@@ -111,7 +111,7 @@ async function Inhalt() {
     ? await vorschlagLage({ gewicht: daten.gewicht.reihe, koerpergewichtKg })
     : {
         art: "kein-vorschlag",
-        grund: `Ohne deinen Gewichtsverlauf kann ich nichts vorschlagen. ${daten.grund}`,
+        grund: `Without your weight history I can't suggest anything. ${daten.grund}`,
       };
 
   const heuteIso = heuteWien();
@@ -119,14 +119,14 @@ async function Inhalt() {
   return (
     <>
       <header className="pt-10 md:pt-14">
-        <Eyebrow>Ernährung · Fitnessbell-Plan</Eyebrow>
+        <Eyebrow>Nutrition · Fitnessbell plan</Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold leading-tight tracking-[-0.025em] md:text-[33px]">
           {ziel ? `${ziel.kcal} kcal` : "—"}
         </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-fg-dim">
           {ziel
-            ? `${quellenSatz(ziel.quelle)} · gilt seit ${alterLabel(ziel.gueltigAb, heuteIso)}.`
-            : "Noch kein Kalorienziel hinterlegt."}
+            ? `${quellenSatz(ziel.quelle)} · valid since ${alterLabel(ziel.gueltigAb, heuteIso)}.`
+            : "No calorie target set yet."}
         </p>
       </header>
 
@@ -147,7 +147,7 @@ async function Inhalt() {
               {/* Neutraler Rahmen: "ich kann es noch nicht sagen" ist keine
                   Warnung und schon gar kein Zustand seines Körpers. Amber
                   wäre in dieser App beides. */}
-              <Eyebrow>Kein Vorschlag</Eyebrow>
+              <Eyebrow>No suggestion</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">{lage.grund}</p>
             </Card>
           )}
@@ -160,9 +160,9 @@ async function Inhalt() {
 
           {plan.mahlzeiten.length === 0 ? (
             <Card>
-              <Eyebrow>Mahlzeiten</Eyebrow>
+              <Eyebrow>Meals</Eyebrow>
               <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-                Es ist kein Ernährungsplan hinterlegt.
+                No nutrition plan stored.
               </p>
             </Card>
           ) : (
@@ -170,9 +170,9 @@ async function Inhalt() {
           )}
 
           <p className="px-1 text-[11px] leading-relaxed text-fg-faint">
-            Essensfenster 05:20–18:00. Die Makros oben sind Tagessummen aus dem Plan; auf
-            einzelne Mahlzeiten ist er nicht aufgeschlüsselt, und Kadenz rechnet das nicht
-            nach — geschätzte Zahlen pro Mahlzeit wären erfunden.
+            Eating window 05:20–18:00. The macros above are daily totals from the plan; it isn't
+            broken down per meal, and Kadenz doesn't recalculate that — estimated numbers per
+            meal would be made up.
           </p>
         </div>
       </div>
@@ -195,17 +195,17 @@ function MakroKarte({
 
   return (
     <Card>
-      <Eyebrow>Was du aktuell isst</Eyebrow>
+      <Eyebrow>What you're eating now</Eyebrow>
       <div className="mt-3 flex flex-col gap-2.5">
-        <Metric label="Kalorien" value={`${ziel.kcal} kcal`} />
-        <Metric label="Kohlenhydrate" value={`${ziel.kohlenhydrateG} g`} />
-        <Metric label="Eiweiß" value={`${ziel.eiweissG} g`} />
-        <Metric label="Fett" value={`${ziel.fettG} g`} />
+        <Metric label="Calories" value={`${ziel.kcal} kcal`} />
+        <Metric label="Carbs" value={`${ziel.kohlenhydrateG} g`} />
+        <Metric label="Protein" value={`${ziel.eiweissG} g`} />
+        <Metric label="Fat" value={`${ziel.fettG} g`} />
       </div>
 
       {koerpergewichtKg !== null && (
         <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-          Eiweiß entspricht {de(ziel.eiweissG / koerpergewichtKg, 2)} g pro kg bei{" "}
+          Protein is {de(ziel.eiweissG / koerpergewichtKg, 2)} g per kg at{" "}
           {de(koerpergewichtKg, 1)} kg.
         </p>
       )}
@@ -214,9 +214,9 @@ function MakroKarte({
         // Die Zahlen stehen so im Plan. Ohne diesen Satz sieht die Differenz
         // aus wie ein Rechenfehler der App.
         <p className="mt-1.5 text-[11px] leading-relaxed text-fg-faint">
-          Aus den Makros gerechnet sind es {ausMakros} kcal. Die Differenz von{" "}
-          {Math.abs(abweichung)} kcal steht so im Plan von Fitnessbell — Kadenz rundet hier
-          nichts weg.
+          Calculated from the macros it's {ausMakros} kcal. The difference of{" "}
+          {Math.abs(abweichung)} kcal is in Fitnessbell's plan as written — Kadenz doesn't round
+          anything away.
         </p>
       )}
     </Card>
@@ -245,7 +245,7 @@ function MahlzeitKarte({ mahlzeit }: { mahlzeit: Mahlzeitplan }) {
                   und die Anpassung wäre nicht nachvollziehbar. */}
               {z.menge !== z.mengeLautPlan && (
                 <em className="block not-italic text-[11px] font-normal text-fg-faint">
-                  laut Plan {mengeText(z.mengeLautPlan)} {z.einheit}
+                  plan says {mengeText(z.mengeLautPlan)} {z.einheit}
                 </em>
               )}
             </span>
@@ -265,18 +265,18 @@ function MahlzeitKarte({ mahlzeit }: { mahlzeit: Mahlzeitplan }) {
 function SkalierungKarte({ skalierung }: { skalierung: NonNullable<Ernaehrungsplan["skalierung"]> }) {
   return (
     <Card>
-      <Eyebrow>Mengen zum Ziel</Eyebrow>
+      <Eyebrow>Amounts for the target</Eyebrow>
       <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-        Dein Ziel steht bei {skalierung.zielKhG} g Kohlenhydraten, der Ausgangsplan von
-        Fitnessbell bei {skalierung.basisKhG} g. Die Kohlenhydratquellen — Reis,
-        Haferflocken, Reispudding, Maltodextrin — laufen deshalb auf{" "}
-        {Math.round(skalierung.faktor * 100)} % ihrer Planmenge. Eiweiß und Fett bleiben, wie
-        sie sind.
+        Your target is {skalierung.zielKhG} g of carbs, Fitnessbell's base plan
+        {skalierung.basisKhG} g. The carb sources — rice,
+        oats, rice pudding, maltodextrin — therefore run at{" "}
+        {Math.round(skalierung.faktor * 100)} % of their plan amount. Protein and fat stay as
+        they are.
       </p>
       <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-        Proportional gerechnet, nicht je Zutat aus Nährwerten: Kadenz hat keine
-        Nährwerttabelle und denkt sich keine aus. Stückzahlen wie die Banane tragen nicht mit.
-        Auf 5 g gerundet.
+        Scaled proportionally, not per ingredient from nutrition facts: Kadenz has no
+        nutrition table and doesn't make one up. Counted items like the banana don't scale.
+        Rounded to 5 g.
       </p>
       {skalierung.hinweis && (
         <p className="mt-2 text-[11px] leading-relaxed text-fg-dim">{skalierung.hinweis}</p>
@@ -288,18 +288,18 @@ function SkalierungKarte({ skalierung }: { skalierung: NonNullable<Ernaehrungspl
 function HistorieKarte({ historie, heuteIso }: { historie: Ziel[]; heuteIso: string }) {
   return (
     <Card>
-      <Eyebrow>Verlauf der Ziele</Eyebrow>
+      <Eyebrow>Target history</Eyebrow>
       <ol className="mt-3 flex flex-col gap-3">
         {historie.map((z) => (
           <li key={z.id} className="border-l-2 border-hair pl-3">
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-sm font-semibold">{z.kcal} kcal</span>
               <span className="whitespace-nowrap text-[11px] text-fg-faint">
-                {z.gueltigAb === heuteIso ? "seit heute" : `seit ${kurzDatum(z.gueltigAb)}`}
+                {z.gueltigAb === heuteIso ? "since today" : `since ${kurzDatum(z.gueltigAb)}`}
               </span>
             </div>
             <p className="mt-0.5 text-[11px] leading-relaxed text-fg-faint">
-              {z.kohlenhydrateG} g KH · {z.eiweissG} g EW · {z.fettG} g F ·{" "}
+              {z.kohlenhydrateG} g C · {z.eiweissG} g P · {z.fettG} g F ·{" "}
               {quellenSatz(z.quelle)}
             </p>
             {/* Die Begründung steht ausdrücklich mit in der Liste. Ein
@@ -318,7 +318,7 @@ function HistorieKarte({ historie, heuteIso }: { historie: Ziel[]; heuteIso: str
 function Meldung({ titel, text }: { titel: string; text: string }) {
   return (
     <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
-      <Eyebrow>Ernährung</Eyebrow>
+      <Eyebrow>Nutrition</Eyebrow>
       <h1 className="mt-2 text-[27px] font-bold leading-tight tracking-[-0.025em]">{titel}</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">{text}</p>
     </div>
@@ -326,9 +326,9 @@ function Meldung({ titel, text }: { titel: string; text: string }) {
 }
 
 function quellenSatz(quelle: string): string {
-  if (quelle === "plan") return "Aus dem Plan übernommen";
-  if (quelle === "coach") return "Von Kadenz vorgeschlagen, von dir bestätigt";
-  if (quelle === "jakob") return "Von dir gesetzt";
+  if (quelle === "plan") return "Taken from the plan";
+  if (quelle === "coach") return "Suggested by Kadenz, confirmed by you";
+  if (quelle === "jakob") return "Set by you";
   return quelle;
 }
 

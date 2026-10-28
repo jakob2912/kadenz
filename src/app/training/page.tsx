@@ -190,12 +190,12 @@ function EinheitWechsel({ art, lautPlan }: { art: Art; lautPlan: Art | null }) {
 
   return (
     <p className="mt-6 text-center text-[13px] leading-relaxed text-fg-faint">
-      {art !== lautPlan && <>Laut Plan heute {lautPlan ? NAME[lautPlan] : "Rest Day"}. </>}
+      {art !== lautPlan && <>Planned today: {lautPlan ? NAME[lautPlan] : "Rest Day"}. </>}
       <Link
         href={`/training?einheit=${andere}`}
         className="font-semibold text-accent underline underline-offset-2"
       >
-        Stattdessen {NAME[andere]} trainieren
+        Train {NAME[andere]} instead
       </Link>
     </p>
   );
@@ -215,7 +215,7 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
 
   return (
     <div className="mx-auto max-w-[520px] pt-10 md:pt-14">
-      <Eyebrow>Heute</Eyebrow>
+      <Eyebrow>Today</Eyebrow>
       <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em]">Rest Day</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">
         {offen.length > 0
@@ -225,14 +225,14 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
           : "Nothing left open this week. "}
         {istMorgen ? (
           <>
-            Als nächstes steht morgen{" "}
-            <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+            Next up tomorrow:{" "}
+            <b className="font-semibold text-fg">{naechste.fokus}</b>.
           </>
         ) : (
           <>
-            Als nächstes steht am{" "}
-            <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>{" "}
-            <b className="font-semibold text-fg">{naechste.fokus}</b> an.
+            Next up on{" "}
+            <b className="font-semibold text-fg">{kurzDatum(heute.naechsterTag)}</b>:{" "}
+            <b className="font-semibold text-fg">{naechste.fokus}</b>.
           </>
         )}
       </p>
@@ -247,7 +247,7 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
             className="flex min-h-[48px] items-center justify-center rounded-md bg-surface-2
                        text-sm font-semibold text-fg transition active:scale-[0.98] md:hover:bg-surface-3"
           >
-            Trotzdem {NAME[e]}
+            {NAME[e]} anyway
           </Link>
         ))}
       </div>
@@ -256,13 +256,13 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
           will wissen, was ansteht — nicht nur, dass heute nichts ansteht. */}
       <Card className="mt-5">
         <div className="flex items-baseline justify-between gap-3">
-          <Eyebrow>{istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}</Eyebrow>
+          <Eyebrow>{istMorgen ? "Tomorrow" : kurzDatum(heute.naechsterTag)}</Eyebrow>
           <span className="text-[11px] text-fg-faint">
-            {anzahl(naechste.uebungen.length, "Übung", "Übungen")} ·{" "}
+            {anzahl(naechste.uebungen.length, "exercise", "exercises")} ·{" "}
             {anzahl(
               naechste.uebungen.reduce((n, e) => n + heutigeSaetze(e).length, 0),
-              "Satz",
-              "Sätze"
+              "set",
+              "sets"
             )}
           </span>
         </div>
@@ -285,15 +285,15 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
           ))}
         </ol>
         <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-          Gewichte aus der letzten Ausführung. Das tatsächliche Zielgewicht rechnet
-          Kadenz am Trainingstag aus deinen Wiederholungen.
+          Weights from the last session. Kadenz works out the actual target weight on
+          the day from your reps.
         </p>
       </Card>
 
       {naechste.bank && (
         <BankHinweis
           bank={naechste.bank}
-          wann={istMorgen ? "Morgen" : kurzDatum(heute.naechsterTag)}
+          wann={istMorgen ? "Tomorrow" : kurzDatum(heute.naechsterTag)}
         />
       )}
 
@@ -311,7 +311,7 @@ async function RestDay({ kalender }: { kalender: Kalender }) {
  * TM-Tag mit Zyklus und Woche. Die Karte wegzulassen, weil heute nichts
  * ansteht, hieße jedes Mal neu nachzurechnen, wann wieder.
  */
-function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string }): ReactNode {
+function BankHinweis({ bank, wann = "Today" }: { bank: Bankstand; wann?: string }): ReactNode {
 
   if (bank.tm === null) {
     return <BankTrainingsmax aktuellerTm={null} zyklus={bank.position.zyklus} />;
@@ -321,17 +321,17 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
     return (
       <Card className="mt-3.5">
         <div className="flex items-baseline justify-between gap-3">
-          <Eyebrow>Bankdrücken · Testtag</Eyebrow>
-          <span className="text-[11px] text-fg-faint">Zyklus {bank.position.zyklus}</span>
+          <Eyebrow>Bench press · Test day</Eyebrow>
+          <span className="text-[11px] text-fg-faint">Cycle {bank.position.zyklus}</span>
         </div>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          {wann} wird echt getestet: aufwärmen, dann Singles bis zum ersten Kampf-Rep. Jeder
-          Versuch nur, wenn der vorige glatt ging. Die Hüfte bleibt auf der Bank.
+          {wann}: real test. Warm up, then singles up to the first grinder. Only take the
+          next attempt if the previous one moved cleanly. Hips stay on the bench.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-          Der Test ersetzt die Deload-Welle und bewegt den Trainingsmax nicht (
-          {de(bank.tm.tmKg, 1)} kg, behauptet rund {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg).
-          Liegt dein bester Single deutlich darunter, setz den Trainingsmax zurück.
+          The test replaces the deload wave and doesn't move the training max (
+          {de(bank.tm.tmKg, 1)} kg, implying about {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg).
+          If your best single is clearly lower, reset the training max.
         </p>
       </Card>
     );
@@ -341,32 +341,32 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
     const zusatz = bank.position.art === "zusatz";
     return (
       <Card className="mt-3.5">
-        <Eyebrow>Bankdrücken · {zusatz ? "Leichter Tag" : "5/3/1"}</Eyebrow>
+        <Eyebrow>Bench press · {zusatz ? "Light day" : "5/3/1"}</Eyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           {zusatz ? (
             <>
-              {wann} kein TM-Tag. Bankdrücken läuft leicht — drei Fünfer mit Reserve
+              {wann}: no TM day. Bench runs light — three sets of five with reps in reserve
               {vorTest(bank.position) ? (
-                <>, ohne Single: am nächsten Bank-Tag wird getestet.</>
+                <>, no single: the next bench day is a test.</>
               ) : (
                 <>
-                  , danach ein <b className="font-semibold text-fg">schwerer Single</b>. Ohne
-                  Wirkung auf den Trainingsmax, keine Auswertung.
+                  , then one <b className="font-semibold text-fg">heavy single</b>. It doesn't
+                  affect the training max and isn't evaluated.
                 </>
               )}
             </>
           ) : (
             <>
-              {wann} keine Bankeinheit. In der Deload-Woche fällt der leichte Tag aus, die
-              Woche ist zum Zurücknehmen da.
+              {wann}: no bench. The light day is skipped in deload week — the week is for
+              backing off.
             </>
           )}
           {bank.naechsterBankTag && (
-            <> Der nächste TM-Tag ist am {kurzDatum(bank.naechsterBankTag)}.</>
+            <> Next TM day: {kurzDatum(bank.naechsterBankTag)}.</>
           )}
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-          Trainingsmax {de(bank.tm.tmKg, 1)} kg · Zyklus {bank.position.zyklus}, Woche{" "}
+          Training max {de(bank.tm.tmKg, 1)} kg · Cycle {bank.position.zyklus}, week{" "}
           {bank.position.woche}
         </p>
       </Card>
@@ -375,20 +375,20 @@ function BankHinweis({ bank, wann = "Heute" }: { bank: Bankstand; wann?: string 
 
   const wochenText =
     bank.position.woche === 4
-      ? "Deload — bewusst leicht. Die Woche ist nicht zum Ausreizen da."
-      : `Der letzte Satz geht auf Maximalwiederholungen. Aus ihm rechnet Kadenz den Trainingsmax für Zyklus ${bank.position.zyklus + 1}.`;
+      ? "Deload — deliberately light. This week is not for pushing limits."
+      : `The last set is for max reps. Kadenz uses it to set the training max for cycle ${bank.position.zyklus + 1}.`;
 
   return (
     <Card className="mt-3.5">
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Bankdrücken · 5/3/1</Eyebrow>
+        <Eyebrow>Bench press · 5/3/1</Eyebrow>
         <span className="text-[11px] text-fg-faint">
-          Zyklus {bank.position.zyklus} · Woche {bank.position.woche}
+          Cycle {bank.position.zyklus} · Week {bank.position.woche}
         </span>
       </div>
       <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">{wochenText}</p>
       <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-        Trainingsmax {de(bank.tm.tmKg, 1)} kg — das entspricht einem Maximum von rund{" "}
+        Training max {de(bank.tm.tmKg, 1)} kg — that means a max of about{" "}
         {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg. {bank.tm.begruendung}
       </p>
     </Card>

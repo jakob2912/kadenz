@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { Card, Eyebrow, heuteWien } from "@/components/ui";
 import { saetzeDerLetztenWochen } from "@/lib/einheiten-daten";
-import { MUSKELGRUPPEN, wochenvolumen } from "@/lib/muskeln";
+import { MUSKELGRUPPEN, MUSKEL_NAMEN, wochenvolumen } from "@/lib/muskeln";
 
 const WOCHEN = 5;
 
@@ -41,49 +41,49 @@ export async function Wochenueberblick() {
   return (
     <Card className="mt-4">
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Sätze je Muskelgruppe</Eyebrow>
-        <span className="text-[11px] text-fg-faint">{WOCHEN} Wochen</span>
+        <Eyebrow>Sets per muscle group</Eyebrow>
+        <span className="text-[11px] text-fg-faint">{WOCHEN} weeks</span>
       </div>
 
       <div className="mt-3.5 flex gap-6">
         <div>
-          <Eyebrow>Diese Woche</Eyebrow>
+          <Eyebrow>This week</Eyebrow>
           <p className="num mt-1 text-[22px]">
             {diese.saetze}
-            <span className="text-xs font-medium text-fg-faint"> Sätze bisher</span>
+            <span className="text-xs font-medium text-fg-faint"> sets so far</span>
           </p>
         </div>
         <div>
-          <Eyebrow>Vorwoche</Eyebrow>
+          <Eyebrow>Last week</Eyebrow>
           <p className="num mt-1 text-[22px]">
             {vorige.saetze}
-            <span className="text-xs font-medium text-fg-faint"> Sätze</span>
+            <span className="text-xs font-medium text-fg-faint"> sets</span>
           </p>
         </div>
       </div>
 
       {wochen.every((w) => w.saetze === 0) ? (
         <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-          In den letzten {WOCHEN} Wochen keine Sätze.
+          No sets in the last {WOCHEN} weeks.
         </p>
       ) : (
-        <table className="mt-4 w-full border-separate border-spacing-y-1.5" aria-label="Sätze je Muskelgruppe und Woche">
+        <table className="mt-4 w-full border-separate border-spacing-y-1.5" aria-label="Sets per muscle group and week">
           <thead>
             <tr>
               <th scope="col" className="w-[30%] text-left text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                Gruppe
+                Group
               </th>
               <th scope="col" className="text-left text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                <span aria-hidden>vor {WOCHEN - 1} Wo. → jetzt</span>
-                <span className="sr-only">Verlauf über {WOCHEN} Wochen</span>
+                <span aria-hidden>{WOCHEN - 1} wk ago → now</span>
+                <span className="sr-only">Trend over {WOCHEN} weeks</span>
               </th>
               <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                <abbr title="Vorwoche" className="no-underline">
-                  Vorw.
+                <abbr title="Last week" className="no-underline">
+                  Last
                 </abbr>
               </th>
               <th scope="col" className="w-[44px] text-right text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint">
-                Jetzt
+                Now
               </th>
             </tr>
           </thead>
@@ -91,7 +91,7 @@ export async function Wochenueberblick() {
             {gruppen.map((g) => (
               <tr key={g}>
                 <th scope="row" className="text-left text-[13px] font-medium text-fg-dim">
-                  {g}
+                  {MUSKEL_NAMEN[g]}
                 </th>
                 <td>
                   <span className="flex h-[22px] items-end gap-1" aria-hidden>
@@ -109,7 +109,7 @@ export async function Wochenueberblick() {
                     })}
                   </span>
                   <span className="sr-only">
-                    älteste Woche zuerst: {wochen.map((w) => zahl(w.jeGruppe[g] ?? 0)).join(", ")}
+                    oldest week first: {wochen.map((w) => zahl(w.jeGruppe[g] ?? 0)).join(", ")}
                   </span>
                 </td>
                 <td className="text-right text-[13px] tabular-nums text-fg-dim">
@@ -125,14 +125,14 @@ export async function Wochenueberblick() {
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Nebenmuskeln zählen halb — ein Satz Bankdrücken ist ein Satz Brust und je ein halber
-        Trizeps und Schulter. „Jetzt“ ist die laufende Woche, sie ist noch nicht vorbei; zum
-        Vergleich steht die Vorwoche daneben.
+        Secondary muscles count half — one set of bench press is one set of chest and half a
+        set each of triceps and shoulders. “Now” is the current week, which isn't over yet;
+        last week stands next to it for comparison.
         {ohneZuordnung > 0 && (
           <>
             {" "}
-            {ohneZuordnung === 1 ? "Ein Satz ließ" : `${ohneZuordnung} Sätze ließen`} sich keiner
-            Gruppe zuordnen und fehlen oben.
+            {ohneZuordnung === 1 ? "One set" : `${ohneZuordnung} sets`} couldn't be assigned to a
+            group and are missing above.
           </>
         )}
       </p>
@@ -142,5 +142,5 @@ export async function Wochenueberblick() {
 
 /** 3 → "3", 2,5 → "2,5" */
 function zahl(n: number): string {
-  return String(Math.round(n * 2) / 2).replace(".", ",");
+  return String(Math.round(n * 2) / 2);
 }

@@ -33,9 +33,9 @@ export type Bestwert = {
 export type BestwertArt = "gewicht" | "wdh" | "e1rm";
 
 export const BESTWERT_TEXT: Record<BestwertArt, string> = {
-  gewicht: "schwerstes Gewicht",
-  wdh: "meiste Wiederholungen",
-  e1rm: "geschätztes Maximum",
+  gewicht: "heaviest weight",
+  wdh: "most reps",
+  e1rm: "estimated max",
 };
 
 /** Aus den bisherigen Sätzen einer Übung. Null, wenn es keine gibt. */

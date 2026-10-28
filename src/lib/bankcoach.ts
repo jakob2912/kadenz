@@ -203,7 +203,7 @@ function tageZwischen(vonIso: string, bisIso: string): number {
 }
 
 function zahl(n: number, stellen = 1): string {
-  const s = n.toFixed(stellen).replace(".", ",");
+  const s = n.toFixed(stellen);
   return s.endsWith(",0") ? s.slice(0, -2) : s;
 }
 

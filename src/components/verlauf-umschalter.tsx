@@ -8,12 +8,12 @@ import Link from "next/link";
  */
 export function VerlaufUmschalter({ aktiv }: { aktiv: "koerper" | "bank" }) {
   const eintraege = [
-    { href: "/verlauf", label: "Körper & Kraft", id: "koerper" },
-    { href: "/bank", label: "Bankdrücken", id: "bank" },
+    { href: "/verlauf", label: "Body & strength", id: "koerper" },
+    { href: "/bank", label: "Bench press", id: "bank" },
   ] as const;
 
   return (
-    <nav aria-label="Verlauf" className="pt-6 md:pt-12">
+    <nav aria-label="History" className="pt-6 md:pt-12">
       <div className="inline-flex rounded-lg border border-hair bg-surface-2 p-1">
         {eintraege.map((e) => {
           const an = e.id === aktiv;

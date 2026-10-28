@@ -293,7 +293,7 @@ async function aufZyklusBringen(
       begruendung:
         `Zwischen Zyklus ${aktuell.zyklus} und ${zielZyklus} liegen ` +
         `${zielZyklus - aktuell.zyklus} Zyklen ohne Auswertung. Der Trainingsmax bleibt ` +
-        `bei ${aktuell.tmKg.toFixed(1).replace(".", ",")} kg — nach so langer Pause ist er ` +
+        `bei ${aktuell.tmKg.toFixed(1)} kg — nach so langer Pause ist er ` +
         `eher zu hoch als zu niedrig. Prüf ihn im ersten Satz und korrigier ihn, wenn er nicht passt.`,
     });
   }
@@ -482,7 +482,7 @@ function vorgabeFuer(
       saetze: bankZusatzPlan(tmKg, false),
       hinweis:
         `Leichter Tag vor dem Testtag: nur drei Fünfer bei ` +
-        `${String(ZUSATZ_PROZENT).replace(".", ",")} %, kein Single — frisch in den Test.`,
+        `${String(ZUSATZ_PROZENT)} %, kein Single — frisch in den Test.`,
     };
   }
 
@@ -490,7 +490,7 @@ function vorgabeFuer(
     return {
       saetze: bankZusatzPlan(tmKg),
       hinweis:
-        `Leichter Tag: drei Fünfer bei ${String(ZUSATZ_PROZENT).replace(".", ",")} %, danach ` +
+        `Leichter Tag: drei Fünfer bei ${String(ZUSATZ_PROZENT)} %, danach ` +
         `ein schwerer Single bei ${SINGLE_PROZENT} % vom Trainingsmax. Eine Wiederholung, ` +
         `sauber und schnell — kein Grinder, keine zweite. Zählt nicht für die ` +
         `Trainingsmax-Progression, dafür ist der AMRAP-Satz am TM-Tag da.`,

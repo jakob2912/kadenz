@@ -58,7 +58,7 @@ export function NichtVerbunden({
         className="mt-6 flex min-h-[52px] items-center justify-center rounded-md bg-accent
                    font-semibold text-on-accent transition active:scale-[0.98]"
       >
-        Mit Google verbinden
+        Connect Google
       </a>
       {/* Die Einstellungen hängen sonst nur am Kopf der Startseite; von
           Verlauf aus ist das ein Tab-Wechsel weiter. */}
@@ -66,7 +66,7 @@ export function NichtVerbunden({
         href="/einstellungen"
         className="mt-3 flex min-h-[44px] items-center justify-center text-[13px] font-semibold text-fg-faint active:text-fg"
       >
-        Einstellungen
+        Settings
       </Link>
     </div>
   );
@@ -92,8 +92,8 @@ export function AbgelaufenHinweis({
     >
       <p className="text-xs leading-relaxed text-caution">
         {lage.neuVerbinden
-          ? "Google-Verbindung abgelaufen — die Werte kommen aus der eigenen Ablage."
-          : `Google antwortet gerade nicht, die Werte kommen aus der eigenen Ablage. ${
+          ? "Google connection expired — showing the values Kadenz stored itself."
+          : `Google isn't responding right now — showing the values Kadenz stored itself. ${
               lage.grund.length > 140 ? `${lage.grund.slice(0, 140)}…` : lage.grund
             }`}
       </p>
@@ -104,7 +104,7 @@ export function AbgelaufenHinweis({
           href="/api/auth/google"
           className="flex min-h-[44px] items-center text-[13px] font-semibold text-fg active:text-accent"
         >
-          Neu verbinden
+          Reconnect
         </a>
       )}
     </div>
@@ -273,7 +273,7 @@ export function Gauge({
             "X von 100". Zwei Namen für dieselbe Zahl auf zwei Screens zwingen
             zum Nachdenken, ob es dieselbe Zahl ist. */}
         <span className="text-[9px] font-semibold uppercase tracking-[0.13em] text-fg-faint">
-          von 100
+          of 100
         </span>
       </div>
     </div>
@@ -296,9 +296,9 @@ export function minToHm(min: number): string {
  */
 export { heuteWien };
 
-/** "Sa., 15. Aug." — kurz genug, um neben einer Zahl in einer Zeile zu stehen. */
+/** "Sat 15 Aug" — kurz genug, um neben einer Zahl in einer Zeile zu stehen. */
 export function kurzDatum(iso: string): string {
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("de-AT", {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
     weekday: "short",
     day: "numeric",
     month: "short",
@@ -317,7 +317,7 @@ export function kurzDatum(iso: string): string {
  * interessiert er niemanden.
  */
 export function langDatum(iso: string): string {
-  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("de-AT", {
+  return new Date(`${iso}T12:00:00Z`).toLocaleDateString("en-GB", {
     month: "short",
     year: "numeric",
     timeZone: "Europe/Vienna",
@@ -336,9 +336,9 @@ export function alterLabel(iso: string, heute = heuteWien()): string {
   const tage = Math.round(
     (Date.parse(`${heute}T00:00:00Z`) - Date.parse(`${iso}T00:00:00Z`)) / 864e5
   );
-  if (tage <= 0) return "heute";
-  if (tage === 1) return "gestern";
-  if (tage < 7) return `vor ${tage} Tagen`;
+  if (tage <= 0) return "today";
+  if (tage === 1) return "yesterday";
+  if (tage < 7) return `${tage} days ago`;
   return kurzDatum(iso);
 }
 
@@ -355,7 +355,7 @@ export function anzahl(n: number, singular: string, plural: string): string {
 }
 
 export function de(n: number, digits = 1): string {
-  return n.toFixed(digits).replace(".", ",");
+  return n.toFixed(digits);
 }
 
 /**

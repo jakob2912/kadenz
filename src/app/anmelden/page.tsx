@@ -16,10 +16,10 @@ export default function Anmelden({ searchParams }: { searchParams: Suchparameter
   return (
     <div className="mx-auto max-w-[420px] pt-16">
       <Eyebrow>Kadenz</Eyebrow>
-      <h1 className="mt-2 text-[27px] font-bold tracking-[-0.025em]">Anmelden</h1>
+      <h1 className="mt-2 text-[27px] font-bold tracking-[-0.025em]">Sign in</h1>
       <p className="mt-3 text-sm leading-relaxed text-fg-dim">
-        Kadenz zeigt Gesundheitsdaten und nimmt Trainingseinträge an — deshalb nur mit
-        Passwort. Einmal pro Gerät, danach bleibt es ein Jahr angemeldet.
+        Kadenz shows health data and accepts training entries — so it needs a
+        password. Once per device; after that you stay signed in for a year.
       </p>
       <Suspense fallback={null}>
         <Formular searchParams={searchParams} />
@@ -38,7 +38,7 @@ async function Formular({ searchParams }: { searchParams: Suchparameter }) {
         className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint"
         htmlFor="passwort"
       >
-        Passwort
+        Password
       </label>
       <input
         id="passwort"
@@ -53,14 +53,14 @@ async function Formular({ searchParams }: { searchParams: Suchparameter }) {
       />
       {fehler && (
         <p id="anmelde-fehler" role="alert" className="text-xs text-strain">
-          Das Passwort stimmt nicht.
+          Wrong password.
         </p>
       )}
       <button
         type="submit"
         className="mt-2 flex min-h-[52px] items-center justify-center rounded-md bg-accent font-semibold text-on-accent transition active:scale-[0.98]"
       >
-        Anmelden
+        Sign in
       </button>
     </form>
   );

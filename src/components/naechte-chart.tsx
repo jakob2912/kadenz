@@ -6,8 +6,8 @@ import { ReihenChart } from "@/components/reihen-chart";
 import type { DailyReadiness } from "@/lib/health-mapper";
 
 const MESSGROESSEN = {
-  schlaf: { label: "Schlaf", einheit: "h", stellen: 1, wert: (n: DailyReadiness) => n.sleepMin / 60 },
-  ruhepuls: { label: "Ruhepuls", einheit: "bpm", stellen: 0, wert: (n: DailyReadiness) => n.restingHr },
+  schlaf: { label: "Sleep", einheit: "h", stellen: 1, wert: (n: DailyReadiness) => n.sleepMin / 60 },
+  ruhepuls: { label: "Resting HR", einheit: "bpm", stellen: 0, wert: (n: DailyReadiness) => n.restingHr },
   hrv: { label: "HRV", einheit: "ms", stellen: 0, wert: (n: DailyReadiness) => n.hrv },
 } as const;
 
@@ -30,7 +30,7 @@ export function NaechteChart({ naechte }: { naechte: DailyReadiness[] }) {
     <Card className="mt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Eyebrow>Nächte</Eyebrow>
-        <div className="inline-flex rounded-lg border border-hair bg-surface-2 p-1" role="group" aria-label="Messgröße">
+        <div className="inline-flex rounded-lg border border-hair bg-surface-2 p-1" role="group" aria-label="Metric">
           {(Object.keys(MESSGROESSEN) as Messgroesse[]).map((k) => (
             <button
               key={k}
@@ -52,8 +52,8 @@ export function NaechteChart({ naechte }: { naechte: DailyReadiness[] }) {
         stellen={m.stellen}
         zeitraeume={[30, 90, 365]}
         bezeichnung={m.label}
-        leer="Noch keine vollständige Nacht."
-        einzeln="Erst eine vollständige Nacht. Ab der zweiten steht hier eine Kurve."
+        leer="No complete night yet."
+        einzeln="Only one complete night so far. A curve appears from the second one."
       />
     </Card>
   );

@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 const TABS: { href: string; label: string; d: string; auch?: string[] }[] = [
   {
     href: "/",
-    label: "Heute",
+    label: "Today",
     d: "M12 2v3M4.9 6.9 7 9M19.1 6.9 17 9M2 15h20M6 15a6 6 0 0 1 12 0M3 20h18",
   },
   { href: "/training", label: "Training", d: "M4 9v6M7.5 6.5v11M16.5 6.5v11M20 9v6M7.5 12h9" },
@@ -15,7 +15,7 @@ const TABS: { href: string; label: string; d: string; auch?: string[] }[] = [
      Kalorienvorschlag braucht eine Stelle, an der er von selbst auffällt. */
   {
     href: "/ernaehrung",
-    label: "Essen",
+    label: "Food",
     d: "M2.5 11.5h19a9.5 9.5 0 0 1-19 0M8.5 7.6c0-1.7 1.2-2 1.2-3.6M12.5 7.2c0-1.7 1.2-2 1.2-3.6M16.5 7.6c0-1.7 1.2-2 1.2-3.6",
   },
   /* Vier statt sechs Tabs. Bankdrücken lebt jetzt unter Verlauf (Umschalter
@@ -24,7 +24,7 @@ const TABS: { href: string; label: string; d: string; auch?: string[] }[] = [
      blieben auf 375 px je 52 px, und "Verlauf" stand kurz vor dem Umbruch. */
   {
     href: "/verlauf",
-    label: "Verlauf",
+    label: "History",
     d: "M3 3v18h18M7 15l4-4 3 3 5-6M19 8h-3M19 8v3",
     auch: ["/bank"],
   },
@@ -38,7 +38,7 @@ export function TabBar() {
 
   return (
     <nav
-      aria-label="Hauptnavigation"
+      aria-label="Main navigation"
       className="fixed inset-x-0 bottom-0 z-50 border-t border-hair-soft bg-ground/85 px-5 pt-2 backdrop-blur-xl
                  pb-[calc(0.5rem+env(safe-area-inset-bottom))]
                  md:bottom-auto md:top-0 md:border-t-0 md:border-b md:py-2.5"

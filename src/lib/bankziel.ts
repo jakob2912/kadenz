@@ -213,6 +213,6 @@ function monatName(iso: string): string {
 }
 
 function zahl(n: number): string {
-  const s = n.toFixed(1).replace(".", ",");
+  const s = n.toFixed(1);
   return s.endsWith(",0") ? s.slice(0, -2) : s;
 }

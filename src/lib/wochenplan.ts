@@ -180,13 +180,13 @@ export async function wochenwahlSetzen(
       if (aenderung.frueh !== woche.frueh) {
         if (gesperrt.fruehGesperrt) return { ok: false, fehler: gesperrt.fruehGesperrt };
         if (aenderung.frueh === "mo" && heute > montag) {
-          return { ok: false, fehler: "Mo ist vorbei." };
+          return { ok: false, fehler: "Monday is over." };
         }
       }
     } else if (aenderung.spaet !== woche.spaet) {
       if (gesperrt.spaetGesperrt) return { ok: false, fehler: gesperrt.spaetGesperrt };
       if (aenderung.spaet === "frsa" && heute > plusTage(montag, 4)) {
-        return { ok: false, fehler: "Fr ist vorbei — Fr + Sa geht diese Woche nicht mehr." };
+        return { ok: false, fehler: "Friday is over — Fri + Sat is no longer possible this week." };
       }
     }
 
@@ -199,7 +199,7 @@ export async function wochenwahlSetzen(
     return { ok: true, stand: await wochenstand() };
   } catch (e) {
     console.error("Wochenwahl nicht speicherbar:", e);
-    return { ok: false, fehler: "Der Schalter konnte nicht gespeichert werden." };
+    return { ok: false, fehler: "The switch could not be saved." };
   }
 }
 

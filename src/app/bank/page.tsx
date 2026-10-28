@@ -40,9 +40,9 @@ export default function Bank() {
     <div className="mx-auto max-w-[520px] md:max-w-[1180px]">
       <VerlaufUmschalter aktiv="bank" />
       <header className="pt-6 md:pt-8">
-        <Eyebrow>Bankdrücken</Eyebrow>
+        <Eyebrow>Bench press</Eyebrow>
         <h1 className="mt-1.5 text-[27px] font-bold tracking-[-0.025em] md:text-[33px]">
-          5/3/1 mit leichtem Tag
+          5/3/1 with a light day
         </h1>
       </header>
 
@@ -74,8 +74,8 @@ async function Inhalt() {
     return (
       <Card className="mt-7">
         <p className="text-sm leading-relaxed text-fg-dim">
-          Die Bankdaten sind gerade nicht lesbar. Versuch es gleich noch einmal — geloggt
-          ist trotzdem alles, was du geloggt hast.
+          The bench data can't be read right now. Try again in a moment — everything you
+          logged is still saved.
         </p>
       </Card>
     );
@@ -85,9 +85,9 @@ async function Inhalt() {
     return (
       <>
         <p className="mt-3 max-w-[62ch] text-sm leading-relaxed text-fg-dim">
-          Das Programm läuft noch nicht. Langhantel-Bankdrücken hat in Kadenz keine
-          Historie, aus der sich ein Trainingsmax schätzen ließe — er ist die Grundlage
-          sämtlicher Prozente und wird einmalig eingetragen.
+          The program isn't running yet. Barbell bench press has no history in Kadenz
+          to estimate a training max from — it is the basis of every percentage and is
+          entered once.
         </p>
         <BankTrainingsmax aktuellerTm={null} zyklus={1} />
       </>
@@ -133,9 +133,9 @@ function Stand({
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Aktueller Stand</Eyebrow>
+        <Eyebrow>Current status</Eyebrow>
         <span className="text-[11px] tabular-nums text-fg-faint">
-          Zyklus {zyklus} · Woche {woche} von {wochen}
+          Cycle {zyklus} · Week {woche} of {wochen}
         </span>
       </div>
 
@@ -143,7 +143,7 @@ function Stand({
         {de(tm.tmKg, 1)} kg
       </p>
       <p className="mt-1.5 text-[13px] text-fg-dim">
-        Trainingsmax — entspricht einem Maximum von rund{" "}
+        Training max — that means a max of about{" "}
         <b className="font-semibold text-fg">{de(behauptetesMaximum(tm.tmKg), 1)} kg</b>.
       </p>
 
@@ -164,7 +164,7 @@ function Stand({
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
         {/* kurzDatum endet auf "Okt." — ein weiterer Punkt dahinter wäre doppelt. */}
-        Gültig seit {kurzDatum(tm.gueltigAb).replace(/\.$/, "")}. {tm.begruendung}
+        Valid since {kurzDatum(tm.gueltigAb)}. {tm.begruendung}
       </p>
     </Card>
   );
@@ -176,15 +176,15 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
 
   return (
     <Card>
-      <Eyebrow>Programmiert</Eyebrow>
+      <Eyebrow>Scheduled</Eyebrow>
       <div className="mt-3 flex flex-col gap-4">
         {wochen.map((w, i) => (
           <div key={`${w.zyklus}-${w.woche}`}>
             <div className="flex items-baseline justify-between gap-3">
               <p className="text-[13px] font-semibold tracking-[-0.015em]">
-                {i === 0 && w.datum === standTag ? "Nächste Einheit" : kurzDatum(w.datum)}
+                {i === 0 && w.datum === standTag ? "Next session" : kurzDatum(w.datum)}
                 <span className="ml-2 font-normal text-fg-faint">
-                  Zyklus {w.zyklus} · Woche {w.woche}
+                  Cycle {w.zyklus} · Week {w.woche}
                 </span>
               </p>
               {w.deload && <Tag tone="warnung">Deload</Tag>}
@@ -219,10 +219,10 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                 Zeichen. Der AMRAP-Satz ist das Messinstrument des Programms. */}
             <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
               {w.test
-                ? "Aufwärmen, dann Singles. Den nächsten Versuch nur, wenn der vorige glatt ging — beim ersten Kampf-Rep ist Schluss."
+                ? "Warm up, then singles. Only take the next attempt if the previous one moved cleanly — stop at the first grinder."
                 : w.deload
-                  ? "Bewusst leicht, kein Satz auf Maximalwiederholungen. Die Woche ist zum Zurücknehmen da."
-                  : "Der letzte Satz geht auf Maximalwiederholungen — aus ihm rechnet Kadenz den nächsten Trainingsmax."}
+                  ? "Deliberately light, no max-rep set. This week is for backing off."
+                  : "The last set is for max reps — Kadenz uses it to set the next training max."}
             </p>
           </div>
         ))}
@@ -237,7 +237,7 @@ function TmHistorie({ historie }: { historie: Trainingsmax[] }) {
 
   return (
     <Card>
-      <Eyebrow>Trainingsmax-Historie</Eyebrow>
+      <Eyebrow>Training max history</Eyebrow>
       <ol className="mt-3 flex flex-col gap-2.5">
         {historie.map((h, i) => {
           /* Die Liste läuft absteigend, der Vorgänger steht also EINEN Platz
@@ -249,7 +249,7 @@ function TmHistorie({ historie }: { historie: Trainingsmax[] }) {
           return (
             <li key={h.zyklus} className="flex items-baseline gap-3">
               <span className="w-[54px] shrink-0 text-[11px] text-fg-faint">
-                Zyklus {h.zyklus}
+                Cycle {h.zyklus}
               </span>
               <span className="shrink-0 text-[13px] font-semibold tabular-nums">
                 {de(h.tmKg, 1)} kg
@@ -293,10 +293,10 @@ function Pr({
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Echter PR</Eyebrow>
+        <Eyebrow>True PR</Eyebrow>
         {naechsterTest && (
           <span className="text-[11px] text-fg-faint">
-            Nächster Test {kurzDatum(naechsterTest)}
+            Next test {kurzDatum(naechsterTest)}
           </span>
         )}
       </div>
@@ -308,23 +308,23 @@ function Pr({
           </p>
           <p className="mt-1.5 text-[13px] text-fg-dim">
             {pr.quelle === "geloggt"
-              ? `Schwerster sauberer Single, am ${kurzDatum(pr.datum)}.`
-              : `Bestwert vom ${kurzDatum(pr.datum)} · von dir eingetragen. Ein schwererer geloggter Single löst ihn ab.`}
+              ? `Heaviest clean single, on ${kurzDatum(pr.datum)}.`
+              : `Best from ${kurzDatum(pr.datum)} · entered by you. A heavier logged single replaces it.`}
           </p>
         </>
       ) : (
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          Noch kein sauberer Single geloggt.
+          No clean single logged yet.
         </p>
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Getestet wird in jedem {TEST_ALLE_ZYKLEN}. Zyklus am TM-Tag der Deload-Woche.
+        Tested every {TEST_ALLE_ZYKLEN} cycles, on the TM day of the deload week.
         {schaetzung !== null && (
           <>
             {" "}
-            Geschätztes Maximum aus den letzten Wochen: {de(schaetzung, 1)} kg — dort beginnt der
-            erste Versuch.
+            Estimated max from recent weeks: {de(schaetzung, 1)} kg — that's where the first
+            attempt starts.
           </>
         )}
       </p>
@@ -336,10 +336,10 @@ const LAGE_TEXT: Record<
   Bankcoach["lage"],
   { label: string; tone: "akzent" | "warnung" | "gut" | "schlecht" }
 > = {
-  laeuft: { label: "Läuft", tone: "gut" },
-  steht: { label: "Steht", tone: "warnung" },
-  faellt: { label: "Geht zurück", tone: "schlecht" },
-  unklar: { label: "Zu wenig Daten", tone: "akzent" },
+  laeuft: { label: "Rising", tone: "gut" },
+  steht: { label: "Stalling", tone: "warnung" },
+  faellt: { label: "Going down", tone: "schlecht" },
+  unklar: { label: "Too little data", tone: "akzent" },
 };
 
 /**
@@ -352,7 +352,7 @@ function Coach({ coach, prognose }: { coach: Bankcoach; prognose: Prognose | nul
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Coach · schwere Tage</Eyebrow>
+        <Eyebrow>Coach · heavy days</Eyebrow>
         <Tag tone={lage.tone}>{lage.label}</Tag>
       </div>
       <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">{coach.vorschlag.text}</p>
@@ -388,7 +388,7 @@ function Ziel({ stand }: { stand: Zielstand }) {
       <p className="mt-2 text-[27px] font-bold leading-none tracking-[-0.03em]">
         {de(stand.tmKg, 1)}{" "}
         <span className="text-[15px] font-semibold text-fg-faint">
-          von {de(ZIEL_TM_KG, 1)} kg Trainingsmax
+          of {de(ZIEL_TM_KG, 1)} kg training max
         </span>
       </p>
 
@@ -401,21 +401,21 @@ function Ziel({ stand }: { stand: Zielstand }) {
       <div className="mt-4">
         <ReihenChart
           reihe={stand.kurve.map((p) => ({ datum: p.datum, wert: p.tmKg }))}
-          bezeichnung="Erwartete Trainingsmax-Kurve"
+          bezeichnung="Expected training max curve"
           einheit="kg"
           /* Großzügig, weil zwischen zwei Punkten 24 Tage liegen — das ist der
              Zyklus und keine Messlücke. Beim Vorgabewert von drei Tagen
              zerfiele die Treppe in lauter Einzelpunkte. */
           lueckeTage={40}
-          leer="Noch kein Trainingsmax."
-          einzeln="Das Ziel ist erreicht."
+          leer="No training max yet."
+          einzeln="Goal reached."
         />
       </div>
 
       <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-        Die Stufen sind der Bestfall: jeder Zyklus gelingt, keiner bleibt stehen. Verfehlt
-        ein Satz auf Maximalwiederholungen sein Soll, setzt das Programm den Trainingsmax
-        zurück — das ist eingeplant und schiebt die Kurve nach rechts.
+        The steps are the best case: every cycle succeeds, none stalls. If a max-rep set
+        misses its target, the program resets the training max — that is planned for and
+        shifts the curve to the right.
       </p>
     </Card>
   );
@@ -432,7 +432,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
 
   return (
     <Card>
-      <Eyebrow>So wechselt es sich ab</Eyebrow>
+      <Eyebrow>How it alternates</Eyebrow>
 
       <div className="mt-3 flex flex-col gap-3.5">
         <div>
@@ -441,43 +441,43 @@ function Ablauf({ tmKg }: { tmKg: number }) {
             <Tag tone="akzent">AMRAP</Tag>
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            Jede zweite Push-Einheit. Drei Sätze nach der Welle, der letzte auf
-            Maximalwiederholungen — nur dieser Satz in Woche 3 bewegt den Trainingsmax.
+            Every second push session. Three sets following the wave, the last one for
+            max reps — only that set in week 3 moves the training max.
           </p>
         </div>
 
         <div className="border-t border-hair-soft pt-3.5">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="text-[15px] font-semibold tracking-[-0.015em]">Leichter Tag</span>
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">Light day</span>
             <Tag tone="gut">+ Single</Tag>
           </div>
           <p className="mt-1.5 text-[13px] tabular-nums text-fg">
-            3 × {fuenfer.wdh} mit {de(fuenfer.kg, 1)} kg
+            3 × {fuenfer.wdh} at {de(fuenfer.kg, 1)} kg
             <span className="text-fg-faint"> · {de(ZUSATZ_PROZENT, 1)} %</span>, dann 1 ×{" "}
             {de(single.kg, 1)} kg
             <span className="text-fg-faint"> · {de(SINGLE_PROZENT, 0)} %</span>
           </p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            Die Push-Einheit dazwischen. Der Single ist eine saubere, schnelle Wiederholung —
-            kein Grinder und keine zweite. Zählt nicht für den Trainingsmax. In der
-            Deload-Woche fällt der Tag aus — die gibt es erst ab {DELOAD_AB_TM_KG} kg
-            Trainingsmax, darunter dauert ein Zyklus drei Wochen.
+            The push session in between. The single is one clean, fast rep — no grinder
+            and no second one. Doesn't count toward the training max. The day is skipped in
+            deload week — deload only exists from {DELOAD_AB_TM_KG} kg training max;
+            below that a cycle lasts three weeks.
           </p>
         </div>
 
         <div className="border-t border-hair-soft pt-3.5">
           <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <span className="text-[15px] font-semibold tracking-[-0.015em]">Testtag</span>
+            <span className="text-[15px] font-semibold tracking-[-0.015em]">Test day</span>
             <Tag tone="warnung">1RM</Tag>
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            Jeder {TEST_ALLE_ZYKLEN}. Zyklus: Der TM-Tag der Deload-Woche wird zum Maximalversuch.
-            Der leichte Tag davor läuft ohne Single. Bewegt den Trainingsmax nicht.
+            Every {TEST_ALLE_ZYKLEN} cycles the TM day of the deload week becomes a max attempt.
+            The light day before it runs without a single. Doesn't move the training max.
           </p>
         </div>
 
         <p className="border-t border-hair-soft pt-3.5 text-[11px] leading-relaxed text-fg-faint">
-          Am Pull-Tag wird nicht gebankt.
+          No bench on pull days.
         </p>
       </div>
     </Card>
@@ -489,10 +489,10 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
   if (einheiten.length === 0) {
     return (
       <Card>
-        <Eyebrow>Verlauf</Eyebrow>
+        <Eyebrow>History</Eyebrow>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          Noch keine Bankeinheit geloggt. Sobald der erste Satz steht, läuft hier die
-          Zeitleiste.
+          No bench session logged yet. As soon as the first set is in, the timeline
+          starts here.
         </p>
       </Card>
     );
@@ -503,9 +503,9 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Verlauf</Eyebrow>
+        <Eyebrow>History</Eyebrow>
         <span className="text-[11px] text-fg-faint">
-          {anzahl(einheiten.length, "Einheit", "Einheiten")}
+          {anzahl(einheiten.length, "session", "sessions")}
         </span>
       </div>
 
@@ -540,9 +540,9 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
           sie ein Zeichen, das nirgends steht. */}
       {unsauberDabei && (
         <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-          Ein Stern markiert einen Satz, dessen Form nicht gestanden hat. Solche Sätze
-          bleiben sichtbar, zählen aber weder für das geschätzte Maximum noch für die
-          Fortschreibung des Trainingsmax.
+          An asterisk marks a set whose form didn't hold. Those sets stay visible but
+          count neither toward the estimated max nor toward the training max
+          progression.
         </p>
       )}
 
@@ -550,7 +550,7 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
         href="/verlauf/Bankdr%C3%BCcken"
         className="mt-3.5 inline-flex min-h-[36px] items-center text-[13px] font-semibold text-accent md:hover:underline"
       >
-        Kraftverlauf des Bankdrückens →
+        Bench press strength trend →
       </Link>
     </Card>
   );
