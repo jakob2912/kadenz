@@ -242,7 +242,7 @@ describe("Wochenschalter", () => {
   });
 
   it("beschreibt eine Woche", () => {
-    expect(wochenText(wocheAm(W, [wahl(W, "di", "saso")]))).toBe("Push Di und Sa, Pull Mi und So");
+    expect(wochenText(wocheAm(W, [wahl(W, "di", "saso")]))).toBe("Push Tue and Sat, Pull Wed and Sun");
   });
 
   it("wechselt Push und Pull in jeder Kombination ohne Doppelung ab", () => {
@@ -289,21 +289,21 @@ describe("Wochenschalter", () => {
     // Di, nach ausgefallenem Montag: beide Schalter frei.
     expect(schalterSperren(woche, "2026-09-29", leer)).toEqual({ fruehGesperrt: null, spaetGesperrt: null });
     // Montag trainiert: der erste Push ist fest.
-    expect(schalterSperren(woche, "2026-09-28", new Set([W])).fruehGesperrt).toContain("schon trainiert");
+    expect(schalterSperren(woche, "2026-09-28", new Set([W])).fruehGesperrt).toContain("already done");
     // Mittwoch: Mo/Di vorbei, das Wochenende noch offen.
     expect(schalterSperren(woche, "2026-09-30", leer)).toMatchObject({
-      fruehGesperrt: "Mo und Di sind vorbei.",
+      fruehGesperrt: "Monday and Tuesday are over.",
       spaetGesperrt: null,
     });
     // Sa nach ausgefallenem Fr: Wochenende noch umlegbar.
     expect(schalterSperren(woche, "2026-10-03", leer).spaetGesperrt).toBeNull();
     // Fr trainiert: Wochenende fest.
     expect(schalterSperren(woche, "2026-10-02", new Set(["2026-10-02"])).spaetGesperrt).toContain(
-      "schon trainiert"
+      "already done"
     );
     // Nach einer Sa + So-Woche ist Mo gesperrt.
     const folge = wocheAm("2026-10-05", [wahl(W, null, "saso")]);
-    expect(schalterSperren(folge, "2026-10-04", leer).fruehGesperrt).toContain("dritte Tag");
+    expect(schalterSperren(folge, "2026-10-04", leer).fruehGesperrt).toContain("third day");
   });
 
   it("holt Push am Folgetag nach", () => {

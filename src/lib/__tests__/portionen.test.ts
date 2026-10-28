@@ -25,11 +25,11 @@ describe("skalierung", () => {
   it("begrenzt den Faktor und sagt es", () => {
     const runter = skalierung(560, 100)!;
     expect(runter.faktor).toBe(0.5);
-    expect(runter.hinweis).toContain("weit unter");
+    expect(runter.hinweis).toContain("far below");
 
     const hoch = skalierung(560, 1200)!;
     expect(hoch.faktor).toBe(1.5);
-    expect(hoch.hinweis).toContain("weit über");
+    expect(hoch.hinweis).toContain("far above");
   });
 
   it("gibt ohne brauchbare Zahlen nichts zurück", () => {

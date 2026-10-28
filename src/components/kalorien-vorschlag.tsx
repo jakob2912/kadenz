@@ -68,21 +68,21 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
 
   return (
     <Card className="border-accent/30">
-      <Eyebrow>Vorschlag · Kadenz</Eyebrow>
+      <Eyebrow>Suggestion · Kadenz</Eyebrow>
 
       <h2 className="mt-2 text-[19px] font-bold leading-snug tracking-[-0.02em]">
-        Sollen wir die Kalorien auf {vorschlag.kcalNeu} {hoch ? "erhöhen" : "senken"}?
+        Should we {hoch ? "raise" : "lower"} calories to {vorschlag.kcalNeu}?
       </h2>
 
       <div className="mt-3.5 flex flex-col gap-2 rounded-md border border-hair bg-surface-3 p-3.5">
         <Zeile
-          label="Kalorien"
+          label="Calories"
           von={`${vorschlag.kcalAlt} kcal`}
           nach={`${vorschlag.kcalNeu} kcal`}
           delta={`${delta > 0 ? "+" : "−"}${Math.abs(delta)}`}
         />
         <Zeile
-          label="Kohlenhydrate"
+          label="Carbs"
           von={`${vorschlag.kohlenhydrateAltG} g`}
           nach={`${vorschlag.kohlenhydrateNeuG} g`}
           delta={`${vorschlag.kohlenhydrateNeuG > vorschlag.kohlenhydrateAltG ? "+" : "−"}${Math.abs(
@@ -93,7 +93,7 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
             Ohne sie bliebe offen, ob der Vorschlag sie stillschweigend mit
             verschiebt. */}
         <p className="text-[11px] leading-relaxed text-fg-faint">
-          Eiweiß {vorschlag.eiweissG} g und Fett {vorschlag.fettG} g bleiben unverändert.
+          Protein {vorschlag.eiweissG} g and fat {vorschlag.fettG} g stay the same.
         </p>
       </div>
 
@@ -104,8 +104,8 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
       </p>
 
       <p className="mt-2.5 text-[11px] leading-relaxed text-fg-faint">
-        Gemessen {de(vorschlag.gemesseneRate, 2)} kg pro Woche · angepeilt{" "}
-        {de(vorschlag.zielRate, 2)} kg pro Woche
+        Measured {de(vorschlag.gemesseneRate, 2)} kg per week · target{" "}
+        {de(vorschlag.zielRate, 2)} kg per week
       </p>
 
       {!entschieden && (
@@ -118,7 +118,7 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
                        text-fg-dim transition active:scale-[0.98] disabled:opacity-55
                        md:hover:border-accent/35 md:hover:text-fg"
           >
-            Nein
+            No
           </button>
           <button
             type="button"
@@ -128,7 +128,7 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
             className="min-h-[52px] rounded-md bg-accent font-semibold text-on-accent
                        transition active:scale-[0.98] disabled:opacity-55"
           >
-            {laeuft ? "Moment…" : "Ja"}
+            {laeuft ? "One moment…" : "Yes"}
           </button>
         </div>
       )}
@@ -151,11 +151,11 @@ export function KalorienVorschlag({ vorschlag }: { vorschlag: Vorschlag }) {
               }`}
             >
               {status.art === "angenommen" &&
-                `Neues Ziel: ${status.kcal} kcal. Ab jetzt messe ich mindestens zehn Tage, bevor ich wieder etwas vorschlage.`}
+                `New target: ${status.kcal} kcal. From now on I'll measure for at least ten days before suggesting anything again.`}
               {status.art === "abgelehnt" &&
-                "Bleibt, wie es ist. Ich frage frühestens in zehn Tagen wieder."}
+                "Staying as it is. I'll ask again in ten days at the earliest."}
               {status.art === "fehler" &&
-                `Nicht gespeichert: ${status.text} Nochmal versuchen — entschieden ist noch nichts.`}
+                `Not saved: ${status.text} Try again — nothing has been decided yet.`}
             </motion.p>
           )}
         </AnimatePresence>

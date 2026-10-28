@@ -22,11 +22,12 @@ import { heuteWien } from "./datum";
 import { prisma } from "./db";
 import {
   datumFuerPushIndex,
+  planVorschau,
   pushIndexAbDatum,
-  rotationFor,
-  type Wochenwahl,
+  pushTageAb,
+  type Vorschautag,
 } from "./plan";
-import { wochenwahlenLesen } from "./wochenplan";
+import { kalenderLesen } from "./wochenplan";
 import {
   BANK_UEBUNG,
   bankPlan,
@@ -163,6 +164,9 @@ export type Bankuebersicht = {
   prognose: Prognose | null;
 };
 
+/** Wie viele Tage die Plan-Vorschau reicht — weit genug für den nächsten Testtag. */
+const VORSCHAU_TAGE = 120;
+
 /** Wie weit der nächste Testtag gesucht wird: gut drei Zyklen. */
 const TEST_SUCHE_PUSH_TAGE = 26;
 
@@ -173,24 +177,14 @@ const TEST_SUCHE_PUSH_TAGE = 26;
  * nicht "kein Bankdrücken" anzeigen und damit genau die Frage offenlassen, mit
  * der man diesen Tab öffnet: was steht als nächstes an.
  *
- * Höchstens acht Tage weit gesucht, aus demselben Grund wie in
- * naechsterTrainingstag(): drei Tage Rotation plus jeder denkbare Einschub
- * liegen darunter, und eine Endlosschleife wäre schlimmer als ein leerer Tab.
+ * Aus der Vorschau des Plans (planVorschau()), also mit vorgezogenen und
+ * nachgeholten Einheiten — nicht nach dem starren Wochentag.
  */
 function naechsterPushTag(
-  heute: string,
-  wahlen: readonly Wochenwahl[]
+  vorschau: readonly Vorschautag[]
 ): { iso: string; pushIndex: number } | null {
-  for (let n = 0; n < 8; n++) {
-    const iso = new Date(Date.parse(`${heute}T00:00:00Z`) + n * 864e5)
-      .toISOString()
-      .slice(0, 10);
-    const r = rotationFor(new Date(`${iso}T12:00:00Z`), wahlen);
-    if (r.art === "training" && r.einheit === "push" && r.pushIndex !== null) {
-      return { iso, pushIndex: r.pushIndex };
-    }
-  }
-  return null;
+  const tag = vorschau.find((v) => v.einheit === "push" && v.pushIndex !== null);
+  return tag ? { iso: tag.datum, pushIndex: tag.pushIndex! } : null;
 }
 
 /** Die Sätze eines Tages zu einer Einheit zusammenfassen. */
@@ -240,20 +234,23 @@ function vorschauAb(
   anker: Zyklusanker,
   tmKg: number,
   schaetzung: number | null,
-  wahlen: readonly Wochenwahl[]
+  tagVon: (pushIndex: number) => string | null
 ): Wochenvorschau[] {
   const out: Wochenvorschau[] = [];
 
-  for (let n = 0; out.length < 2 && n < 6; n++) {
+  for (let n = 0; out.length < 2 && n < 10; n++) {
     const index = pushIndex + n;
     const pos = bankPosition(index, anker);
     if (pos.art !== "tm" && pos.art !== "test") continue;
+    // Ein verfallener Platz kommt nicht mehr dran — siehe pushTageAb().
+    const datum = tagVon(index);
+    if (datum === null) continue;
 
     const test = pos.art === "test";
     out.push({
       zyklus: pos.zyklus,
       woche: pos.woche,
-      datum: datumFuerPushIndex(index, wahlen),
+      datum,
       saetze: test ? testPlan(tmKg, schaetzung) : bankPlan(tmKg, pos.woche),
       deload: !test && pos.woche === 4,
       test,
@@ -265,8 +262,15 @@ function vorschauAb(
 
 export async function bankuebersicht(): Promise<Bankuebersicht> {
   const heute = heuteWien();
-  const wahlen = await wochenwahlenLesen();
-  const naechster = naechsterPushTag(heute, wahlen);
+  const { wahlen, eintraege } = await kalenderLesen();
+  const plan = planVorschau(heute, wahlen, eintraege, VORSCHAU_TAGE);
+  const naechster = naechsterPushTag(plan);
+  /* Der nächste Push gilt an seinem Tag aus der Vorschau, auch wenn er als
+     Extra-Einheit den Index eines schon trainierten Platzes wiederholt —
+     sonst trüge die erste Karte das Datum jenes früheren Tags. */
+  const tagAusPlan = pushTageAb(heute, wahlen, eintraege, VORSCHAU_TAGE);
+  const tagVon = (pushIndex: number) =>
+    naechster && pushIndex === naechster.pushIndex ? naechster.iso : tagAusPlan(pushIndex);
 
   const [historie, saetze] = await Promise.all([
     trainingsmaxHistorie(24),
@@ -276,7 +280,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
   let stand: Bankstand | null = null;
   if (naechster) {
     try {
-      stand = await bankstandFuer(naechster.pushIndex, wahlen);
+      stand = await bankstandFuer(naechster.pushIndex, wahlen, tagVon);
     } catch (e) {
       // Der Verlauf und die Historie stehen auch ohne den Stand. Diesen Tab
       // wegen einer nicht lesbaren Fortschreibung ganz zu leeren wäre falsch.
@@ -319,12 +323,12 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
       tmKg: tm.tmKg,
     };
 
-    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, wahlen);
+    vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, tagVon);
 
     for (let n = 0; n < TEST_SUCHE_PUSH_TAGE; n++) {
       if (bankPosition(naechster.pushIndex + n, anker).art === "test") {
-        naechsterTest = datumFuerPushIndex(naechster.pushIndex + n, wahlen);
-        break;
+        naechsterTest = tagVon(naechster.pushIndex + n);
+        if (naechsterTest !== null) break;
       }
     }
 

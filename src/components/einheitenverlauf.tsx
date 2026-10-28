@@ -33,25 +33,25 @@ export async function Einheitenverlauf() {
     <div className="mt-4 grid items-start gap-4 md:grid-cols-2">
       <Card>
         <div className="flex items-baseline justify-between gap-3">
-          <Eyebrow>Trainingskalender</Eyebrow>
+          <Eyebrow>Training calendar</Eyebrow>
           <span className="text-[11px] text-fg-faint">{WOCHEN} Wochen</span>
         </div>
 
         <div className="mt-3.5 flex gap-6">
           <div>
-            <Eyebrow>Diese Woche</Eyebrow>
+            <Eyebrow>This week</Eyebrow>
             <p className="num mt-1 text-[22px]">
               {dieseWoche}
-              <span className="text-xs font-medium text-fg-faint"> Einheiten</span>
+              <span className="text-xs font-medium text-fg-faint"> sessions</span>
             </p>
           </div>
           <div>
-            <Eyebrow>Serie</Eyebrow>
+            <Eyebrow>Streak</Eyebrow>
             <p className="num mt-1 text-[22px]">
               {inSerie}
               <span className="text-xs font-medium text-fg-faint">
                 {" "}
-                {inSerie === 1 ? "Woche" : "Wochen"}
+                {inSerie === 1 ? "week" : "weeks"}
               </span>
             </p>
           </div>
@@ -59,7 +59,7 @@ export async function Einheitenverlauf() {
 
         {/* Das Raster als Tabelle: ein Screenreader kann dann Zeile für Zeile
             lesen, statt 84 namenlose Kästchen vorzulesen. */}
-        <table className="mt-4 w-full table-fixed border-separate border-spacing-[3px]" aria-label="Trainingstage der letzten zwölf Wochen">
+        <table className="mt-4 w-full table-fixed border-separate border-spacing-[3px]" aria-label="Training days over the last twelve weeks">
           <thead>
             <tr>
               {WOCHENTAGE.map((t) => (
@@ -85,7 +85,7 @@ export async function Einheitenverlauf() {
                       } ${tag.iso === heute ? "outline outline-1 outline-offset-1 outline-fg-faint" : ""}`}
                     >
                       <span className="sr-only">
-                        {kurzDatum(tag.iso)}: {tag.einheiten > 0 ? "trainiert" : tag.zukunft ? "kommt noch" : "kein Training"}
+                        {kurzDatum(tag.iso)}: {tag.einheiten > 0 ? "trained" : tag.zukunft ? "upcoming" : "no training"}
                       </span>
                     </span>
                   </td>
@@ -96,17 +96,16 @@ export async function Einheitenverlauf() {
         </table>
 
         <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-          Die Serie zählt Wochen mit mindestens {EINHEITEN_PRO_WOCHE} Einheiten — ein
-          ausgefallener Tag soll sie nicht gleich beenden. Die laufende Woche zählt, sobald sie
-          voll ist.
+          The streak counts weeks with at least {EINHEITEN_PRO_WOCHE} sessions — one missed
+          day shouldn’t end it. The current week counts once it is complete.
         </p>
       </Card>
 
       <Card>
-        <Eyebrow>Letzte Einheiten</Eyebrow>
+        <Eyebrow>Recent sessions</Eyebrow>
         {einheiten.length === 0 ? (
           <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-            Noch keine Einheit geloggt.
+            No sessions logged yet.
           </p>
         ) : (
           <ul className="mt-2 flex flex-col divide-y divide-hair-soft">
@@ -119,8 +118,8 @@ export async function Einheitenverlauf() {
                         {e.art === "push" ? "Push" : "Pull"} · {kurzDatum(e.datum)}
                       </b>
                       <span className="block text-[11px] text-fg-faint">
-                        {anzahl(e.uebungen.reduce((n, u) => n + u.saetze.length, 0), "Satz", "Sätze")}{" "}
-                        · {Math.round(e.volumenKg).toLocaleString("de-AT")} kg
+                        {anzahl(e.uebungen.reduce((n, u) => n + u.saetze.length, 0), "set", "sets")}{" "}
+                        · {Math.round(e.volumenKg).toLocaleString("en-GB")} kg
                         {e.dauerMin !== null && <> · {e.dauerMin} min</>}
                       </span>
                     </span>
@@ -155,5 +154,5 @@ export async function Einheitenverlauf() {
 
 /** 80 → "80", 82,5 → "82,5", 81,25 → "81,25" — so viele Stellen wie nötig. */
 function kgText(kg: number): string {
-  return String(Math.round(kg * 100) / 100).replace(".", ",");
+  return String(Math.round(kg * 100) / 100);
 }

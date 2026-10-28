@@ -31,15 +31,15 @@ export function WochenplanSchalter({ stand }: { stand: Wochenstand }) {
   return (
     <div className="mt-6">
       <p className="text-center text-[11px] uppercase tracking-[0.11em] text-fg-faint">
-        Woche {stand.rhythmus} · ab {kurzDatum(stand.montag)}
+        Week {stand.rhythmus} · from {kurzDatum(stand.montag)}
       </p>
       <p className="mt-1 text-center text-[13px] text-fg-dim">{wochenText(stand)}</p>
 
       <Schalter
-        titel="Erster Push"
+        titel="First push"
         optionen={[
-          ["mo", "Montag"],
-          ["di", "Dienstag"],
+          ["mo", "Monday"],
+          ["di", "Tuesday"],
         ]}
         wert={stand.frueh}
         gesperrt={stand.fruehGesperrt}
@@ -47,10 +47,10 @@ export function WochenplanSchalter({ stand }: { stand: Wochenstand }) {
         onWahl={(w) => umlegen("frueh", w)}
       />
       <Schalter
-        titel="Wochenende"
+        titel="Weekend"
         optionen={[
-          ["frsa", "Fr + Sa"],
-          ["saso", "Sa + So"],
+          ["frsa", "Fri + Sat"],
+          ["saso", "Sat + Sun"],
         ]}
         wert={stand.spaet}
         gesperrt={stand.spaetGesperrt}

@@ -6,7 +6,7 @@ import { AppAbzeichen, SwRegistrierung } from "@/components/pwa";
 
 export const metadata: Metadata = {
   title: "Kadenz",
-  description: "Persönlicher Trainings- und Ernährungscoach",
+  description: "Personal training and nutrition coach",
   appleWebApp: {
     capable: true,
     title: "Kadenz",
@@ -41,7 +41,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="de" className="h-full">
+    <html lang="en" className="h-full">
       <body className="min-h-full">
         {/* Ambientes Licht im Hintergrund — rein dekorativ, daher aria-hidden
             und pointer-events-none, damit es keine Klicks abfängt. */}

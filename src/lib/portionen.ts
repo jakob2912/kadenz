@@ -71,10 +71,10 @@ export function skalierung(basisKhG: number, zielKhG: number): Skalierung | null
   const hinweis =
     faktor === roh
       ? null
-      : `Das Ziel liegt ${roh > faktor ? "weit über" : "weit unter"} dem Ausgangsplan ` +
-        `(${basisKhG} → ${zielKhG} g Kohlenhydrate). Die Mengen stehen bei ` +
-        `${Math.round(faktor * 100)} % und damit an der Grenze — ab hier gehört der Plan ` +
-        `neu gerechnet, nicht weiter skaliert.`;
+      : `The target is ${roh > faktor ? "far above" : "far below"} the base plan ` +
+        `(${basisKhG} → ${zielKhG} g carbs). The amounts are at ` +
+        `${Math.round(faktor * 100)} %, which is the limit — from here the plan needs ` +
+        `recalculating, not further scaling.`;
 
   return { faktor, basisKhG, zielKhG, hinweis };
 }

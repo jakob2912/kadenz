@@ -76,11 +76,11 @@ export const START: Gewichtspunkt = { datum: "2026-08-25", kg: 82.5 };
 export const GEWICHTSPLAN: readonly Phase[] = [
   {
     art: "aufbau",
-    label: "Aufbau 1",
+    label: "Bulk 1",
     bisKg: 92.5,
     rateProWoche: 0.375,
     korridor: { unten: 0.25, oben: 0.5 },
-    zweck: "Masse aufbauen bis in den Bereich, ab dem sich ein Einschnitt lohnt.",
+    zweck: "Build mass up to the point where a cut is worth it.",
   },
   {
     art: "cut",
@@ -91,15 +91,15 @@ export const GEWICHTSPLAN: readonly Phase[] = [
        im Defizit an die Muskulatur, langsamer als 0,4 ist die Zeit nicht
        wert. Sechs Wochen sind die Mitte von Jakobs 4–8. */
     korridor: { unten: -0.75, oben: -0.4 },
-    zweck: "Angesetztes Fett zurückholen, bevor der zweite Aufbau beginnt.",
+    zweck: "Take back the fat gained before the second bulk starts.",
   },
   {
     art: "aufbau",
-    label: "Aufbau 2",
+    label: "Bulk 2",
     bisKg: 100,
     rateProWoche: 0.375,
     korridor: { unten: 0.25, oben: 0.5 },
-    zweck: "Der Weg auf die 100 kg aus der Vision für Dezember 2027.",
+    zweck: "The road to 100 kg from the vision for December 2027.",
   },
 ];
 

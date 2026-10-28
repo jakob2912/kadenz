@@ -22,8 +22,8 @@ export async function GET() {
   } catch (e) {
     if (istKonfigurationsFehler(e)) {
       return fehlerSeite({
-        titel: "Google-Login nicht eingerichtet",
-        nachricht: `${e.message} Ohne sie kann kein Login gestartet werden — in den Projekteinstellungen bei Vercel bzw. in .env.local nachtragen und neu deployen.`,
+        titel: "Google sign-in not set up",
+        nachricht: `${e.message} Without it no sign-in can start — add it in the Vercel project settings or .env.local and redeploy.`,
         status: 500,
       });
     }

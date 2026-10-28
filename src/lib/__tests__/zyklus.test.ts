@@ -197,19 +197,19 @@ describe("zielProjektion", () => {
   it("meldet ein unerreichbares Ziel als solches", () => {
     const stand = zielProjektion(60, 1, "2027-06-01");
     expect(stand.imPlan).toBe(false);
-    expect(zielSatz(stand)).toContain("nach Ende 2027");
+    expect(zielSatz(stand)).toContain("after the end of 2027");
   });
 
   it("sagt im Text ausdrücklich, dass es nicht gleichmäßig geht", () => {
     const text = zielSatz(zielProjektion(90, 1, "2026-08-20"));
-    expect(text).toContain("nicht gleichmäßig");
-    expect(text).toContain("15 Zyklen");
-    expect(text).toContain("kein einziger Zyklus stehen bleibt");
+    expect(text).toContain("doesn't add that evenly");
+    expect(text).toContain("15 cycles");
+    expect(text).toContain("not a single cycle stalls");
   });
 
   it("wechselt den Ton, sobald der Trainingsmax das Ziel trägt", () => {
     const stand = zielProjektion(ZIEL_TM_KG, 20, "2027-01-01");
     expect(stand.fehltTmKg).toBe(0);
-    expect(zielSatz(stand)).toContain("sauber zu heben");
+    expect(zielSatz(stand)).toContain("lifting it cleanly once");
   });
 });

@@ -90,17 +90,6 @@ export function sicherAb(fensterBeginn: string): string {
   return iso(new Date(tag(fensterBeginn).getTime() + 864e5));
 }
 
-/** Ein eingetragenes Gewicht sofort festhalten — auch wenn Google es ablehnt. */
-export async function gewichtAblegen(datum: string, kg: number): Promise<void> {
-  /* Als "kadenz", bis ein Google-Abruf denselben Tag liefert und die Zeile
-     zur Abschrift macht. */
-  await prisma.gewichtsmessung.upsert({
-    where: { datum: tag(datum) },
-    update: { kg, quelle: "kadenz" },
-    create: { datum: tag(datum), kg, quelle: "kadenz" },
-  });
-}
-
 /** Die Nächte der letzten `tage` Tage, älteste zuerst. */
 export async function tageswerteLesen(tage: number): Promise<DailyReadiness[]> {
   const zeilen = await prisma.tageswert.findMany({

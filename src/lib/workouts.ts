@@ -34,27 +34,27 @@ function heuteIso(): string {
 class Ungueltig extends Error {}
 
 function art(kind: unknown): "push" | "pull" {
-  if (kind !== "push" && kind !== "pull") throw new Ungueltig(`Unbekannte Einheit: ${String(kind)}`);
+  if (kind !== "push" && kind !== "pull") throw new Ungueltig(`Unknown session: ${String(kind)}`);
   return kind;
 }
 
 function zahl(wert: unknown, name: string, von: number, bis: number, ganz = false): number {
   if (typeof wert !== "number" || !Number.isFinite(wert) || wert < von || wert > bis) {
-    throw new Ungueltig(`${name} muss zwischen ${von} und ${bis} liegen.`);
+    throw new Ungueltig(`${name} must be between ${von} and ${bis}.`);
   }
-  if (ganz && !Number.isInteger(wert)) throw new Ungueltig(`${name} muss eine ganze Zahl sein.`);
+  if (ganz && !Number.isInteger(wert)) throw new Ungueltig(`${name} must be a whole number.`);
   return wert;
 }
 
 function text(wert: unknown, name: string, maxLaenge: number): string {
   if (typeof wert !== "string" || wert.trim() === "" || wert.length > maxLaenge) {
-    throw new Ungueltig(`${name} fehlt oder ist zu lang.`);
+    throw new Ungueltig(`${name} is missing or too long.`);
   }
   return wert;
 }
 
 function fehler(e: unknown): { ok: false; fehler: string } {
-  return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+  return { ok: false, fehler: e instanceof Error ? e.message : "Unknown error" };
 }
 
 /**
@@ -105,16 +105,16 @@ export async function satzSpeichern(input: {
   try {
     input = {
       kind: art(input.kind),
-      exercise: text(input.exercise, "Übung", 100),
-      setIndex: zahl(input.setIndex, "Satznummer", 0, 30, true),
+      exercise: text(input.exercise, "Exercise", 100),
+      setIndex: zahl(input.setIndex, "Set number", 0, 30, true),
       // 0 kg ist erlaubt — Körpergewichtsübungen wie Crunch werden so geloggt.
-      kg: zahl(input.kg, "Gewicht", 0, 500),
-      reps: zahl(input.reps, "Wiederholungen", 1, 100, true),
+      kg: zahl(input.kg, "Weight", 0, 500),
+      reps: zahl(input.reps, "Reps", 1, 100, true),
       erfasstAm: input.erfasstAm,
       rir:
         input.rir === undefined || input.rir === null
           ? input.rir
-          : zahl(input.rir, "Reserve", 0, 5, true),
+          : zahl(input.rir, "Reps in reserve", 0, 5, true),
     };
     const zeitpunkt = erfassungszeit(input.erfasstAm);
     const workout = await workoutHeute(input.kind, wienerDatum(zeitpunkt));
@@ -149,7 +149,7 @@ export async function satzSpeichern(input: {
   } catch (e) {
     // Der Satz darf im Gym nicht verloren gehen, nur weil das WLAN kurz weg
     // war — die Oberfläche behält ihn und zeigt den Fehler an.
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
@@ -216,9 +216,9 @@ export async function trainingBeenden(
   tagIso?: string
 ): Promise<{ ok: true; finishedAtMs: number } | { ok: false; fehler: string }> {
   try {
-    if (note !== undefined) note = text(note, "Notiz", 1000);
+    if (note !== undefined) note = text(note, "Note", 1000);
     if (tagIso !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(tagIso))) {
-      throw new Ungueltig("Ungültiger Tag.");
+      throw new Ungueltig("Invalid day.");
     }
     const zeitpunkt = erfassungszeit(erfasstAm);
     /* Mit ausdrücklichem Tag nur eine bestehende Einheit beenden, nie eine
@@ -230,7 +230,7 @@ export async function trainingBeenden(
             where: { date_kind: { date: new Date(`${tagIso}T00:00:00Z`), kind: art(kind) } },
           })
         : await workoutHeute(art(kind), wienerDatum(zeitpunkt));
-    if (workout === null) throw new Ungueltig("Zu diesem Tag gibt es keine Einheit.");
+    if (workout === null) throw new Ungueltig("There is no session for this day.");
     if (workout.finishedAt !== null) {
       return { ok: true, finishedAtMs: workout.finishedAt.getTime() };
     }
@@ -264,14 +264,14 @@ export async function notizSpeichern(
   notiz: string
 ): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tagIso))) throw new Ungueltig("Ungültiger Tag.");
-    if (typeof notiz !== "string") throw new Ungueltig("Notiz fehlt.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tagIso))) throw new Ungueltig("Invalid day.");
+    if (typeof notiz !== "string") throw new Ungueltig("Note is missing.");
     const inhalt = notiz.trim().slice(0, 1000);
     const r = await prisma.workout.updateMany({
       where: { date: new Date(`${tagIso}T00:00:00Z`), kind: art(kind) },
       data: { note: inhalt === "" ? null : inhalt },
     });
-    if (r.count === 0) throw new Ungueltig("Zu diesem Tag gibt es keine Einheit.");
+    if (r.count === 0) throw new Ungueltig("There is no session for this day.");
     return { ok: true };
   } catch (e) {
     return fehler(e);

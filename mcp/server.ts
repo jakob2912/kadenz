@@ -64,11 +64,11 @@ import {
   sollGewichtAm,
   zielKorridor,
 } from "../src/lib/gewichtsplan";
-import { heutigeSaetze, rotationFor, SESSIONS, wochenText } from "../src/lib/plan";
+import { heutigeSaetze, pushTageAb, rotationFor, SESSIONS, wochenText } from "../src/lib/plan";
 import {
   rotationMitPlan,
   wochenstand,
-  wochenwahlenLesen,
+  kalenderLesen,
   wochenwahlSetzen,
 } from "../src/lib/wochenplan";
 import {
@@ -245,7 +245,7 @@ server.registerTool(
   {
     title: "Regeneration heute",
     description:
-      "Regenerations-Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV, verglichen mit Jakobs persönlicher Baseline. Sagt außerdem, ob Krafttraining und Cardio vertretbar sind.",
+      "Regenerations-Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV, verglichen mit Jakobs persönlicher Baseline. Sagt außerdem, ob schweres Krafttraining vertretbar ist.",
   },
   async () => {
     try {
@@ -271,7 +271,7 @@ server.registerTool(
   {
     title: "Gewichtstrend",
     description:
-      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Aufbau 1 → Mini-Cut → Aufbau 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
+      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk 1 → Mini-Cut → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
     inputSchema: { tage: z.number().int().min(7).max(120).optional() },
   },
   async ({ tage }) => {
@@ -940,8 +940,8 @@ server.registerTool(
   async () => {
     try {
       datenbankPruefen();
-      const wahlen = await wochenwahlenLesen();
-      const rotation = rotationFor(new Date(), wahlen);
+      const { wahlen, eintraege } = await kalenderLesen();
+      const rotation = rotationFor(new Date(), wahlen, eintraege);
 
       if (rotation.art !== "training" || rotation.pushIndex === null) {
         return antwort({
@@ -952,7 +952,11 @@ server.registerTool(
         });
       }
 
-      const stand = await bankstandFuer(rotation.pushIndex, wahlen);
+      const stand = await bankstandFuer(
+        rotation.pushIndex,
+        wahlen,
+        pushTageAb(heuteWien(), wahlen, eintraege)
+      );
       return antwort({
         art: stand.position.art,
         bankTag: stand.position.art === "tm" || stand.position.art === "test",
@@ -1053,7 +1057,7 @@ server.registerTool(
   {
     title: "Briefing heute",
     description:
-      "Wie die Nacht war und was daraus folgt: Schlafdauer und Tiefschlaf gegen Jakobs persönliche Referenz, die Freigabe für Kraft und Cardio und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer, und genau das ist die Aussage. Dieselbe Funktion erzeugt den Text auf der Startseite.",
+      "Wie die Nacht war und was daraus folgt: Schlafdauer und Tiefschlaf gegen Jakobs persönliche Referenz, die Freigabe fürs Krafttraining und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer, und genau das ist die Aussage. Dieselbe Funktion erzeugt den Text auf der Startseite.",
   },
   async () => {
     try {

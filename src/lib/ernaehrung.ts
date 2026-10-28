@@ -222,8 +222,8 @@ export async function vorschlagLage(opts: {
     return {
       art: "kein-vorschlag",
       grund:
-        "Es ist noch kein Kalorienziel hinterlegt. Ohne Ausgangswert lässt sich keine " +
-        "Anpassung berechnen.",
+        "No calorie target set yet. Without a starting value no " +
+        "adjustment can be calculated.",
     };
   }
 
@@ -320,17 +320,17 @@ async function anlegen(ziel: Ziel, a: Anpassung) {
 
 function entschiedenGrund(status: string, tage: number): string {
   const alter =
-    tage === 0 ? "heute" : tage === 1 ? "gestern" : `vor ${tage} Tagen`;
+    tage === 0 ? "today" : tage === 1 ? "yesterday" : `${tage} days ago`;
   const rest = MIN_TAGE_ZWISCHEN_ANPASSUNGEN - tage;
-  const wartezeit = `Ich messe wieder — noch ${rest === 1 ? "ein Tag" : `${rest} Tage`}.`;
+  const wartezeit = `I'm measuring again — ${rest === 1 ? "one more day" : `${rest} more days`}.`;
 
   if (status === "abgelehnt") {
-    return `Du hast meinen letzten Vorschlag ${alter} abgelehnt. ${wartezeit}`;
+    return `You declined my last suggestion ${alter}. ${wartezeit}`;
   }
   if (status === "angenommen") {
-    return `Das Ziel wurde ${alter} angepasst. ${wartezeit}`;
+    return `The target was adjusted ${alter}. ${wartezeit}`;
   }
-  return `Der letzte Vorschlag ist ${alter} weggefallen. ${wartezeit}`;
+  return `The last suggestion lapsed ${alter}. ${wartezeit}`;
 }
 
 type ZielZeile = {

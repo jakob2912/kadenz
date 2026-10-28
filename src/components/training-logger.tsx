@@ -81,7 +81,7 @@ function senden(satz: OffenerSatz, melden: (fehler: string | null) => void) {
     })
     // Abgelaufene Anmeldung (401 vom Proxy) oder ein Wurf der Aktion: der
     // Satz bleibt im Ausgang, und die Meldung sagt es, statt still zu bleiben.
-    .catch((e: unknown) => melden(e instanceof Error ? e.message : "Server nicht erreichbar"));
+    .catch((e: unknown) => melden(e instanceof Error ? e.message : "Server not reachable"));
 }
 
 /** Der Zustand eines abgehakten Satzes im Logger. */
@@ -311,7 +311,7 @@ export function TrainingLogger({
         pauseSchreiben(null);
         setPauseEnde(null);
         setPauseVorbei(true);
-        setAnsage("Satzpause vorbei.");
+        setAnsage("Rest over.");
         if (t - pauseEnde! < SIGNAL_NACHLAUF_MS) pauseVorbeiSignal();
         return;
       }
@@ -507,9 +507,9 @@ export function TrainingLogger({
     // erneut vorgelesen.
     const rekord = bestwertArt({ kg, reps }, bestwerte[exercise]);
     setAnsage(
-      `${exercise}, Satz ${setIndex + 1} gespeichert.${
-        rekord ? ` Bestwert: ${BESTWERT_TEXT[rekord]}.` : ""
-      }${nachtrag ? "" : " Satzpause drei Minuten."}`
+      `${exercise}, set ${setIndex + 1} saved.${
+        rekord ? ` Best: ${BESTWERT_TEXT[rekord]}.` : ""
+      }${nachtrag ? "" : " Rest three minutes."}`
     );
 
     // Erst der Satz, dann die Ankündigung: Next arbeitet Server Actions
@@ -646,10 +646,10 @@ export function TrainingLogger({
             }`}
           >
             {kopfTon === "pause"
-              ? "Satzpause"
+              ? "Rest"
               : kopfTon === "vorbei"
-                ? "Pause vorbei · nächster Satz"
-                : "Laufzeit"}
+                ? "Rest over · next set"
+                : "Elapsed"}
           </p>
           {/* Die große Zahl wechselt mit: vorher stand der Countdown in
               derselben Farbe wie die Laufzeit, und aus zwei Metern Abstand
@@ -682,7 +682,7 @@ export function TrainingLogger({
                 +30 s
               </Klein>
               <Klein
-                beschriftung="Satzpause beenden und weitermachen"
+                beschriftung="End rest and continue"
                 onClick={() => {
                   setPauseEnde(null);
                   setPauseVorbei(false);
@@ -690,7 +690,7 @@ export function TrainingLogger({
                   satzpauseAnkuendigen(null).catch(() => {});
                 }}
               >
-                Weiter
+                Continue
               </Klein>
             </motion.div>
           )}
@@ -711,26 +711,26 @@ export function TrainingLogger({
         </h1>
         <div className="mt-5 flex gap-6">
           <Kennzahl
-            label="Volumen"
-            wert={Math.round(volumen).toLocaleString("de-AT")}
+            label="Volume"
+            wert={Math.round(volumen).toLocaleString("en-GB")}
             einheit=" kg"
           />
-          <Kennzahl label="Sätze" wert={String(saetzeFertig)} einheit={`/${saetzeGesamt}`} />
-          <Kennzahl label="Pause" wert="3:00" />
+          <Kennzahl label="Sets" wert={String(saetzeFertig)} einheit={`/${saetzeGesamt}`} />
+          <Kennzahl label="Rest" wert="3:00" />
         </div>
         {offline && (
           <p
             role="status"
             className="mt-4 rounded-sm border border-caution/30 bg-caution/10 px-3.5 py-2.5 text-xs leading-relaxed text-caution"
           >
-            Kein Netz. Abgehakte Sätze bleiben auf dem Handy und gehen raus, sobald wieder
-            Empfang da ist — auch wenn die App zwischendurch geschlossen wird.
+            No connection. Checked sets stay on the phone and are sent once you have
+            signal again — even if the app is closed in between.
           </p>
         )}
         {speicherFehler && (
           <p className="mt-4 rounded-sm border border-strain/30 bg-strain/10 px-3.5 py-2.5 text-xs leading-relaxed text-strain">
-            Satz konnte nicht gespeichert werden: {speicherFehler} — er bleibt auf dem Handy
-            und wird beim nächsten Öffnen der Trainingsseite erneut gesendet.
+            Set could not be saved: {speicherFehler} — it stays on the phone
+            and is sent again the next time you open the workout page.
           </p>
         )}
       </header>
@@ -775,7 +775,7 @@ export function TrainingLogger({
                   <b className="block text-[15px] font-semibold tracking-[-0.015em]">{ex.name}</b>
                   {ex.planName && (
                     <span className="mt-0.5 block text-xs text-accent">
-                      heute statt {ex.planName}
+                      today instead of {ex.planName}
                     </span>
                   )}
                   {/* Begründung der Progression und Notiz stehen getrennt.
@@ -790,7 +790,7 @@ export function TrainingLogger({
                   )}
                 </span>
                 {alleFertig ? (
-                  <Tag tone="gut">fertig</Tag>
+                  <Tag tone="gut">done</Tag>
                 ) : (
                   ex.delta !== 0 && (
                     <Tag tone={ex.delta > 0 ? "gut" : "warnung"}>
@@ -803,7 +803,7 @@ export function TrainingLogger({
 
               {saetze.length > 0 && (
                 <div className="mt-3 grid grid-cols-[26px_58px_1fr_1fr_44px] items-center gap-2 border-b border-hair-soft pb-2">
-                  {["Satz", "Zuletzt", "kg", "Wdh", ""].map((h, hi) => (
+                  {["Set", "Last", "kg", "Reps", ""].map((h, hi) => (
                     <span
                       key={hi}
                       className={`text-[10px] font-semibold uppercase tracking-[0.11em] text-fg-faint ${
@@ -862,9 +862,9 @@ export function TrainingLogger({
               {saetze.length === 0 && (
                 <p className="mt-2 text-[12px] leading-relaxed text-fg-faint">
                   {heutigeSaetze(ex).length > 0
-                    ? "Heute ausgelassen."
+                    ? "Skipped today."
                     : (ex.programmHinweis ??
-                      "Für diese Übung sind heute keine Sätze hinterlegt. Setz die Satzanzahl im Katalog, dann steht sie beim nächsten Training hier.")}
+                      "No sets planned for this exercise today. Set the number of sets in the catalog and they show up here next time.")}
                 </p>
               )}
 
@@ -930,21 +930,21 @@ export function TrainingLogger({
             transition={{ type: "spring", stiffness: 260, damping: 24 }}
           >
           <Card className="border-ready/30">
-            <Eyebrow>Einheit abgeschlossen</Eyebrow>
+            <Eyebrow>Session complete</Eyebrow>
             <p className="mt-2 text-[15px] font-semibold tracking-[-0.015em]">
               {alleSaetzeFertig
-                ? `Alle ${anzahl(saetzeGesamt, "Satz", "Sätze")} abgehakt`
-                : `${anzahl(saetzeFertig, "Satz", "Sätze")} von ${saetzeGesamt} abgehakt`}
+                ? `All ${anzahl(saetzeGesamt, "set", "sets")} done`
+                : `${anzahl(saetzeFertig, "set", "sets")} of ${saetzeGesamt} done`}
             </p>
             <div className="mt-3.5 flex gap-6">
               <Kennzahl
-                label="Volumen"
-                wert={Math.round(volumen).toLocaleString("de-AT")}
+                label="Volume"
+                wert={Math.round(volumen).toLocaleString("en-GB")}
                 einheit=" kg"
               />
-              <Kennzahl label="Dauer" wert={mmss(laufzeit)} />
+              <Kennzahl label="Duration" wert={mmss(laufzeit)} />
               {rekordUebungen.length > 0 && (
-                <Kennzahl label="Bestwerte" wert={String(rekordUebungen.length)} />
+                <Kennzahl label="Bests" wert={String(rekordUebungen.length)} />
               )}
             </div>
             {rekordUebungen.length > 0 && (
@@ -959,13 +959,13 @@ export function TrainingLogger({
               </ul>
             )}
             <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-              Jeder Satz ist einzeln gespeichert, sobald du ihn abgehakt hast. Korrigieren
-              geht weiterhin: Tipp auf den Haken oder ins Feld.
+              Every set was saved the moment you checked it. You can still correct
+              them: tap the check mark or the field.
               {fertigSeit !== null && (
                 <>
                   {" "}
-                  Die Einheit ist um {uhrzeit(fertigSeit)} abgeschlossen worden — die Dauer
-                  steht ab jetzt fest und läuft nicht weiter.
+                  The session was finished at {uhrzeit(fertigSeit)} — the duration
+                  is now fixed and no longer running.
                 </>
               )}
             </p>
@@ -1044,7 +1044,7 @@ function SatzZeile({
      einem Tipp als Fünfer gespeichert — der Trainingsmax bliebe stehen, und
      niemand sähe, warum. Das Gewicht steht auch dort im Feld, nur die Zahl
      der Wiederholungen bleibt leer. */
-  const [kg, setKg] = useState(vorgegeben ? String(zielKg).replace(".", ",") : "");
+  const [kg, setKg] = useState(vorgegeben ? String(zielKg) : "");
   const [reps, setReps] = useState(vorgegeben && !amrap ? String(zielReps) : "");
   /* Aus dem Gewicht, das im Feld steht, nicht aus dem geplanten: wer die
      Stange leichter oder schwerer belädt, braucht eine andere Zahl. Nur
@@ -1065,7 +1065,7 @@ function SatzZeile({
   // damit man nur die falsche Stelle ändern muss statt alles neu zu tippen.
   function oeffnen() {
     if (!logged) return;
-    setKg(String(logged.kg).replace(".", ","));
+    setKg(String(logged.kg));
     setReps(String(logged.reps));
     setRepsUngueltig(false);
     setKgUngueltig(false);
@@ -1099,7 +1099,7 @@ function SatzZeile({
      Feld steht, sonst die Vorgabe. */
   function kgSchritt(um: number) {
     const basis = Number((kg || String(zielKg)).replace(",", ".")) || 0;
-    setKg(String(Math.max(0, Math.round((basis + um) * 100) / 100)).replace(".", ","));
+    setKg(String(Math.max(0, Math.round((basis + um) * 100) / 100)));
     setKgUngueltig(false);
   }
   function wdhSchritt(um: number) {
@@ -1121,16 +1121,16 @@ function SatzZeile({
         {prev ?? "—"}
       </span>
       <Feld
-        wert={fertig ? String(logged!.kg).replace(".", ",") : kg}
+        wert={fertig ? String(logged!.kg) : kg}
         setWert={(v) => {
           setKg(v);
           setKgUngueltig(false);
         }}
-        platzhalter={ohneVorgabe ? "kg" : String(zielKg).replace(".", ",")}
+        platzhalter={ohneVorgabe ? "kg" : String(zielKg)}
         fertig={fertig}
         ungueltig={kgUngueltig}
         onOeffnen={oeffnen}
-        label={`Gewicht in Kilogramm, Satz ${nummer}`}
+        label={`Weight in kilograms, set ${nummer}`}
       />
       <Feld
         wert={fertig ? String(logged!.reps) : reps}
@@ -1148,11 +1148,11 @@ function SatzZeile({
         // die Komma-Taste, auf die man sonst danebengreift.
         modus="numeric"
         onOeffnen={oeffnen}
-        label={`Wiederholungen, Satz ${nummer}`}
+        label={`Reps, set ${nummer}`}
       />
       <button
         type="button"
-        aria-label={fertig ? `Satz ${nummer} korrigieren` : `Satz ${nummer} abhaken`}
+        aria-label={fertig ? `Correct set ${nummer}` : `Check set ${nummer}`}
         onClick={() => (fertig ? oeffnen() : loggen())}
         className={`grid min-h-[44px] w-full place-items-center rounded-sm transition
                     ${fertig ? "bg-ready text-ground" : "bg-surface-3 active:scale-90 md:hover:bg-hair"}`}
@@ -1180,19 +1180,19 @@ function SatzZeile({
            dort blieben je Knopf 35 px, hier sind es gut 70. */
         <div className="col-span-5 grid grid-cols-2 gap-3 pb-1.5">
           <span className="grid grid-cols-2 gap-1.5">
-            <Schritt onClick={() => kgSchritt(-2.5)} label={`Gewicht 2,5 kg weniger, Satz ${nummer}`}>
-              −2,5 kg
+            <Schritt onClick={() => kgSchritt(-2.5)} label={`2.5 kg less, set ${nummer}`}>
+              −2.5 kg
             </Schritt>
-            <Schritt onClick={() => kgSchritt(2.5)} label={`Gewicht 2,5 kg mehr, Satz ${nummer}`}>
-              +2,5 kg
+            <Schritt onClick={() => kgSchritt(2.5)} label={`2.5 kg more, set ${nummer}`}>
+              +2.5 kg
             </Schritt>
           </span>
           <span className="grid grid-cols-2 gap-1.5">
-            <Schritt onClick={() => wdhSchritt(-1)} label={`Eine Wiederholung weniger, Satz ${nummer}`}>
-              −1 Wdh
+            <Schritt onClick={() => wdhSchritt(-1)} label={`One rep less, set ${nummer}`}>
+              −1 rep
             </Schritt>
-            <Schritt onClick={() => wdhSchritt(1)} label={`Eine Wiederholung mehr, Satz ${nummer}`}>
-              +1 Wdh
+            <Schritt onClick={() => wdhSchritt(1)} label={`One rep more, set ${nummer}`}>
+              +1 rep
             </Schritt>
           </span>
         </div>
@@ -1204,16 +1204,19 @@ function SatzZeile({
            abgehakt wird. Wer sie ignoriert, verliert nichts — ohne Angabe
            rechnet die Progression wie immer. */
         <div className="col-span-5 flex items-center gap-1.5 pb-1.5 pl-[34px]">
-          <span className="mr-1 text-[12px] text-fg-faint">Noch drin?</span>
-          {[0, 1, 2, 3].map((r) => (
+          <span className="mr-1 text-[12px] text-fg-faint">Reps left?</span>
+          {/* Nur 0 und 1: Jakob trainiert jeden Satz bis ans Limit oder eine
+              davor (28.10.2026) — 2 und 3+ waren Knöpfe, die nie gedrückt
+              werden. Ältere Angaben über 1 bleiben gespeichert und zählen. */}
+          {[0, 1].map((r) => (
             <button
               key={r}
               type="button"
               onClick={() => onReserve(r)}
-              aria-label={`${r === 3 ? "Drei oder mehr" : r} Wiederholungen in Reserve`}
+              aria-label={`${r} ${r === 1 ? "rep" : "reps"} in reserve`}
               className="min-h-[44px] min-w-[44px] rounded-sm bg-surface-2 text-[13px] font-semibold text-fg-dim transition active:scale-95 active:bg-accent/15 active:text-accent"
             >
-              {r === 3 ? "3+" : r}
+              {r}
             </button>
           ))}
         </div>
@@ -1221,7 +1224,7 @@ function SatzZeile({
 
       {fertig && logged!.rir != null && !reserveFrage && hervorgehoben && (
         <p className="col-span-5 pb-1 pl-[34px] text-[12px] text-fg-faint">
-          {logged!.rir === 0 ? "Bis ans Limit." : `${logged!.rir >= 3 ? "3+" : logged!.rir} in Reserve.`}
+          {logged!.rir === 0 ? "To failure." : `${logged!.rir} in reserve.`}
         </p>
       )}
 
@@ -1229,13 +1232,13 @@ function SatzZeile({
         // Direkt unter der Zeile statt als Sammelmeldung oben: im Gym sieht
         // man sonst nicht, welcher der 16 Sätze gemeint ist.
         <p className="col-span-5 pb-1 text-right text-[11px] text-strain" role="alert">
-          Wiederholungen müssen größer als 0 sein.
+          Reps must be greater than 0.
         </p>
       )}
 
       {kgUngueltig && (
         <p className="col-span-5 pb-1 text-right text-[11px] text-strain" role="alert">
-          Für diese Übung gibt es noch kein Gewicht — bitte eintragen (0 für ohne).
+          No weight for this exercise yet — please enter one (0 for bodyweight).
         </p>
       )}
     </div>
@@ -1262,11 +1265,11 @@ function SatzHinweis({
         {ziel !== null &&
           (ziel <= minimum ? (
             <>
-              Bestwert <b className="font-semibold text-accent">schon mit {minimum} Wdh</b>
+              Best <b className="font-semibold text-accent">already at {minimum} reps</b>
             </>
           ) : (
             <>
-              Bestwert ab <b className="font-semibold text-accent">{ziel} Wdh</b>
+              Best from <b className="font-semibold text-accent">{ziel} reps</b>
             </>
           ))}
       </span>
@@ -1280,7 +1283,7 @@ function SatzHinweis({
           transition={{ type: "spring", stiffness: 520, damping: 18 }}
           className="flex flex-col items-end gap-0.5"
         >
-          <Tag tone="akzent">Bestwert</Tag>
+          <Tag tone="akzent">Best</Tag>
           <span className="text-[11px] text-fg-faint">{BESTWERT_TEXT[rekord]}</span>
         </motion.span>
       )}
@@ -1300,7 +1303,7 @@ function Aufwaermen({ arbeitsKg }: { arbeitsKg: number }) {
   return (
     <details className="group mt-3 rounded-sm bg-surface-2/60 px-3 py-2">
       <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between text-[13px] font-semibold text-fg-dim">
-        Aufwärmen bis {de(arbeitsKg, 1)} kg
+        Warm-up to {de(arbeitsKg, 1)} kg
         <span aria-hidden className="text-fg-faint transition group-open:rotate-90">›</span>
       </summary>
       <ol className="mt-1.5 flex flex-col gap-1 pb-1">
@@ -1346,7 +1349,7 @@ function Notiz({
     setStand("speichert");
     try {
       const r = await notizSpeichern(einheit, tag, inhalt);
-      if (!r.ok && r.fehler.startsWith("Zu diesem Tag gibt es keine Einheit")) {
+      if (!r.ok && r.fehler.startsWith("There is no session for this day")) {
         // Kommt nie mehr an — den Entwurf nicht bei jedem Laden neu schicken.
         try {
           localStorage.removeItem(ablage);
@@ -1406,7 +1409,7 @@ function Notiz({
   return (
     <div>
       <label htmlFor={id} className="text-[11px] font-semibold uppercase tracking-[0.14em] text-fg-faint">
-        Notiz zur Einheit
+        Session note
       </label>
       <textarea
         id={id}
@@ -1422,18 +1425,18 @@ function Notiz({
         onBlur={() => void sichern()}
         rows={2}
         maxLength={1000}
-        placeholder="Wie lief's? Etwa: Schulter zwickt, Bank war belegt"
+        placeholder="How did it go? E.g. shoulder twinges, bench was taken"
         className="mt-1.5 w-full resize-none rounded-sm border border-transparent bg-surface-3 px-3 py-2.5 text-base leading-snug outline-none placeholder:text-fg-faint focus:border-accent"
       />
       {/* Nur Ergebnis und Fehler werden angesagt, nicht jedes "Speichert…" —
           sonst redet ein Screenreader nach jeder Tipp-Pause dazwischen. */}
       <p className="mt-1 min-h-4 text-[12px] text-fg-faint" aria-live={stand === "speichert" ? "off" : "polite"}>
         {stand === "speichert"
-          ? "Speichert…"
+          ? "Saving…"
           : stand === "fehler"
-            ? "Noch nicht gespeichert — bleibt auf dem Handy und geht beim nächsten Versuch raus."
+            ? "Not saved yet — stays on the phone and goes out on the next try."
             : stand === "gespeichert"
-              ? "Gespeichert."
+              ? "Saved."
               : ""}
       </p>
     </div>
@@ -1495,7 +1498,7 @@ function UebungAnpassen({
       setName("");
       router.refresh();
     } catch (e) {
-      setFehler(e instanceof Error ? e.message : "Server nicht erreichbar");
+      setFehler(e instanceof Error ? e.message : "Server not reachable");
     } finally {
       setLaeuft(false);
     }
@@ -1508,7 +1511,7 @@ function UebungAnpassen({
     return (
       <div className="mt-2 flex">
         <button type="button" onClick={onWiederAufnehmen} className={`${knopf} -ml-3`}>
-          Wieder aufnehmen
+          Add back
         </button>
       </div>
     );
@@ -1518,16 +1521,16 @@ function UebungAnpassen({
     <div className="mt-2">
       <div className="-mx-1 flex flex-wrap items-center gap-1">
         <button type="button" onClick={onMehr} disabled={!kannMehr} className={knopf}>
-          + Satz
+          + Set
         </button>
         <button
           type="button"
           onClick={onWeniger}
           disabled={!kannWeniger}
           className={knopf}
-          aria-label="Letzten offenen Satz weglassen"
+          aria-label="Drop the last open set"
         >
-          − Satz
+          − Set
         </button>
         {tauschbar && !hatGeloggt && (
           <button
@@ -1536,7 +1539,7 @@ function UebungAnpassen({
             aria-expanded={offen}
             className={`${knopf} ml-auto`}
           >
-            {offen ? "Abbrechen" : "Tauschen"}
+            {offen ? "Cancel" : "Swap"}
           </button>
         )}
       </div>
@@ -1554,13 +1557,13 @@ function UebungAnpassen({
             autoFocus
             enterKeyHint="done"
             maxLength={100}
-            placeholder="z. B. Kurzhantel-Bankdrücken"
+            placeholder="e.g. Dumbbell bench press"
             className="mt-1.5 min-h-[44px] w-full rounded-sm border border-transparent bg-surface-3 px-3 text-base outline-none focus:border-accent"
           />
-          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Wie lange">
+          <div className="mt-3 grid grid-cols-2 gap-2" role="radiogroup" aria-label="How long">
             {[
-              { wert: false, text: "Nur heute" },
-              { wert: true, text: "Dauerhaft im Plan" },
+              { wert: false, text: "Today only" },
+              { wert: true, text: "Permanently" },
             ].map((o) => (
               <button
                 key={o.text}
@@ -1578,8 +1581,8 @@ function UebungAnpassen({
           </div>
           {dauerhaft && (
             <p className="mt-2 text-[12px] leading-relaxed text-fg-faint">
-              Ersetzt {planName} im Katalog. Die bisherigen Sätze bleiben unter dem alten Namen
-              im Verlauf.
+              Replaces {planName} in the catalog. Past sets stay in the history under the
+              old name.
             </p>
           )}
           <button
@@ -1588,7 +1591,7 @@ function UebungAnpassen({
             onClick={() => void tauschen(name, dauerhaft)}
             className="mt-3 flex min-h-[48px] w-full items-center justify-center rounded-md bg-accent text-sm font-semibold text-on-accent transition active:scale-[0.98] disabled:opacity-50"
           >
-            {laeuft ? "Wird getauscht…" : "Tauschen"}
+            {laeuft ? "Swapping…" : "Swap"}
           </button>
           {getauscht && (
             <button
@@ -1597,7 +1600,7 @@ function UebungAnpassen({
               onClick={() => void tauschen(planName, false)}
               className="mt-2 flex min-h-[44px] w-full items-center justify-center text-[13px] font-semibold text-fg-dim"
             >
-              Zurück zu {planName}
+              Back to {planName}
             </button>
           )}
           {fehler && <p className="mt-2 text-xs text-strain">{fehler}</p>}
@@ -1637,7 +1640,7 @@ function EinheitBeenden({
         onClick={() => setFragen(true)}
         className="flex min-h-[48px] items-center justify-center rounded-md border border-hair text-sm font-semibold text-fg-dim transition active:scale-[0.98] md:hover:text-fg"
       >
-        Einheit beenden
+        Finish session
       </button>
     );
   }
@@ -1646,8 +1649,8 @@ function EinheitBeenden({
     <div className="rounded-md border border-hair p-3.5">
       <p className="text-[13px] leading-relaxed text-fg-dim">
         {offen === 0
-          ? "Alles Übrige ist abgehakt. Einheit jetzt beenden? Danach steht die Dauer fest."
-          : `${anzahl(offen, "Satz ist", "Sätze sind")} noch offen. Trotzdem beenden? Die offenen Sätze fallen dann weg; beim nächsten Mal plant Kadenz wieder alle.`}
+          ? "Everything else is checked. Finish the session now? The duration is fixed after that."
+          : `${anzahl(offen, "set is", "sets are")} still open. Finish anyway? The open sets are dropped; next time Kadenz plans all of them again.`}
       </p>
       <div className="mt-3 flex gap-2.5">
         <button
@@ -1660,14 +1663,14 @@ function EinheitBeenden({
             } catch (e) {
               // Abgelaufene Anmeldung oder kein Netz — der Knopf darf nicht
               // für immer auf "Wird beendet…" stehen bleiben.
-              setFehler(e instanceof Error ? e.message : "Server nicht erreichbar");
+              setFehler(e instanceof Error ? e.message : "Server not reachable");
             } finally {
               setLaeuft(false);
             }
           }}
           className="flex min-h-[48px] flex-1 items-center justify-center rounded-md bg-accent text-sm font-semibold text-on-accent transition active:scale-[0.98] disabled:opacity-60"
         >
-          {laeuft ? "Wird beendet…" : "Ja, beenden"}
+          {laeuft ? "Finishing…" : "Yes, finish"}
         </button>
         <button
           type="button"
@@ -1725,7 +1728,7 @@ function UebungsNotiz({
     }
     setSpeichert(true);
     const r = await uebungNotizSetzen(einheit, name, entwurf).catch(
-      (e: unknown) => ({ ok: false as const, fehler: e instanceof Error ? e.message : "Server nicht erreichbar" })
+      (e: unknown) => ({ ok: false as const, fehler: e instanceof Error ? e.message : "Server not reachable" })
     );
     setSpeichert(false);
     if (r.ok) {
@@ -1740,7 +1743,7 @@ function UebungsNotiz({
     return (
       <span className="mt-1.5 flex flex-col gap-1.5">
         <label htmlFor={id} className="sr-only">
-          Notiz zu {name}
+          Note on {name}
         </label>
         <span className="flex gap-2">
           <input
@@ -1754,7 +1757,7 @@ function UebungsNotiz({
             maxLength={300}
             enterKeyHint="done"
             autoFocus
-            placeholder="z. B. Sitz Stufe 4, Griff eng"
+            placeholder="e.g. seat level 4, narrow grip"
             className="min-h-[44px] min-w-0 flex-1 rounded-sm border border-transparent bg-surface-3 px-2.5 text-base outline-none focus:border-accent"
           />
           <button
@@ -1774,7 +1777,7 @@ function UebungsNotiz({
           disabled={speichert}
           className="-ml-1 min-h-[44px] self-start px-1 text-[13px] font-semibold text-fg-faint active:text-fg"
         >
-          Abbrechen
+          Cancel
         </button>
         {fehler && <span className="text-[11px] text-strain">{fehler}</span>}
       </span>
@@ -1787,12 +1790,12 @@ function UebungsNotiz({
       type="button"
       onClick={() => setEntwurf(notiz ?? "")}
       className="-my-1.5 -ml-1 flex min-h-[44px] items-center gap-1.5 rounded-sm px-1 text-left text-xs text-fg-faint active:bg-surface-2"
-      aria-label={notiz ? `Notiz zu ${name} ändern: ${notiz}` : `Notiz zu ${name} hinzufügen`}
+      aria-label={notiz ? `Edit note on ${name}: ${notiz}` : `Add note on ${name}`}
     >
       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
         <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
       </svg>
-      <span className={notiz ? "text-fg-dim" : ""}>{notiz ?? "Notiz"}</span>
+      <span className={notiz ? "text-fg-dim" : ""}>{notiz ?? "Note"}</span>
     </button>
   );
 }
@@ -1939,7 +1942,7 @@ function Ring({ fortschritt, farbe }: { fortschritt: number; farbe: string }) {
 
 /** Uhrzeit in Wiener Zeit — der Server läuft auf Vercel in UTC. */
 function uhrzeit(ms: number): string {
-  return new Date(ms).toLocaleTimeString("de-AT", {
+  return new Date(ms).toLocaleTimeString("en-GB", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Vienna",
@@ -2023,8 +2026,8 @@ export function TrainingStart({
         {session.title}
       </h1>
       <p className="mt-1.5 text-sm text-fg-dim">
-        {anzahl(uebungen.length, "Übung", "Übungen")} · {anzahl(saetze, "Satz", "Sätze")} ·
-        Satzpause 3 Minuten
+        {anzahl(uebungen.length, "exercise", "exercises")} · {anzahl(saetze, "set", "sets")} ·
+        3 min rest
       </p>
 
       <button
@@ -2035,12 +2038,12 @@ export function TrainingStart({
                    text-base font-semibold text-on-accent transition active:scale-[0.98]
                    disabled:opacity-60"
       >
-        {laeuft ? "Wird gestartet…" : "Training starten"}
+        {laeuft ? "Starting…" : "Start workout"}
       </button>
 
       {fehler && (
         <p className="mt-3 rounded-md border border-strain/30 bg-strain/10 px-3.5 py-2.5 text-xs leading-relaxed text-strain">
-          Start fehlgeschlagen: {fehler}
+          Start failed: {fehler}
         </p>
       )}
 
@@ -2050,7 +2053,7 @@ export function TrainingStart({
 
       {aenderungen.length > 0 && (
         <Card className="mt-5">
-          <Eyebrow>Heute geändert</Eyebrow>
+          <Eyebrow>Changed today</Eyebrow>
           <ul className="mt-3 flex flex-col gap-2.5">
             {aenderungen.map((ex) => (
               <li key={ex.name} className="flex items-start gap-3">
@@ -2073,7 +2076,7 @@ export function TrainingStart({
       )}
 
       <Card className="mt-3.5">
-        <Eyebrow>Übungen</Eyebrow>
+        <Eyebrow>Exercises</Eyebrow>
         <ol className="mt-3 flex flex-col gap-2">
           {uebungen.map((ex, i) => (
             <li key={ex.name} className="flex items-center gap-3">

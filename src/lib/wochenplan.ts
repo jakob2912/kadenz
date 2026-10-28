@@ -8,19 +8,18 @@
  */
 
 import { prisma } from "./db";
-import { heuteWien } from "./datum";
+import { heuteWien, wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import {
-  FRUEH_NAMEN,
+  belegtePlaetze,
   montagVon,
   rotationFor,
   schalterSperren,
-  SPAET_NAMEN,
   wocheAm,
   type Frueh,
   type Rotation,
   type Spaet,
-  type Woche,
+  type Eintrag,
   type Wochenstand,
   type Wochenwahl,
 } from "./plan";
@@ -68,9 +67,51 @@ export async function wochenwahlenLesen(): Promise<Wochenwahl[]> {
   }
 }
 
-/** rotationFor() mit den gespeicherten Wochenwahlen. */
+/**
+ * Die geloggten Einheiten zwischen zwei Tagen (ISO, beide eingeschlossen).
+ *
+ * Grundlage dafür, dass der Plan sich nach dem richtet, was trainiert wurde
+ * (zuordnung() in plan.ts). Ist die Datenbank nicht erreichbar, ist die Liste
+ * leer — dann gilt der Plan, als wäre noch nichts gelaufen.
+ */
+export async function eintraegeLesen(von: string, bis: string): Promise<Eintrag[]> {
+  if (!datenbankKonfiguriert()) return [];
+  try {
+    const zeilen = await prisma.workout.findMany({
+      where: { date: { gte: alsDatum(von), lte: alsDatum(bis) } },
+      select: { date: true, kind: true },
+      orderBy: { date: "asc" },
+    });
+    return zeilen.flatMap((z) =>
+      z.kind === "push" || z.kind === "pull" ? [{ datum: iso(z.date), einheit: z.kind }] : []
+    );
+  } catch (e) {
+    console.error("Trainingseinheiten nicht lesbar, Plan ohne sie:", e);
+    return [];
+  }
+}
+
+/** Was der Plan für einen Tag braucht: die Wochenwahlen und die geloggten Einheiten. */
+export type Kalender = { wahlen: Wochenwahl[]; eintraege: Eintrag[] };
+
+/**
+ * Wochenwahlen und Einträge rund um einen Tag: ab dem Montag der Vorwoche
+ * (die Zwei-Tage-Pause reicht über den Montag zurück) bis zum Sonntag der
+ * Folgewoche (Vorschau auf den nächsten Trainingstag).
+ */
+export async function kalenderLesen(date: Date = new Date()): Promise<Kalender> {
+  const montag = montagVon(wienerDatum(date));
+  const [wahlen, eintraege] = await Promise.all([
+    wochenwahlenLesen(),
+    eintraegeLesen(plusTage(montag, -7), plusTage(montag, 13)),
+  ]);
+  return { wahlen, eintraege };
+}
+
+/** rotationFor() mit den gespeicherten Wochenwahlen und den geloggten Einheiten. */
 export async function rotationMitPlan(date: Date): Promise<Rotation> {
-  return rotationFor(date, await wochenwahlenLesen());
+  const { wahlen, eintraege } = await kalenderLesen(date);
+  return rotationFor(date, wahlen, eintraege);
 }
 
 /**
@@ -84,25 +125,36 @@ export function zielwoche(heute: string): string {
 
 export type { Wochenstand } from "./plan";
 
-/** An welchen Tagen der Woche schon eine Einheit geloggt ist. */
-async function geloggteTage(montag: string): Promise<Set<string>> {
+/**
+ * Welche Plätze der Woche schon trainiert sind — auch vorgezogen oder
+ * nachgeholt (belegtePlaetze() in plan.ts), nicht bloß, an welchen
+ * Wochentagen etwas lief.
+ *
+ * Wirft bei einem Lesefehler, statt eine leere Woche anzunehmen: sonst
+ * ließe sich ein Schalter umlegen, unter dem schon eine Einheit liegt.
+ */
+async function belegteTage(montag: string, wahlen: readonly Wochenwahl[]): Promise<Set<string>> {
   const workouts = await prisma.workout.findMany({
     where: { date: { gte: alsDatum(montag), lt: alsDatum(plusTage(montag, 7)) } },
-    select: { date: true },
+    select: { date: true, kind: true },
   });
-  return new Set(workouts.map((w) => iso(w.date)));
+  const eintraege = workouts.flatMap((w): Eintrag[] =>
+    w.kind === "push" || w.kind === "pull" ? [{ datum: iso(w.date), einheit: w.kind }] : []
+  );
+  return belegtePlaetze(montag, wahlen, eintraege);
 }
 
 /** Die Woche, die der Schalter zeigt, samt dem, was sich noch umlegen lässt. */
 export async function wochenstand(): Promise<Wochenstand> {
   const heute = heuteWien();
   const montag = zielwoche(heute);
-  const woche = wocheAm(montag, await wochenwahlenLesen());
+  const wahlen = await wochenwahlenLesen();
+  const woche = wocheAm(montag, wahlen);
 
   let geloggt = new Set<string>();
   if (datenbankKonfiguriert()) {
     try {
-      geloggt = await geloggteTage(montag);
+      geloggt = await belegteTage(montag, wahlen);
     } catch (e) {
       console.error("Trainingstage der Woche nicht lesbar:", e);
     }
@@ -130,20 +182,21 @@ export async function wochenwahlSetzen(
   try {
     const heute = heuteWien();
     const montag = zielwoche(heute);
-    const woche = wocheAm(montag, await wochenwahlenLesen());
-    const gesperrt = schalterSperren(woche, heute, await geloggteTage(montag));
+    const wahlen = await wochenwahlenLesen();
+    const woche = wocheAm(montag, wahlen);
+    const gesperrt = schalterSperren(woche, heute, await belegteTage(montag, wahlen));
 
     if ("frueh" in aenderung) {
       if (aenderung.frueh !== woche.frueh) {
         if (gesperrt.fruehGesperrt) return { ok: false, fehler: gesperrt.fruehGesperrt };
         if (aenderung.frueh === "mo" && heute > montag) {
-          return { ok: false, fehler: "Mo ist vorbei." };
+          return { ok: false, fehler: "Monday is over." };
         }
       }
     } else if (aenderung.spaet !== woche.spaet) {
       if (gesperrt.spaetGesperrt) return { ok: false, fehler: gesperrt.spaetGesperrt };
       if (aenderung.spaet === "frsa" && heute > plusTage(montag, 4)) {
-        return { ok: false, fehler: "Fr ist vorbei — Fr + Sa geht diese Woche nicht mehr." };
+        return { ok: false, fehler: "Friday is over — Fri + Sat is no longer possible this week." };
       }
     }
 
@@ -156,11 +209,6 @@ export async function wochenwahlSetzen(
     return { ok: true, stand: await wochenstand() };
   } catch (e) {
     console.error("Wochenwahl nicht speicherbar:", e);
-    return { ok: false, fehler: "Der Schalter konnte nicht gespeichert werden." };
+    return { ok: false, fehler: "The switch could not be saved." };
   }
-}
-
-/** Für Texte: "Push Di und Sa, Pull Mi und So". */
-export function wahlBeschreibung(woche: Woche): string {
-  return `${FRUEH_NAMEN[woche.frueh]} · ${SPAET_NAMEN[woche.spaet]}`;
 }

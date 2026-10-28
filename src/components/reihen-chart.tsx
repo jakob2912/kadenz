@@ -89,7 +89,7 @@ export function ReihenChart({
   );
   const knoepfe =
     waehlbar.length > 1 ? (
-      <div className="mt-3 flex gap-1.5" role="group" aria-label="Zeitraum">
+      <div className="mt-3 flex gap-1.5" role="group" aria-label="Time range">
         {waehlbar.map((z) => (
           <button
             key={z}
@@ -105,7 +105,7 @@ export function ReihenChart({
                 : "text-fg-dim active:bg-surface-2 active:text-fg"
             }`}
           >
-            {z >= 3650 ? "Alles" : z === 365 ? "1 Jahr" : `${z} Tage`}
+            {z >= 3650 ? "All" : z === 365 ? "1 year" : `${z} days`}
           </button>
         ))}
       </div>
@@ -119,7 +119,7 @@ export function ReihenChart({
           {/* Im kurzen Fenster zu wenig, insgesamt aber genug: dann hilft
               ein längerer Zeitraum, nicht das Warten auf die nächste Messung. */}
           {ganzeReihe.length >= 2
-            ? "In diesem Zeitraum zu wenige Werte für eine Kurve — einen längeren wählen."
+            ? "Too few values in this range for a curve — pick a longer one."
             : reihe.length === 0
               ? leer
               : einzeln}
@@ -229,12 +229,12 @@ export function ReihenChart({
     mitJahr ? `${kurzDatum(d)} ${d.slice(0, 4)}` : kurzDatum(d).replace(/\.$/, "");
   const amTag = (d: string) => (mitJahr ? `${kurzDatum(d)} ${d.slice(0, 4)}` : kurzDatum(d));
   const beschreibung =
-    `${bezeichnung} von ${de(erste.wert, stellen)} ${einheit} am ${amTag(erste.datum)} ` +
-    `auf ${de(letzte.wert, stellen)} ${einheit} am ${ohnePunkt(letzte.datum)}.` +
+    `${bezeichnung} from ${de(erste.wert, stellen)} ${einheit} on ${amTag(erste.datum)} ` +
+    `to ${de(letzte.wert, stellen)} ${einheit} on ${ohnePunkt(letzte.datum)}.` +
     (sollReihe.length > 1
-      ? ` Gestrichelt daneben ${sollBezeichnung}: ${de(sollReihe[0].wert, stellen)} ${einheit} ` +
-        `am ${amTag(sollReihe[0].datum)} auf ` +
-        `${de(sollReihe[sollReihe.length - 1].wert, stellen)} ${einheit} am ` +
+      ? ` Dashed alongside, ${sollBezeichnung}: ${de(sollReihe[0].wert, stellen)} ${einheit} ` +
+        `on ${amTag(sollReihe[0].datum)} to ` +
+        `${de(sollReihe[sollReihe.length - 1].wert, stellen)} ${einheit} on ` +
         `${ohnePunkt(sollReihe[sollReihe.length - 1].datum)}.`
       : "");
 
@@ -245,7 +245,7 @@ export function ReihenChart({
     <div
       role="slider"
       tabIndex={0}
-      aria-label={`${bezeichnung}, Messtag`}
+      aria-label={`${bezeichnung}, measurement day`}
       aria-describedby={beschreibungId}
       aria-valuemin={0}
       aria-valuemax={reihe.length - 1}

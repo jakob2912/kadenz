@@ -37,9 +37,13 @@ import {
 /* Weiterhin von hier lesbar: bank.ts war die Heimat dieses Namens, und der
    MCP-Server sowie mehrere Seiten importieren ihn von hier. */
 export { BANK_UEBUNG } from "./kraft";
+import { eintraegeLesen } from "./wochenplan";
 import {
   datumFuerPushIndex,
+  FESTE_TAGE_AB_ISO,
+  montagVon,
   pushIndexAbDatum,
+  tageFuerPushIndex,
   type Wochenwahl,
   type Programmvorgabe,
 } from "./plan";
@@ -135,7 +139,7 @@ export async function trainingsmaxSetzen(
   if (!Number.isFinite(tmKg) || tmKg < 20 || tmKg > 300) {
     return {
       ok: false,
-      fehler: `${tmKg} kg ist als Trainingsmax fürs Bankdrücken nicht plausibel (20–300 kg).`,
+      fehler: `${tmKg} kg isn't a plausible bench training max (20–300 kg).`,
     };
   }
 
@@ -164,7 +168,7 @@ export async function trainingsmaxSetzen(
     return { ok: true, tm: zuTrainingsmax(zeile) };
   } catch (e) {
     console.error("Trainingsmax nicht speicherbar:", e);
-    return { ok: false, fehler: "Der Trainingsmax konnte nicht gespeichert werden." };
+    return { ok: false, fehler: "The training max could not be saved." };
   }
 }
 
@@ -176,11 +180,11 @@ export async function trainingsmaxSetzen(
  * falsch — wer einen Aufwärmsatz mitloggt, verschiebt die Nummerierung, und
  * dann zählt Kadenz die falsche Zeile.
  *
- * Zeitraum statt Datum, weil ein ausgefallener Push-Tag nachgeholt wird: der
- * Freitag am Samstag oder Sonntag, der Montag am Dienstag (trainingAls() in
- * plan.ts). Gesucht wird deshalb ab dem planmäßigen Tag bis vor den nächsten
- * Push-Tag. Über das genaue Datum fände Kadenz einen nachgeholten AMRAP-Satz
- * nicht, und der Trainingsmax bliebe stillschweigend stehen.
+ * Nicht über das planmäßige Datum, weil Push-Tage vorgezogen und nachgeholt
+ * werden: gesucht wird an dem Tag, dessen Einheit den Platz belegt hat
+ * (tageFuerPushIndex() in plan.ts). Über das planmäßige Datum fände Kadenz
+ * einen verschobenen AMRAP-Satz nicht, und der Trainingsmax bliebe
+ * stillschweigend stehen.
  *
  * `mindestKg` ist das vorgegebene Gewicht des AMRAP-Satzes. Ein schwerer
  * Single (1 Wiederholung bei 90 %) sähe ohne diese Schranke wie ein
@@ -192,14 +196,33 @@ async function amrapSatzVon(
   mindestKg: number,
   wahlen: readonly Wochenwahl[]
 ): Promise<SetLog | null> {
-  const ab = new Date(`${datumFuerPushIndex(pushIndex, wahlen)}T00:00:00Z`);
-  const bis = new Date(`${datumFuerPushIndex(pushIndex + 1, wahlen)}T00:00:00Z`);
+  const geplant = datumFuerPushIndex(pushIndex, wahlen);
+
+  /* Seit den festen Wochentagen belegt jede Einheit einen Platz der Woche
+     (zuordnung() in plan.ts) — ein vorgezogener Push am Do trägt den Index
+     des Sa. Gesucht wird deshalb an genau den Tagen, die diesen Platz belegt
+     haben. Davor gilt weiter das Zeitfenster bis zum nächsten Push-Tag. */
+  let tage: { date: { in: Date[] } } | { date: { gte: Date; lt: Date } };
+  if (geplant >= FESTE_TAGE_AB_ISO) {
+    const montag = montagVon(geplant);
+    const sonntag = new Date(Date.parse(`${montag}T00:00:00Z`) + 6 * 864e5).toISOString().slice(0, 10);
+    const belegt = tageFuerPushIndex(pushIndex, wahlen, await eintraegeLesen(montag, sonntag));
+    if (belegt.length === 0) return null;
+    tage = { date: { in: belegt.map((d) => new Date(`${d}T00:00:00Z`)) } };
+  } else {
+    tage = {
+      date: {
+        gte: new Date(`${geplant}T00:00:00Z`),
+        lt: new Date(`${datumFuerPushIndex(pushIndex + 1, wahlen)}T00:00:00Z`),
+      },
+    };
+  }
 
   return prisma.setLog.findFirst({
     where: {
       exercise: BANK_UEBUNG,
       kg: { gte: mindestKg },
-      workout: { kind: "push", date: { gte: ab, lt: bis } },
+      workout: { kind: "push", ...tage },
       /* Markieren lässt sich seit dem 11.09.2026 nicht mehr — eine unsaubere
          letzte Wiederholung zählt Jakob einfach nicht mit. Die alten
          Markierungen gelten aber weiter, deshalb bleibt der Filter.
@@ -268,10 +291,10 @@ async function aufZyklusBringen(
         zielZyklus
       ),
       begruendung:
-        `Zwischen Zyklus ${aktuell.zyklus} und ${zielZyklus} liegen ` +
-        `${zielZyklus - aktuell.zyklus} Zyklen ohne Auswertung. Der Trainingsmax bleibt ` +
-        `bei ${aktuell.tmKg.toFixed(1).replace(".", ",")} kg — nach so langer Pause ist er ` +
-        `eher zu hoch als zu niedrig. Prüf ihn im ersten Satz und korrigier ihn, wenn er nicht passt.`,
+        `Between cycle ${aktuell.zyklus} and ${zielZyklus} there are ` +
+        `${zielZyklus - aktuell.zyklus} cycles without evaluation. The training max stays ` +
+        `at ${aktuell.tmKg.toFixed(1)} kg — after such a long break it's more likely ` +
+        `too high than too low. Check it on the first set and correct it if it doesn't fit.`,
     });
   }
 
@@ -356,7 +379,12 @@ export type Bankstand = {
  */
 export async function bankstandFuer(
   pushIndex: number,
-  wahlen: readonly Wochenwahl[]
+  wahlen: readonly Wochenwahl[],
+  /* Wann ein Push-Index trainiert wird. Ohne Angabe der planmäßige Tag; wer
+     die geloggten Einheiten kennt, reicht den tatsächlichen herein
+     (pushTageAb() in plan.ts) — sonst nennt die Seite für einen vorgezogenen
+     TM-Tag den alten Wochentag. Null: dieser Platz verfällt. */
+  tagVon: (pushIndex: number) => string | null = (i) => datumFuerPushIndex(i, wahlen)
 ): Promise<Bankstand> {
   let tm = await aktuellerTrainingsmax();
 
@@ -372,9 +400,9 @@ export async function bankstandFuer(
       vorgabe: {
         saetze: [],
         hinweis:
-          "Trainingsmax fehlt. Langhantel-Bankdrücken hat hier keine Historie, aus der " +
-          "Kadenz ihn schätzen könnte — trag ihn einmalig ein. Er liegt bei rund 90 % von " +
-          "dem, was du sicher einmal schaffst.",
+          "Training max missing. Barbell bench press has no history here for " +
+          "Kadenz to estimate it from — enter it once. It's about 90 % of " +
+          "what you can safely do for one rep.",
       },
     };
   }
@@ -382,14 +410,17 @@ export async function bankstandFuer(
   const anker = (await zyklusanker(wahlen)) ?? { pushIndex, zyklus: tm.zyklus, tmKg: tm.tmKg };
   const position = bankPosition(pushIndex, anker);
 
-  /* Der nächste TM-Tag ist die übernächste Push-Einheit, wenn heute einer ist,
-     sonst die nächste. Nach der Deload-Zusatzeinheit — art "keiner" bei
-     bereits laufendem Programm — gilt dasselbe: der TM-Tag liegt eine
-     Push-Einheit weiter. */
-  const naechsterBankTag =
-    position.art === "tm" || position.art === "test"
-      ? null
-      : datumFuerPushIndex(pushIndex + 1, wahlen);
+  /* Der nächste TM-Tag: die nächste Push-Einheit, deren Position einer ist
+     und deren Platz nicht verfällt. Meist die gleich folgende — nach dem
+     leichten Tag und nach der Deload-Zusatzeinheit liegt er eine Push-Einheit
+     weiter. Ist heute selbst einer, gibt es nichts anzukündigen. */
+  let naechsterBankTag: string | null = null;
+  if (position.art !== "tm" && position.art !== "test") {
+    for (let k = 1; k <= 8 && naechsterBankTag === null; k++) {
+      const art = bankPosition(pushIndex + k, anker).art;
+      if (art === "tm" || art === "test") naechsterBankTag = tagVon(pushIndex + k);
+    }
+  }
 
   if (tm.zyklus < position.zyklus) {
     tm = await aufZyklusBringen(position.zyklus, tm, anker.pushIndex, wahlen);
@@ -444,12 +475,12 @@ function vorgabeFuer(
     return {
       saetze: testPlan(tmKg, schaetzung),
       hinweis:
-        `Testtag: vier Aufwärmsätze, dann bis zu ${TEST_VERSUCHE} Singles. Den nächsten ` +
-        `Versuch nur, wenn der vorige glatt ging — beim ersten Kampf-Rep ist Schluss. Hüfte ` +
-        `bleibt auf der Bank, sonst zählt der Versuch nicht. 3–5 Minuten Pause. Nicht ` +
-        `geschaffte Versuche einfach nicht abhaken.` +
+        `Test day: four warm-up sets, then up to ${TEST_VERSUCHE} singles. Only take the next ` +
+        `attempt if the previous one moved cleanly — stop at the first grinder. Hips ` +
+        `stay on the bench, otherwise the attempt doesn't count. 3–5 minutes rest. Simply ` +
+        `don't check attempts you missed.` +
         (schaetzung === null
-          ? " Keine Schätzung aus den letzten Wochen — der erste Versuch liegt beim Trainingsmax."
+          ? " No estimate from recent weeks — the first attempt is at the training max."
           : ""),
     };
   }
@@ -458,8 +489,8 @@ function vorgabeFuer(
     return {
       saetze: bankZusatzPlan(tmKg, false),
       hinweis:
-        `Leichter Tag vor dem Testtag: nur drei Fünfer bei ` +
-        `${String(ZUSATZ_PROZENT).replace(".", ",")} %, kein Single — frisch in den Test.`,
+        `Light day before the test: only three sets of five at ` +
+        `${String(ZUSATZ_PROZENT)} %, no single — go into the test fresh.`,
     };
   }
 
@@ -467,18 +498,18 @@ function vorgabeFuer(
     return {
       saetze: bankZusatzPlan(tmKg),
       hinweis:
-        `Leichter Tag: drei Fünfer bei ${String(ZUSATZ_PROZENT).replace(".", ",")} %, danach ` +
-        `ein schwerer Single bei ${SINGLE_PROZENT} % vom Trainingsmax. Eine Wiederholung, ` +
-        `sauber und schnell — kein Grinder, keine zweite. Zählt nicht für die ` +
-        `Trainingsmax-Progression, dafür ist der AMRAP-Satz am TM-Tag da.`,
+        `Light day: three sets of five at ${String(ZUSATZ_PROZENT)} %, then ` +
+        `one heavy single at ${SINGLE_PROZENT} % of the training max. One rep, ` +
+        `clean and fast — no grinder, no second one. Doesn't count toward the ` +
+        `training max progression; that's what the AMRAP set on TM day is for.`,
     };
   }
 
   return {
     saetze: [],
     hinweis:
-      "Heute keine Bankeinheit. In der Deload-Woche fällt die Zusatz-Einheit aus — " +
-      "die Woche ist zum Zurücknehmen da.",
+      "No bench today. The extra session is skipped in deload week — " +
+      "the week is for backing off.",
   };
 }
 

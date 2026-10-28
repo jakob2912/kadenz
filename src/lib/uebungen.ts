@@ -13,7 +13,7 @@ import { prisma } from "./db";
 import { wienerDatum } from "./datum";
 import { datenbankKonfiguriert } from "./konfiguration";
 import { bankstandFuer, type Bankstand } from "./bank";
-import { wochenwahlenLesen } from "./wochenplan";
+import { kalenderLesen, type Kalender } from "./wochenplan";
 import { NEUSTART_SCHLUESSEL, neustartsAusText } from "./kraftverlauf";
 import { letzteSaetzeFuer } from "./training-lesen";
 import { heutigeTausche } from "./tagestausch";
@@ -21,10 +21,10 @@ import type { SetLog } from "./coach";
 import {
   SESSIONS,
   mitHistorie,
+  pushTageAb,
   rotationFor,
   trainingAls,
   saetzeFuerTag,
-  type Wochenwahl,
   type PlannedExercise,
   type ZuPlanen,
 } from "./plan";
@@ -148,26 +148,23 @@ export type Tagesplan =
     };
 
 /**
- * `wahlen` reicht mit, wer die Wochenwahl schon geladen hat; sonst liest die
- * Funktion sie selbst.
+ * `kalender` reicht mit, wer Wochenwahlen und Einträge schon geladen hat;
+ * sonst liest die Funktion sie selbst.
  */
-export async function einheitFuerTag(
-  date: Date,
-  wahlen?: readonly Wochenwahl[]
-): Promise<Tagesplan> {
-  wahlen ??= await wochenwahlenLesen();
-  const rotation = rotationFor(date, wahlen);
+export async function einheitFuerTag(date: Date, kalender?: Kalender): Promise<Tagesplan> {
+  kalender ??= await kalenderLesen(date);
+  const rotation = rotationFor(date, kalender.wahlen, kalender.eintraege);
 
   if (rotation.art === "pause") {
-    const naechsterTag = naechsterTrainingstag(date, wahlen);
+    const naechsterTag = naechsterTrainingstag(date, kalender);
     return {
       art: "pause",
-      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), wahlen),
+      naechste: await trainingsplanFuer(new Date(`${naechsterTag}T12:00:00Z`), kalender),
       naechsterTag,
     };
   }
 
-  return { art: "training", ...(await trainingsplanFuer(date, wahlen)) };
+  return { art: "training", ...(await trainingsplanFuer(date, kalender)) };
 }
 
 /**
@@ -178,12 +175,12 @@ export async function einheitFuerTag(
  * also; wird die Schranke erreicht, ist ein Plan kaputt, und ein Fehler ist
  * besser als eine Endlosschleife.
  */
-function naechsterTrainingstag(date: Date, wahlen: readonly Wochenwahl[]): string {
+function naechsterTrainingstag(date: Date, { wahlen, eintraege }: Kalender): string {
   let tag = date;
 
-  for (let n = 0; n < 7; n++) {
+  for (let n = 0; n < 8; n++) {
     tag = morgen(tag);
-    if (rotationFor(tag, wahlen).art === "training") return wienerDatum(tag);
+    if (rotationFor(tag, wahlen, eintraege).art === "training") return wienerDatum(tag);
   }
 
   throw new Error(`Ab ${wienerDatum(date)} steht in den nächsten sieben Tagen keine Einheit an.`);
@@ -210,17 +207,19 @@ function morgen(date: Date): Date {
 export async function trainingsplanAls(
   date: Date,
   einheit: Einheit,
-  wahlen?: readonly Wochenwahl[]
+  kalender?: Kalender
 ): Promise<Trainingsplan> {
-  return trainingsplanFuer(date, wahlen ?? (await wochenwahlenLesen()), einheit);
+  return trainingsplanFuer(date, kalender ?? (await kalenderLesen(date)), einheit);
 }
 
 async function trainingsplanFuer(
   date: Date,
-  wahlen: readonly Wochenwahl[],
+  { wahlen, eintraege }: Kalender,
   gewaehlt?: Einheit
 ): Promise<Trainingsplan> {
-  const rotation = gewaehlt ? trainingAls(date, gewaehlt, wahlen) : rotationFor(date, wahlen);
+  const rotation = gewaehlt
+    ? trainingAls(date, gewaehlt, wahlen, eintraege)
+    : rotationFor(date, wahlen, eintraege);
 
   /* Kann nur eintreten, wenn jemand diese Funktion für einen Pausentag
      aufruft. Dann ist der Fehler im Aufrufer, nicht in den Daten — lieber
@@ -236,7 +235,11 @@ async function trainingsplanFuer(
   let bank: Bankstand | null = null;
   if (einheit === "push" && rotation.pushIndex !== null) {
     try {
-      bank = await bankstandFuer(rotation.pushIndex, wahlen);
+      bank = await bankstandFuer(
+        rotation.pushIndex,
+        wahlen,
+        pushTageAb(wienerDatum(date), wahlen, eintraege)
+      );
     } catch (e) {
       // Ohne Trainingsmax fällt der Bank-Slot weg, der Rest der Einheit steht.
       console.error("Bankstand nicht lesbar:", e);
@@ -375,14 +378,14 @@ export async function uebungTauschen(
   } = {}
 ): Promise<Aenderung> {
   const neu = sauber(neuerName);
-  if (neu.length === 0) return { ok: false, fehler: "Die neue Übung braucht einen Namen." };
+  if (neu.length === 0) return { ok: false, fehler: "The new exercise needs a name." };
 
   try {
     const alt = await prisma.uebung.findUnique({
       where: { einheit_name: { einheit, name: sauber(alterName) } },
     });
     if (!alt) {
-      return { ok: false, fehler: `"${alterName}" steht nicht in der ${einheit}-Einheit.` };
+      return { ok: false, fehler: `"${alterName}" isn't in the ${einheit} session.` };
     }
 
     await prisma.uebung.update({
@@ -421,7 +424,7 @@ export async function uebungHinzufuegen(
   } = {}
 ): Promise<Aenderung> {
   const neu = sauber(name);
-  if (neu.length === 0) return { ok: false, fehler: "Die Übung braucht einen Namen." };
+  if (neu.length === 0) return { ok: false, fehler: "The exercise needs a name." };
 
   try {
     const vorhanden = await katalogLesen(einheit);
@@ -466,7 +469,7 @@ export async function uebungEntfernen(einheit: Einheit, name: string): Promise<A
     const vorhanden = await katalogLesen(einheit);
     const weg = vorhanden.find((u) => u.name === sauber(name));
     if (!weg) {
-      return { ok: false, fehler: `"${name}" steht nicht in der ${einheit}-Einheit.` };
+      return { ok: false, fehler: `"${name}" isn't in the ${einheit} session.` };
     }
 
     await prisma.$transaction(async (tx) => {
@@ -504,7 +507,7 @@ export async function uebungUmbenennen(
   const alt = sauber(alterName);
   const neu = sauber(neuerName);
 
-  if (neu.length === 0) return { ok: false, fehler: "Der neue Name darf nicht leer sein." };
+  if (neu.length === 0) return { ok: false, fehler: "The new name can't be empty." };
   if (alt === neu) return { ok: true, saetzeUmgeschrieben: 0 };
 
   try {
@@ -513,7 +516,7 @@ export async function uebungUmbenennen(
         where: { einheit_name: { einheit, name: alt } },
       });
       if (!zeile) {
-        return { ok: false as const, fehler: `"${alt}" steht nicht in der ${einheit}-Einheit.` };
+        return { ok: false as const, fehler: `"${alt}" isn't in the ${einheit} session.` };
       }
 
       await tx.uebung.update({ where: { id: zeile.id }, data: { name: neu } });
@@ -564,7 +567,7 @@ export async function uebungSaetzeSetzen(
   saetzeBankTag?: number | null
 ): Promise<Aenderung> {
   if (!Number.isInteger(saetze) || saetze < 1 || saetze > 10) {
-    return { ok: false, fehler: "Die Satzanzahl muss zwischen 1 und 10 liegen." };
+    return { ok: false, fehler: "The number of sets must be between 1 and 10." };
   }
   if (
     saetzeBankTag !== undefined &&
@@ -574,8 +577,8 @@ export async function uebungSaetzeSetzen(
     return {
       ok: false,
       fehler:
-        `Die Bank-Tag-Anzahl muss zwischen 1 und ${saetze} liegen. ` +
-        `Mehr als sonst wäre keine Reduktion — dafür ist das Feld nicht da.`,
+        `The bench-day count must be between 1 and ${saetze}. ` +
+        `More than usual wouldn't be a reduction — that's not what the field is for.`,
     };
   }
 
@@ -584,15 +587,15 @@ export async function uebungSaetzeSetzen(
       where: { einheit_name: { einheit, name: sauber(name) } },
     });
     if (!zeile) {
-      return { ok: false, fehler: `"${name}" steht nicht in der ${einheit}-Einheit.` };
+      return { ok: false, fehler: `"${name}" isn't in the ${einheit} session.` };
     }
 
     if (zeile.programm !== null) {
       return {
         ok: false,
         fehler:
-          `"${zeile.name}" hängt am Programm "${zeile.programm}" — dort gibt der Zyklus die ` +
-          `Sätze vor, eine Zahl hier hätte keine Wirkung.`,
+          `"${zeile.name}" is tied to the program "${zeile.programm}" — the cycle sets the ` +
+          `sets there, a number here would have no effect.`,
       };
     }
 
@@ -621,7 +624,7 @@ export async function uebungenUmsortieren(
     const bekannt = new Map(vorhanden.map((u) => [u.name, u.id]));
     const fehlend = gewuenscht.filter((n) => !bekannt.has(n));
     if (fehlend.length > 0) {
-      return { ok: false, fehler: `Nicht in der ${einheit}-Einheit: ${fehlend.join(", ")}.` };
+      return { ok: false, fehler: `Not in the ${einheit} session: ${fehlend.join(", ")}.` };
     }
 
     /* Die Liste muss vollständig sein. Eine Teilliste ließe offen, wo die
@@ -631,8 +634,8 @@ export async function uebungenUmsortieren(
       return {
         ok: false,
         fehler:
-          `Die Reihenfolge nennt ${gewuenscht.length} von ${vorhanden.length} Übungen. ` +
-          `Nenn alle, sonst ist nicht bestimmt, wohin der Rest kommt.`,
+          `The order names ${gewuenscht.length} of ${vorhanden.length} exercises. ` +
+          `Name all of them, otherwise it's unclear where the rest goes.`,
       };
     }
 
@@ -653,8 +656,8 @@ export async function uebungenUmsortieren(
 function fehlertext(e: unknown, name: string, einheit: Einheit): string {
   const code = (e as { code?: string })?.code;
   if (code === "P2002") {
-    return `"${name}" steht schon in der ${einheit}-Einheit. Zwei gleiche Namen in einer Einheit gehen nicht — die geloggten Sätze wären danach nicht mehr zuzuordnen.`;
+    return `"${name}" is already in the ${einheit} session. Two identical names in one session don't work — the logged sets couldn't be assigned anymore.`;
   }
   console.error("Übungskatalog nicht änderbar:", e);
-  return "Die Änderung am Übungskatalog hat nicht geklappt.";
+  return "Changing the exercise catalog didn't work.";
 }

@@ -20,14 +20,14 @@ export default function manifest(): MetadataRoute.Manifest {
     id: "/",
     name: "Kadenz",
     short_name: "Kadenz",
-    description: "Persönlicher Trainings- und Ernährungscoach",
+    description: "Personal training and nutrition coach",
     start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",
     background_color: "#090b0d",
     theme_color: "#090b0d",
-    lang: "de-AT",
+    lang: "en",
     icons: [
       { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
@@ -36,7 +36,7 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     shortcuts: [
       { name: "Training", url: "/training", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
-      { name: "Essen", url: "/ernaehrung", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
+      { name: "Food", url: "/ernaehrung", icons: [{ src: "/icons/icon-192.png", sizes: "192x192" }] },
     ],
   };
 }

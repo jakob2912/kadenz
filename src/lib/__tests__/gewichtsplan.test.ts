@@ -154,8 +154,8 @@ describe("kalorienAnpassung mit Phasenkorridor", () => {
   it("sagt bei fallendem Gewicht nicht, der Schnitt steige", () => {
     const urteil = kalorienAnpassung({ ...gemeinsam, korridor: { unten: -0.75, oben: -0.4 } });
     if (urteil.art === "kein-vorschlag") {
-      expect(urteil.grund).toContain("fällt");
-      expect(urteil.grund).not.toContain("steigt");
+      expect(urteil.grund).toContain("is falling");
+      expect(urteil.grund).not.toContain("is rising");
     }
   });
 });

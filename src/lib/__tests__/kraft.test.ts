@@ -87,7 +87,7 @@ describe("kraftTrend", () => {
       { datum: "2026-07-29", e1rm: 108 },
     ]);
     expect(urteil.verwertbar).toBe(false);
-    if (!urteil.verwertbar) expect(urteil.grund).toContain("3 von 4");
+    if (!urteil.verwertbar) expect(urteil.grund).toContain("3 of 4");
   });
 
   it("verweigert unter 21 Tagen Spanne, auch bei genug Punkten", () => {
@@ -98,7 +98,7 @@ describe("kraftTrend", () => {
       { datum: "2026-07-10", e1rm: 106 },
     ]);
     expect(urteil.verwertbar).toBe(false);
-    if (!urteil.verwertbar) expect(urteil.grund).toContain("noch 12 Tage");
+    if (!urteil.verwertbar) expect(urteil.grund).toContain("12 days to go");
   });
 
   it("erkennt Anstieg", () => {

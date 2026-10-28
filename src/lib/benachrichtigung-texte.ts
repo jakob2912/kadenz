@@ -28,7 +28,7 @@ export type MorgenLage =
 
 export type Plan = { art: "training"; einheit: Einheit } | { art: "pause"; naechste: Einheit };
 
-const BAND_WORT = { gut: "erholt", mittel: "erholt sich", schlecht: "unerholt" } as const;
+const BAND_WORT = { gut: "recovered", mittel: "recovering", schlecht: "not recovered" } as const;
 
 function einheitText(e: Einheit): string {
   return `${SESSIONS[e].focus.split(" · ")[0]} (${SESSIONS[e].title})`;
@@ -45,13 +45,13 @@ function einheitText(e: Einheit): string {
 export function morgenNachricht(lage: MorgenLage, plan: Plan): Nachricht {
   const heute =
     plan.art === "training"
-      ? `Heute ${einheitText(plan.einheit)}.`
-      : `Heute Rest Day, als Nächstes ${SESSIONS[plan.naechste].focus.split(" · ")[0]}.`;
+      ? `Today: ${einheitText(plan.einheit)}.`
+      : `Rest day today, next up ${SESSIONS[plan.naechste].focus.split(" · ")[0]}.`;
 
   if (!lage.verbunden && lage.neuVerbinden === false) {
     return {
-      title: "Google Health antwortet nicht",
-      body: `${heute} Die Nacht kommt nach, sobald Google wieder liefert — verbinden musst du nichts.`,
+      title: "Google Health isn't responding",
+      body: `${heute} Last night's data follows as soon as Google delivers again — no need to reconnect.`,
       url: "/",
       tag: "morgen",
     };
@@ -59,24 +59,24 @@ export function morgenNachricht(lage: MorgenLage, plan: Plan): Nachricht {
 
   if (!lage.verbunden) {
     return {
-      title: "Google Health neu verbinden",
+      title: "Reconnect Google Health",
       // Das Gewicht fehlt nicht mehr: es lässt sich auch ohne Google eintragen
       // und liegt dann in Kadenz' eigener Ablage.
-      body: `${heute} Neue Nächte (Schlaf, HRV) kommen erst nach dem Verbinden — ein Tipp auf die Startseite.`,
+      body: `${heute} New nights (sleep, HRV) only arrive after reconnecting — one tap on the home screen.`,
       url: "/",
       tag: "morgen",
     };
   }
 
   const teile: string[] = [heute];
-  if (!lage.gewogenHeute) teile.push("Morgengewicht noch eintragen.");
+  if (!lage.gewogenHeute) teile.push("Log your morning weight in Google Health.");
 
   const titel = lage.regeneration
-    ? `Regeneration ${lage.regeneration.score} · ${BAND_WORT[lage.regeneration.band]}`
-    : "Guten Morgen";
+    ? `Recovery ${lage.regeneration.score} · ${BAND_WORT[lage.regeneration.band]}`
+    : "Good morning";
 
   if (lage.regeneration?.band === "schlecht" && plan.art === "training") {
-    teile.push("Heute eher Gewichte halten als steigern.");
+    teile.push("Hold weights today rather than adding.");
   }
 
   return { title: titel, body: teile.join(" "), url: "/", tag: "morgen" };
@@ -105,10 +105,10 @@ export function abendNachricht(lage: AbendLage): Nachricht | null {
 
   if (offen) {
     return {
-      title: `Heute noch ${SESSIONS[offen].focus.split(" · ")[0]}`,
+      title: `Still to do today: ${SESSIONS[offen].focus.split(" · ")[0]}`,
       body: lage.kalorienvorschlagOffen
-        ? `${SESSIONS[offen].title} — noch nicht begonnen. Außerdem wartet ein Kalorienvorschlag auf deine Entscheidung.`
-        : `${SESSIONS[offen].title} — noch nicht begonnen.`,
+        ? `${SESSIONS[offen].title} — not started yet. A calorie suggestion is also waiting for your decision.`
+        : `${SESSIONS[offen].title} — not started yet.`,
       url: "/training",
       tag: "abend",
     };
@@ -116,8 +116,8 @@ export function abendNachricht(lage: AbendLage): Nachricht | null {
 
   if (lage.kalorienvorschlagOffen) {
     return {
-      title: "Kalorienvorschlag wartet",
-      body: "Kadenz schlägt ein neues Kalorienziel vor. Bis du Ja oder Nein sagst, gilt das alte.",
+      title: "Calorie suggestion waiting",
+      body: "Kadenz suggests a new calorie target. Until you say yes or no, the old one applies.",
       url: "/ernaehrung",
       tag: "abend",
     };

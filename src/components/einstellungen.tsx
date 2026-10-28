@@ -145,7 +145,7 @@ export function PushSchalter({
       }
 
       setStand({ art: "an", endpoint: abo.endpoint });
-      setMeldung({ ton: "gut", text: "Eingeschaltet. Tipp auf „Testnachricht“, um es zu prüfen." });
+      setMeldung({ ton: "gut", text: "Turned on. Tap “Test notification” to check it." });
       router.refresh();
     } catch (e) {
       setMeldung({ ton: "fehler", text: e instanceof Error ? e.message : String(e) });
@@ -179,7 +179,7 @@ export function PushSchalter({
       const r = await testNachricht();
       setMeldung(
         r.ok
-          ? { ton: "gut", text: `Unterwegs an ${r.zugestellt === 1 ? "ein Gerät" : `${r.zugestellt} Geräte`}.` }
+          ? { ton: "gut", text: `On its way to ${r.zugestellt === 1 ? "one device" : `${r.zugestellt} devices`}.` }
           : { ton: "fehler", text: r.fehler }
       );
     } catch (e) {
@@ -203,18 +203,18 @@ export function PushSchalter({
     <div className="mt-3">
       {stand.art === "nicht-installiert" && (
         <Hinweis>
-          Auf dem iPhone kommen Nachrichten nur in der installierten App. In Safari auf{" "}
-          <b className="font-semibold text-fg">Teilen → „Zum Home-Bildschirm“</b> (Teilen
-          liegt seit iOS 26 hinter •••), Kadenz von dort öffnen und hier einschalten.
+          On iPhone, notifications only arrive in the installed app. In Safari, tap{" "}
+          <b className="font-semibold text-fg">Share → “Add to Home Screen”</b> (Share
+          is behind ••• since iOS 26), open Kadenz from there and turn it on here.
         </Hinweis>
       )}
       {stand.art === "nicht-unterstuetzt" && (
-        <Hinweis>Dieser Browser kann keine Push-Nachrichten empfangen.</Hinweis>
+        <Hinweis>This browser can’t receive push notifications.</Hinweis>
       )}
       {stand.art === "abgelehnt" && (
         <Hinweis>
-          Nachrichten sind für Kadenz abgelehnt. Erlauben lässt es sich nur in den
-          Systemeinstellungen: Einstellungen → Mitteilungen → Kadenz.
+          Notifications are blocked for Kadenz. They can only be allowed in the
+          system settings: Settings → Notifications → Kadenz.
         </Hinweis>
       )}
 
@@ -222,15 +222,15 @@ export function PushSchalter({
         <div className="flex gap-2.5">
           {stand.art === "aus" ? (
             <Knopf haupt onClick={einschalten} disabled={arbeitet}>
-              {arbeitet ? "Wird eingeschaltet…" : "Auf diesem Gerät einschalten"}
+              {arbeitet ? "Turning on…" : "Turn on for this device"}
             </Knopf>
           ) : (
             <>
               <Knopf onClick={testen} disabled={arbeitet}>
-                Testnachricht
+                Test notification
               </Knopf>
               <Knopf onClick={ausschalten} disabled={arbeitet}>
-                Hier ausschalten
+                Turn off here
               </Knopf>
             </>
           )}
@@ -250,27 +250,27 @@ export function PushSchalter({
         <Schalter
           an={wahl.satzpause}
           onChange={(an) => umschalten("satzpause", an)}
-          titel="Satzpause vorbei"
-          text="Auch bei gesperrtem Bildschirm — das Handy kann in der Pause in die Tasche."
+          titel="Rest over"
+          text="Even with the screen locked — your phone can go in your pocket during rest."
         />
         <Schalter
           an={wahl.morgen}
           onChange={(an) => umschalten("morgen", an)}
-          titel="Morgen-Briefing"
-          text="Zwischen 6 und 7 Uhr (Sommerzeit 7–8): Regeneration, heutige Einheit, ob das Gewicht fehlt, und ob Google neu verbunden werden muss."
+          titel="Morning briefing"
+          text="Between 6 and 7 am (summer time 7–8): recovery, today's session, whether your weight is missing, and whether Google needs reconnecting."
         />
         <Schalter
           an={wahl.abend}
           onChange={(an) => umschalten("abend", an)}
-          titel="Abend-Erinnerung"
-          text="Zwischen 17 und 18 Uhr (Sommerzeit 18–19), nur wenn eine geplante Einheit noch nicht begonnen ist oder ein Kalorienvorschlag wartet."
+          titel="Evening reminder"
+          text="Between 5 and 6 pm (summer time 6–7), only if a planned session hasn't started or a calorie suggestion is waiting."
         />
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
         {angemeldet.length === 0
-          ? "Noch kein Gerät angemeldet."
-          : `Angemeldet: ${angemeldet.join(", ")}. Die Schalter gelten für alle Geräte.`}
+          ? "No device registered yet."
+          : `Registered: ${angemeldet.join(", ")}. The switches apply to all devices.`}
       </p>
     </div>
   );
@@ -299,14 +299,14 @@ export function GeraeteSchalter() {
       <Schalter
         an={ton}
         onChange={(an) => setzen("ton", an)}
-        titel="Ton am Pausenende"
-        text="Zwei kurze Töne, wenn Kadenz offen ist. Bei gesperrtem Bildschirm übernimmt die Nachricht."
+        titel="Sound when rest ends"
+        text="Two short beeps while Kadenz is open. With the screen locked, the notification takes over."
       />
       <Schalter
         an={wach}
         onChange={(an) => setzen("wachhalten", an)}
-        titel="Bildschirm im Training anlassen"
-        text="Der Bildschirm geht während einer laufenden Einheit nicht aus. Kostet Akku."
+        titel="Keep screen on during workouts"
+        text="The screen stays on during a running session. Costs battery."
       />
     </div>
   );

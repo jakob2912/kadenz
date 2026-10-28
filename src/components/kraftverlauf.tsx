@@ -32,10 +32,10 @@ export async function Kraftverlauf() {
     console.error("Kraftverlauf nicht lesbar:", e);
     return (
       <Card className="mt-3.5">
-        <Eyebrow>Kraftverlauf</Eyebrow>
+        <Eyebrow>Strength trend</Eyebrow>
         <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-          Die Trainingshistorie ist gerade nicht lesbar. Das Gewicht oben stammt aus Google
-          Health und ist davon nicht betroffen.
+          The training history can’t be read right now. The body weight above comes from
+          Google Health and isn’t affected.
         </p>
       </Card>
     );
@@ -58,11 +58,10 @@ export async function Kraftverlauf() {
   if (raenge.length === 0) {
     return (
       <Card className="mt-3.5">
-        <Eyebrow>Kraftverlauf</Eyebrow>
+        <Eyebrow>Strength trend</Eyebrow>
         <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-          Noch keine geloggten Sätze in den letzten {FENSTER_TAGE} Tagen. Sobald du im
-          Training Sätze abhakst, steht hier je Übung dein geschätztes Maximum und ob es
-          steigt.
+          No logged sets in the last {FENSTER_TAGE} days. Once you check off sets in a
+          workout, this shows your estimated max per exercise and whether it is rising.
         </p>
       </Card>
     );
@@ -79,16 +78,16 @@ export async function Kraftverlauf() {
   return (
     <Card className="mt-3.5">
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Kraftverlauf</Eyebrow>
+        <Eyebrow>Strength trend</Eyebrow>
         <span className="text-[11px] text-fg-faint">
-          {raenge.length} Übungen · letzte {FENSTER_TAGE} Tage
+          {raenge.length} exercises · last {FENSTER_TAGE} days
         </span>
       </div>
 
       <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-        Verglichen wird die Änderung deines geschätzten Maximums in Prozent, nicht in
-        Kilogramm — 2,5 kg sind auf dem Preacher Curl ein Achtel mehr und auf dem Leg Curl
-        ein Fünfzigstel. Was hängt, steht oben.
+        Compared by the percentage change of your estimated max, not by kilograms —
+        2.5 kg is an eighth more on the preacher curl and a fiftieth on the leg curl.
+        Whatever is stuck comes first.
       </p>
 
       <ul className="mt-4 flex flex-col gap-3.5">
@@ -126,7 +125,7 @@ function Zeile({
               {de(Math.abs(rang.urteil.prozentPro4Wochen), 1)} %
             </span>
           ) : (
-            <span className="shrink-0 text-[11px] text-fg-faint">noch kein Urteil</span>
+            <span className="shrink-0 text-[11px] text-fg-faint">no verdict yet</span>
           )}
         </div>
 
@@ -144,8 +143,8 @@ function Zeile({
         <p className="mt-1.5 text-[11px] leading-relaxed text-fg-faint">
           {best && (
             <>
-              Bestleistung ({FENSTER_TAGE} Tage) {de(best.kg, 1)} kg × {best.reps}
-              {bestesMaximum !== null && <> · geschätztes Maximum {de(bestesMaximum, 1)} kg</>}
+              Best ({FENSTER_TAGE} days) {de(best.kg, 1)} kg × {best.reps}
+              {bestesMaximum !== null && <> · est. max {de(bestesMaximum, 1)} kg</>}
               {" · "}
             </>
           )}

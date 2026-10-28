@@ -14,7 +14,7 @@ Trainingsdaten und Vault-Notizen zusammenbringen.
 
 | Werkzeug | Liefert |
 |---|---|
-| `regeneration_heute` | Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV gegen die persönliche Baseline; dazu ob Krafttraining und Cardio vertretbar sind |
+| `regeneration_heute` | Score aus Schlaf, Tiefschlaf, Ruhepuls und HRV gegen die persönliche Baseline; dazu ob schweres Krafttraining vertretbar ist |
 | `briefing_heute` | Wie die Nacht war, die Freigabe für heute und konkrete Verbesserungsvorschläge. Jeder Vorschlag hängt an einem gemessenen Wert — liegt keiner daneben, ist die Liste leer. Derselbe Text steht auf der Startseite |
 | `gewichtstrend` | Gewichtsreihe, 7-Tage-Schnitt, Trendurteil — inklusive der Aussage, wann der Trend **nicht** verwertbar ist |
 

@@ -14,7 +14,7 @@ import {
 type Ergebnis = { ok: true } | { ok: false; fehler: string };
 
 function alsFehler(e: unknown): { ok: false; fehler: string } {
-  return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+  return { ok: false, fehler: e instanceof Error ? e.message : "Unknown error" };
 }
 
 /** Der öffentliche Schlüssel, mit dem der Browser sein Abo anlegt. */
@@ -48,7 +48,7 @@ export async function aboSpeichern(abo: {
     if (url.protocol !== "https:") throw new Error();
     host = url.hostname;
   } catch {
-    return { ok: false, fehler: "Ungültiger Endpoint." };
+    return { ok: false, fehler: "Invalid endpoint." };
   }
   // Die Schlüssel des Geräts: p256dh ist ein unkomprimierter P-256-Punkt
   // (65 Byte, Base64url 87 Zeichen), auth 16 Byte (22 Zeichen). Ein kaputtes
@@ -62,7 +62,7 @@ export async function aboSpeichern(abo: {
     abo.keys.auth.length < 20 ||
     abo.keys.auth.length > 30
   ) {
-    return { ok: false, fehler: "Ungültige Schlüssel im Abo." };
+    return { ok: false, fehler: "Invalid keys in the subscription." };
   }
 
   const bekannt = [
@@ -73,7 +73,7 @@ export async function aboSpeichern(abo: {
     "notify.windows.com",
   ];
   if (!bekannt.some((d) => host === d || host.endsWith(`.${d}`))) {
-    return { ok: false, fehler: `Unbekannter Push-Dienst: ${host}` };
+    return { ok: false, fehler: `Unknown push service: ${host}` };
   }
 
   try {
@@ -104,14 +104,14 @@ export async function testNachricht(): Promise<
   try {
     const r = await anAlleSenden({
       title: "Kadenz",
-      body: "Testnachricht — so sehen Benachrichtigungen aus.",
+      body: "Test notification — this is what notifications look like.",
       url: "/einstellungen",
       tag: "test",
     });
     if (r.zugestellt === 0) {
       return {
         ok: false,
-        fehler: r.fehler[0] ?? "Kein Gerät angemeldet — erst Benachrichtigungen einschalten.",
+        fehler: r.fehler[0] ?? "No device registered — turn on notifications first.",
       };
     }
     return { ok: true, zugestellt: r.zugestellt };
@@ -219,8 +219,8 @@ export async function satzpauseAnkuendigen(
 
       await anAlleSenden(
         {
-          title: "Satzpause vorbei",
-          body: "Nächster Satz.",
+          title: "Rest over",
+          body: "Next set.",
           url: "/training",
           tag: "satzpause",
         },

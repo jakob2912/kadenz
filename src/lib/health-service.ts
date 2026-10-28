@@ -116,9 +116,9 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
   if (fehlend.length > 0) {
     return {
       verbunden: false,
-      grund: `Google Health ist nicht eingerichtet — es fehlt: ${fehlend.join(
+      grund: `Google Health isn't set up — missing: ${fehlend.join(
         ", "
-      )}. In den Vercel-Projekteinstellungen bzw. in .env.local nachtragen.`,
+      )}. Add it in the Vercel project settings or .env.local.`,
     };
   }
 
@@ -129,7 +129,7 @@ export async function loadDashboard(days = 30): Promise<Dashboard> {
     const jar = await cookies();
     const refresh = jar.get("kadenz_google_refresh")?.value;
     return alsLage(async () => {
-      if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
+      if (!refresh) throw new NichtVerbundenFehler("Not connected to Google Health yet.");
       return auswerten(refresh, days);
     });
   }
@@ -185,9 +185,9 @@ async function alsLage(ermitteln: () => Promise<Dashboard>): Promise<Dashboard> 
  * Der teure Teil, serverseitig zwischengespeichert.
  *
  * Fünf Minuten, wenn es geklappt hat: Schlaf und Ruhepuls stehen nach der
- * Nacht fest, und das Morgengewicht wird einmal am Tag eingetragen. Wer es
- * einträgt, soll es trotzdem sofort sehen — dafür ruft gewichtEintragen()
- * updateTag("gesundheit") auf.
+ * Nacht fest, und das Morgengewicht trägt Jakob einmal am Tag in Google
+ * Health ein. Seit dem 28.10.2026 gibt es in Kadenz keine eigene
+ * Gewichtseingabe mehr.
  *
  * Dreißig Sekunden, wenn nicht. Ein Fehlschlag wird ebenfalls abgelegt,
  * aber nur kurz (bedingte cacheLife, siehe Next-Doku "Conditional cache
@@ -207,14 +207,14 @@ async function gesundheitsdaten(days: number): Promise<Dashboard> {
       // Eine nicht erreichbare Datenbank ist etwas anderes als ein fehlender
       // Login. Ohne diese Unterscheidung stand hier bisher ein 500.
       throw new NichtVerbundenFehler(
-        `Die Datenbank ist gerade nicht erreichbar: ${
+        `The database can't be reached right now: ${
           e instanceof Error ? e.message : String(e)
         }`,
         false
       );
     }
 
-    if (!refresh) throw new NichtVerbundenFehler("Noch nicht mit Google Health verbunden.");
+    if (!refresh) throw new NichtVerbundenFehler("Not connected to Google Health yet.");
     return auswerten(refresh, days);
   }).then((l) => (l.verbunden ? l : ausAblage(days, l.grund, l.neuVerbinden ?? true)));
 
@@ -238,7 +238,7 @@ async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
   try {
     accessToken = (await refreshAccessToken(refresh)).access_token;
   } catch (e) {
-    const text = e instanceof Error ? e.message : "Token konnte nicht erneuert werden.";
+    const text = e instanceof Error ? e.message : "Token could not be refreshed.";
 
     /* invalid_grant heißt: Google nimmt diesen Refresh-Token nicht mehr an.
        Bei Kadenz ist das kein Ausnahmefall, sondern der Wochenrhythmus — das
@@ -249,9 +249,9 @@ async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
        aber er sagt nicht, was zu tun ist. */
     if (googleZugangAbgelaufen(e)) {
       throw new NichtVerbundenFehler(
-        "Die Verbindung zu Google Health ist abgelaufen. Einmal neu verbinden, dann " +
-          "laufen Schlaf, Ruhepuls, HRV und Gewicht wieder. Das passiert etwa jede " +
-          "Woche, solange das Google-Projekt im Testmodus steht."
+        "The connection to Google Health has expired. Reconnect once and " +
+          "sleep, resting HR, HRV and weight flow again. This happens about every " +
+          "week while the Google project is in test mode."
       );
     }
 
@@ -283,7 +283,7 @@ async function abrufen(refresh: string, days: number): Promise<Rohdaten> {
        Alles andere (5xx, Netz) geht von selbst vorbei. */
     const text = e instanceof Error ? e.message : String(e);
     throw new NichtVerbundenFehler(
-      `Google Health hat die Abfrage abgelehnt: ${text}`,
+      `Google Health rejected the request: ${text}`,
       /\b(401|403)\b|PERMISSION_DENIED|UNAUTHENTICATED/.test(text)
     );
   }

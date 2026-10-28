@@ -39,7 +39,7 @@ export async function GET() {
 
   const gezeigt = new Set<string>();
   const zeilen = [
-    "Datum;Einheit;Übung;Satz;kg;Wdh;Uhrzeit;Sauber;Notiz zur Einheit",
+    "Date;Session;Exercise;Set;kg;Reps;Time;Clean;Session note",
     ...saetze.map((s) => {
       // Die Notiz je Einheit nur einmal, beim ersten Satz — sonst stünde sie
       // bei jedem der sechzehn Sätze.
@@ -54,7 +54,7 @@ export async function GET() {
         zahl(s.kg),
         String(s.reps),
         uhr(s.loggedAt),
-        s.sauber === null ? "" : s.sauber ? "ja" : "nein",
+        s.sauber === null ? "" : s.sauber ? "yes" : "no",
         notiz,
       ].join(";");
     }),

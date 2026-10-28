@@ -19,8 +19,8 @@ export class KonfigurationsFehler extends Error {
   constructor(variablen: string[]) {
     super(
       variablen.length === 1
-        ? `Die Umgebungsvariable ${variablen[0]} ist nicht gesetzt.`
-        : `Diese Umgebungsvariablen sind nicht gesetzt: ${variablen.join(", ")}.`
+        ? `The environment variable ${variablen[0]} isn't set.`
+        : `These environment variables aren't set: ${variablen.join(", ")}.`
     );
     this.name = "KonfigurationsFehler";
     this.variablen = variablen;

@@ -78,14 +78,14 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
   return (
     <section className={`rounded-lg border border-accent/30 bg-accent/5 p-5 ${className}`}>
       <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
-        Als App installieren
+        Install as app
       </p>
       <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-        In Safari auf <b className="font-semibold text-fg">Teilen</b> tippen (seit iOS 26
-        hinter <b className="font-semibold text-fg">•••</b>), dann{" "}
-        <b className="font-semibold text-fg">„Zum Home-Bildschirm“</b>. Danach startet Kadenz
-        ohne Browser-Leiste wie eine App — und nur so kann es dir Nachrichten schicken
-        (Satzpause vorbei, Morgen-Briefing).
+        In Safari, tap <b className="font-semibold text-fg">Share</b> (behind{" "}
+        <b className="font-semibold text-fg">•••</b> since iOS 26), then{" "}
+        <b className="font-semibold text-fg">“Add to Home Screen”</b>. Kadenz then opens
+        without the browser bar like an app — and only then can it send you notifications
+        (rest over, morning briefing).
       </p>
       <button
         type="button"
@@ -97,7 +97,7 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
         }}
         className="mt-3 min-h-[44px] text-[13px] font-semibold text-fg-faint active:text-fg"
       >
-        Nicht mehr anzeigen
+        Don’t show again
       </button>
     </section>
   );

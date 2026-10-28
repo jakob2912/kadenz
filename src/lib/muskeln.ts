@@ -36,6 +36,21 @@ export const MUSKELGRUPPEN = [
 
 export type Muskelgruppe = (typeof MUSKELGRUPPEN)[number];
 
+/** Anzeigename je Gruppe — die App ist englisch, die Schlüssel bleiben deutsch. */
+export const MUSKEL_NAMEN: Record<Muskelgruppe, string> = {
+  Brust: "Chest",
+  Rücken: "Back",
+  Schulter: "Shoulders",
+  Bizeps: "Biceps",
+  Trizeps: "Triceps",
+  Quads: "Quads",
+  Hamstrings: "Hamstrings",
+  Gesäß: "Glutes",
+  Waden: "Calves",
+  Bauch: "Abs",
+  Adduktoren: "Adductors",
+};
+
 /*
  * Die Namen werden vorher vereinheitlicht (klein, Bindestriche und
  * Unterstriche zu Leerzeichen — "Leg-Curl" wie "Leg Curl"). Die Muster

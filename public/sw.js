@@ -16,7 +16,7 @@
  *      nach (experimental.useOffline in next.config.ts).
  */
 
-const OFFLINE_HTML = `<!doctype html><html lang="de"><head><meta charset="utf-8">
+const OFFLINE_HTML = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Kadenz · offline</title>
 <style>
@@ -27,10 +27,10 @@ const OFFLINE_HTML = `<!doctype html><html lang="de"><head><meta charset="utf-8"
   button{margin-top:24px;width:100%;min-height:52px;border:0;border-radius:16px;background:#a9c9ff;color:#0a1220;font-weight:600;font-size:16px}
 </style></head><body><main>
 <small>Kadenz</small>
-<h1 style="font-size:27px;letter-spacing:-.025em;margin:8px 0 0">Kein Netz</h1>
-<p>Die Seite braucht eine Verbindung — Startgewichte und Historie kommen frisch aus der Datenbank.
-War die Trainingsseite schon offen, bevor das Netz weg war: dort weiterloggen, die Sätze gehen raus, sobald wieder Empfang da ist.</p>
-<button onclick="location.reload()">Nochmal versuchen</button>
+<h1 style="font-size:27px;letter-spacing:-.025em;margin:8px 0 0">No connection</h1>
+<p>This page needs a connection — starting weights and history come fresh from the database.
+If the workout page was already open before the connection dropped: keep logging there, the sets go out once you have signal again.</p>
+<button onclick="location.reload()">Try again</button>
 </main></body></html>`;
 
 self.addEventListener("install", () => {
