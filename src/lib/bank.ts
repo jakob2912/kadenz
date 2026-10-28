@@ -139,7 +139,7 @@ export async function trainingsmaxSetzen(
   if (!Number.isFinite(tmKg) || tmKg < 20 || tmKg > 300) {
     return {
       ok: false,
-      fehler: `${tmKg} kg ist als Trainingsmax fürs Bankdrücken nicht plausibel (20–300 kg).`,
+      fehler: `${tmKg} kg isn't a plausible bench training max (20–300 kg).`,
     };
   }
 
@@ -168,7 +168,7 @@ export async function trainingsmaxSetzen(
     return { ok: true, tm: zuTrainingsmax(zeile) };
   } catch (e) {
     console.error("Trainingsmax nicht speicherbar:", e);
-    return { ok: false, fehler: "Der Trainingsmax konnte nicht gespeichert werden." };
+    return { ok: false, fehler: "The training max could not be saved." };
   }
 }
 
@@ -291,10 +291,10 @@ async function aufZyklusBringen(
         zielZyklus
       ),
       begruendung:
-        `Zwischen Zyklus ${aktuell.zyklus} und ${zielZyklus} liegen ` +
-        `${zielZyklus - aktuell.zyklus} Zyklen ohne Auswertung. Der Trainingsmax bleibt ` +
-        `bei ${aktuell.tmKg.toFixed(1)} kg — nach so langer Pause ist er ` +
-        `eher zu hoch als zu niedrig. Prüf ihn im ersten Satz und korrigier ihn, wenn er nicht passt.`,
+        `Between cycle ${aktuell.zyklus} and ${zielZyklus} there are ` +
+        `${zielZyklus - aktuell.zyklus} cycles without evaluation. The training max stays ` +
+        `at ${aktuell.tmKg.toFixed(1)} kg — after such a long break it's more likely ` +
+        `too high than too low. Check it on the first set and correct it if it doesn't fit.`,
     });
   }
 
@@ -395,9 +395,9 @@ export async function bankstandFuer(
       vorgabe: {
         saetze: [],
         hinweis:
-          "Trainingsmax fehlt. Langhantel-Bankdrücken hat hier keine Historie, aus der " +
-          "Kadenz ihn schätzen könnte — trag ihn einmalig ein. Er liegt bei rund 90 % von " +
-          "dem, was du sicher einmal schaffst.",
+          "Training max missing. Barbell bench press has no history here for " +
+          "Kadenz to estimate it from — enter it once. It's about 90 % of " +
+          "what you can safely do for one rep.",
       },
     };
   }
@@ -467,12 +467,12 @@ function vorgabeFuer(
     return {
       saetze: testPlan(tmKg, schaetzung),
       hinweis:
-        `Testtag: vier Aufwärmsätze, dann bis zu ${TEST_VERSUCHE} Singles. Den nächsten ` +
-        `Versuch nur, wenn der vorige glatt ging — beim ersten Kampf-Rep ist Schluss. Hüfte ` +
-        `bleibt auf der Bank, sonst zählt der Versuch nicht. 3–5 Minuten Pause. Nicht ` +
-        `geschaffte Versuche einfach nicht abhaken.` +
+        `Test day: four warm-up sets, then up to ${TEST_VERSUCHE} singles. Only take the next ` +
+        `attempt if the previous one moved cleanly — stop at the first grinder. Hips ` +
+        `stay on the bench, otherwise the attempt doesn't count. 3–5 minutes rest. Simply ` +
+        `don't check attempts you missed.` +
         (schaetzung === null
-          ? " Keine Schätzung aus den letzten Wochen — der erste Versuch liegt beim Trainingsmax."
+          ? " No estimate from recent weeks — the first attempt is at the training max."
           : ""),
     };
   }
@@ -481,8 +481,8 @@ function vorgabeFuer(
     return {
       saetze: bankZusatzPlan(tmKg, false),
       hinweis:
-        `Leichter Tag vor dem Testtag: nur drei Fünfer bei ` +
-        `${String(ZUSATZ_PROZENT)} %, kein Single — frisch in den Test.`,
+        `Light day before the test: only three sets of five at ` +
+        `${String(ZUSATZ_PROZENT)} %, no single — go into the test fresh.`,
     };
   }
 
@@ -490,18 +490,18 @@ function vorgabeFuer(
     return {
       saetze: bankZusatzPlan(tmKg),
       hinweis:
-        `Leichter Tag: drei Fünfer bei ${String(ZUSATZ_PROZENT)} %, danach ` +
-        `ein schwerer Single bei ${SINGLE_PROZENT} % vom Trainingsmax. Eine Wiederholung, ` +
-        `sauber und schnell — kein Grinder, keine zweite. Zählt nicht für die ` +
-        `Trainingsmax-Progression, dafür ist der AMRAP-Satz am TM-Tag da.`,
+        `Light day: three sets of five at ${String(ZUSATZ_PROZENT)} %, then ` +
+        `one heavy single at ${SINGLE_PROZENT} % of the training max. One rep, ` +
+        `clean and fast — no grinder, no second one. Doesn't count toward the ` +
+        `training max progression; that's what the AMRAP set on TM day is for.`,
     };
   }
 
   return {
     saetze: [],
     hinweis:
-      "Heute keine Bankeinheit. In der Deload-Woche fällt die Zusatz-Einheit aus — " +
-      "die Woche ist zum Zurücknehmen da.",
+      "No bench today. The extra session is skipped in deload week — " +
+      "the week is for backing off.",
   };
 }
 

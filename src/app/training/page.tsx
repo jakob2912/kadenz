@@ -329,7 +329,7 @@ function BankHinweis({ bank, wann = "Today" }: { bank: Bankstand; wann?: string 
           next attempt if the previous one moved cleanly. Hips stay on the bench.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-          The test replaces the deload wave and doesn't move the training max (
+          The test replaces the deload wave and doesn’t move the training max (
           {de(bank.tm.tmKg, 1)} kg, implying about {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg).
           If your best single is clearly lower, reset the training max.
         </p>
@@ -350,8 +350,8 @@ function BankHinweis({ bank, wann = "Today" }: { bank: Bankstand; wann?: string 
                 <>, no single: the next bench day is a test.</>
               ) : (
                 <>
-                  , then one <b className="font-semibold text-fg">heavy single</b>. It doesn't
-                  affect the training max and isn't evaluated.
+                  , then one <b className="font-semibold text-fg">heavy single</b>. It doesn’t
+                  affect the training max and isn’t evaluated.
                 </>
               )}
             </>

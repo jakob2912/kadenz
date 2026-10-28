@@ -18,7 +18,7 @@ class Hinweis extends Error {}
 function meldung(e: unknown): string {
   if (e instanceof Hinweis) return e.message;
   console.error(e);
-  return "Datenbank gerade nicht erreichbar.";
+  return "Database not reachable right now.";
 }
 
 /** Länger nimmt diese Aktion keine Notiz an; der MCP-Server prüft dieselbe Grenze. */
@@ -42,14 +42,14 @@ export async function uebungNotizSetzen(
   notiz: string
 ): Promise<{ ok: true; notiz: string | null } | { ok: false; fehler: string }> {
   try {
-    if (einheit !== "push" && einheit !== "pull") throw new Hinweis("Unbekannte Einheit.");
+    if (einheit !== "push" && einheit !== "pull") throw new Hinweis("Unknown session.");
     if (typeof name !== "string" || name.length === 0 || name.length > 100) {
-      throw new Hinweis("Unbekannte Übung.");
+      throw new Hinweis("Unknown exercise.");
     }
-    if (typeof notiz !== "string") throw new Hinweis("Notiz fehlt.");
+    if (typeof notiz !== "string") throw new Hinweis("Note is missing.");
     // Ablehnen statt still kürzen: eine abgeschnittene Notiz sähe aus, als
     // wäre sie so gemeint.
-    if (notiz.trim().length > NOTIZ_MAX) throw new Hinweis(`Höchstens ${NOTIZ_MAX} Zeichen.`);
+    if (notiz.trim().length > NOTIZ_MAX) throw new Hinweis(`At most ${NOTIZ_MAX} characters.`);
 
     const text = notiz.trim() || null;
     const r = await prisma.uebung.updateMany({
@@ -57,7 +57,7 @@ export async function uebungNotizSetzen(
       data: { notiz: text },
     });
     if (r.count === 0) {
-      throw new Hinweis("Die Übung steht nicht im Katalog — die Notiz hätte keinen Platz.");
+      throw new Hinweis("The exercise isn't in the catalog — the note would have nowhere to go.");
     }
     // Sonst zeigt der Router-Cache beim Zurück-Navigieren kurz die alte Notiz.
     revalidatePath("/training");
@@ -87,22 +87,22 @@ export async function uebungTauschenAktion(
   dauerhaft: boolean
 ): Promise<{ ok: true } | { ok: false; fehler: string }> {
   try {
-    if (einheit !== "push" && einheit !== "pull") throw new Hinweis("Unbekannte Einheit.");
-    if (typeof dauerhaft !== "boolean") throw new Hinweis("Unklar, ob nur heute oder dauerhaft.");
+    if (einheit !== "push" && einheit !== "pull") throw new Hinweis("Unknown session.");
+    if (typeof dauerhaft !== "boolean") throw new Hinweis("Unclear whether today only or permanently.");
     const name = typeof neu === "string" ? neu.trim().replace(/\s+/g, " ") : "";
     if (name.length === 0 || name.length > 100) {
-      throw new Hinweis("Die neue Übung braucht einen Namen.");
+      throw new Hinweis("The new exercise needs a name.");
     }
-    if (typeof planName !== "string") throw new Hinweis("Unbekannte Übung.");
+    if (typeof planName !== "string") throw new Hinweis("Unknown exercise.");
 
     const [katalog, tausche] = await Promise.all([
       prisma.uebung.findMany({ select: { einheit: true, name: true, programm: true } }),
       heutigeTausche(einheit),
     ]);
     const eintrag = katalog.find((k) => k.einheit === einheit && k.name === planName);
-    if (!eintrag) throw new Hinweis(`"${planName}" steht nicht im Plan.`);
+    if (!eintrag) throw new Hinweis(`"${planName}" isn't in the plan.`);
     if (eintrag.programm) {
-      throw new Hinweis("Bankdrücken läuft nach Programm und lässt sich hier nicht tauschen.");
+      throw new Hinweis("Bench press follows the program and can't be swapped here.");
     }
 
     /* Zwei gleiche Namen in einer Einheit überschreiben sich die Sätze — die
@@ -120,7 +120,7 @@ export async function uebungTauschenAktion(
       ([alt, ersatz]) => alt !== planName && ersatz.toLowerCase() === klein
     );
     if (!zurueck && (belegt || alsErsatz)) {
-      throw new Hinweis(`"${name}" steht heute schon im Plan. Nimm einen anderen Namen.`);
+      throw new Hinweis(`"${name}" is already in today's plan. Pick another name.`);
     }
 
     /* Was heute schon unter dem angezeigten Namen geloggt ist, hätte nach dem
@@ -134,7 +134,7 @@ export async function uebungTauschenAktion(
       },
     });
     if (schonGeloggt > 0) {
-      throw new Hinweis(`Für ${angezeigt} sind heute schon Sätze gespeichert — Tauschen geht nicht mehr.`);
+      throw new Hinweis(`Sets for ${angezeigt} are already saved today — swapping is no longer possible.`);
     }
 
     if (dauerhaft) {

@@ -53,7 +53,7 @@ async function Inhalt({ params }: { params: Promise<{ uebung: string }> }) {
         <h1 className="mt-3 text-[27px] font-bold tracking-[-0.025em]">{uebung}</h1>
         <Card className="mt-5">
           <p className="text-sm leading-relaxed text-fg-dim">
-            The training history can't be read right now. Try again in a moment.
+            The training history can’t be read right now. Try again in a moment.
           </p>
         </Card>
       </>
@@ -114,7 +114,7 @@ async function Inhalt({ params }: { params: Promise<{ uebung: string }> }) {
           einzeln="Only one training day with usable sets so far. A curve appears from the second one."
         />
         <p className="mt-3.5 text-[11px] leading-relaxed text-fg-faint">
-          Estimated with Epley from the best set per training day. On a machine this isn't
+          Estimated with Epley from the best set per training day. On a machine this isn’t
           a true one-rep max but a load index — comparable with itself over time, not
           with a barbell.
         </p>

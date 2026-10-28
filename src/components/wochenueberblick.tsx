@@ -126,12 +126,12 @@ export async function Wochenueberblick() {
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
         Secondary muscles count half — one set of bench press is one set of chest and half a
-        set each of triceps and shoulders. “Now” is the current week, which isn't over yet;
+        set each of triceps and shoulders. “Now” is the current week, which isn’t over yet;
         last week stands next to it for comparison.
         {ohneZuordnung > 0 && (
           <>
             {" "}
-            {ohneZuordnung === 1 ? "One set" : `${ohneZuordnung} sets`} couldn't be assigned to a
+            {ohneZuordnung === 1 ? "One set" : `${ohneZuordnung} sets`} couldn’t be assigned to a
             group and are missing above.
           </>
         )}

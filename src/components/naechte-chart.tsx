@@ -29,7 +29,7 @@ export function NaechteChart({ naechte }: { naechte: DailyReadiness[] }) {
   return (
     <Card className="mt-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Eyebrow>Nächte</Eyebrow>
+        <Eyebrow>Nights</Eyebrow>
         <div className="inline-flex rounded-lg border border-hair bg-surface-2 p-1" role="group" aria-label="Metric">
           {(Object.keys(MESSGROESSEN) as Messgroesse[]).map((k) => (
             <button

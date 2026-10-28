@@ -271,7 +271,7 @@ server.registerTool(
   {
     title: "Gewichtstrend",
     description:
-      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Aufbau 1 → Mini-Cut → Aufbau 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
+      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk 1 → Mini-Cut → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
     inputSchema: { tage: z.number().int().min(7).max(120).optional() },
   },
   async ({ tage }) => {

@@ -170,8 +170,8 @@ async function Inhalt() {
           )}
 
           <p className="px-1 text-[11px] leading-relaxed text-fg-faint">
-            Eating window 05:20–18:00. The macros above are daily totals from the plan; it isn't
-            broken down per meal, and Kadenz doesn't recalculate that — estimated numbers per
+            Eating window 05:20–18:00. The macros above are daily totals from the plan; it isn’t
+            broken down per meal, and Kadenz doesn’t recalculate that — estimated numbers per
             meal would be made up.
           </p>
         </div>
@@ -195,7 +195,7 @@ function MakroKarte({
 
   return (
     <Card>
-      <Eyebrow>What you're eating now</Eyebrow>
+      <Eyebrow>What you’re eating now</Eyebrow>
       <div className="mt-3 flex flex-col gap-2.5">
         <Metric label="Calories" value={`${ziel.kcal} kcal`} />
         <Metric label="Carbs" value={`${ziel.kohlenhydrateG} g`} />
@@ -214,8 +214,8 @@ function MakroKarte({
         // Die Zahlen stehen so im Plan. Ohne diesen Satz sieht die Differenz
         // aus wie ein Rechenfehler der App.
         <p className="mt-1.5 text-[11px] leading-relaxed text-fg-faint">
-          Calculated from the macros it's {ausMakros} kcal. The difference of{" "}
-          {Math.abs(abweichung)} kcal is in Fitnessbell's plan as written — Kadenz doesn't round
+          Calculated from the macros it’s {ausMakros} kcal. The difference of{" "}
+          {Math.abs(abweichung)} kcal is in Fitnessbell’s plan as written — Kadenz doesn’t round
           anything away.
         </p>
       )}
@@ -267,7 +267,7 @@ function SkalierungKarte({ skalierung }: { skalierung: NonNullable<Ernaehrungspl
     <Card>
       <Eyebrow>Amounts for the target</Eyebrow>
       <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-        Your target is {skalierung.zielKhG} g of carbs, Fitnessbell's base plan
+        Your target is {skalierung.zielKhG} g of carbs, Fitnessbell’s base plan
         {skalierung.basisKhG} g. The carb sources — rice,
         oats, rice pudding, maltodextrin — therefore run at{" "}
         {Math.round(skalierung.faktor * 100)} % of their plan amount. Protein and fat stay as
@@ -275,7 +275,7 @@ function SkalierungKarte({ skalierung }: { skalierung: NonNullable<Ernaehrungspl
       </p>
       <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
         Scaled proportionally, not per ingredient from nutrition facts: Kadenz has no
-        nutrition table and doesn't make one up. Counted items like the banana don't scale.
+        nutrition table and doesn’t make one up. Counted items like the banana don’t scale.
         Rounded to 5 g.
       </p>
       {skalierung.hinweis && (

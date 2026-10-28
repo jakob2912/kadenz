@@ -31,7 +31,7 @@ export function fehlerSeite(opts: {
     : "";
 
   return new Response(
-    `<!doctype html><meta charset="utf-8">
+    `<!doctype html><html lang="en"><meta charset="utf-8">
      <meta name="viewport" content="width=device-width,initial-scale=1">
      <title>${escapeHtml(titel)}</title>
      <body style="background:#090b0d;color:#e9eef2;font:16px/1.6 -apple-system,system-ui,sans-serif;padding:2.5rem;max-width:38rem">

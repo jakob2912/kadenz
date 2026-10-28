@@ -34,8 +34,8 @@ export async function Kraftverlauf() {
       <Card className="mt-3.5">
         <Eyebrow>Strength trend</Eyebrow>
         <p className="mt-2 text-sm leading-relaxed text-fg-dim">
-          The training history can't be read right now. The body weight above comes from
-          Google Health and isn't affected.
+          The training history can’t be read right now. The body weight above comes from
+          Google Health and isn’t affected.
         </p>
       </Card>
     );

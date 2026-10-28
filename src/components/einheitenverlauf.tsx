@@ -97,7 +97,7 @@ export async function Einheitenverlauf() {
 
         <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
           The streak counts weeks with at least {EINHEITEN_PRO_WOCHE} sessions — one missed
-          day shouldn't end it. The current week counts once it is complete.
+          day shouldn’t end it. The current week counts once it is complete.
         </p>
       </Card>
 

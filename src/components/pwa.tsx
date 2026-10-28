@@ -97,7 +97,7 @@ export function InstallHinweis({ className = "" }: { className?: string }) {
         }}
         className="mt-3 min-h-[44px] text-[13px] font-semibold text-fg-faint active:text-fg"
       >
-        Don't show again
+        Don’t show again
       </button>
     </section>
   );

@@ -25,14 +25,14 @@ export async function vorschlagAnnehmen(id: string): Promise<EntscheidungErgebni
   // Eine Server Action ist ein offener POST-Endpunkt. Was von der Oberfläche
   // kommt, wird hier noch einmal geprüft.
   if (typeof id !== "string" || id.trim() === "") {
-    return { ok: false, fehler: "Kein Vorschlag angegeben." };
+    return { ok: false, fehler: "No suggestion given." };
   }
 
   try {
     const v = await prisma.kalorienvorschlag.findUnique({ where: { id } });
-    if (!v) return { ok: false, fehler: "Diesen Vorschlag gibt es nicht mehr." };
+    if (!v) return { ok: false, fehler: "This suggestion no longer exists." };
     if (v.status !== "offen") {
-      return { ok: false, fehler: `Der Vorschlag wurde bereits entschieden (${v.status}).` };
+      return { ok: false, fehler: `The suggestion was already decided (${v.status}).` };
     }
 
     /* Beides in einer Transaktion, damit es das eine nie ohne das andere gibt:
@@ -68,7 +68,7 @@ export async function vorschlagAnnehmen(id: string): Promise<EntscheidungErgebni
     revalidatePath("/ernaehrung");
     return { ok: true, kcal: v.kcalNeu };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unknown error" };
   }
 }
 
@@ -76,7 +76,7 @@ export async function vorschlagAblehnen(
   id: string
 ): Promise<{ ok: true } | { ok: false; fehler: string }> {
   if (typeof id !== "string" || id.trim() === "") {
-    return { ok: false, fehler: "Kein Vorschlag angegeben." };
+    return { ok: false, fehler: "No suggestion given." };
   }
 
   try {
@@ -89,12 +89,12 @@ export async function vorschlagAblehnen(
     });
 
     if (ergebnis.count === 0) {
-      return { ok: false, fehler: "Der Vorschlag ist nicht mehr offen." };
+      return { ok: false, fehler: "The suggestion is no longer open." };
     }
 
     revalidatePath("/ernaehrung");
     return { ok: true };
   } catch (e) {
-    return { ok: false, fehler: e instanceof Error ? e.message : "Unbekannter Fehler" };
+    return { ok: false, fehler: e instanceof Error ? e.message : "Unknown error" };
   }
 }

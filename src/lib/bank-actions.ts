@@ -15,7 +15,7 @@ export async function trainingsmaxEintragen(
 ): Promise<{ ok: true } | { ok: false; fehler: string }> {
   const r = await trainingsmaxSetzen(
     kg,
-    begruendung?.trim() || "Von Hand eingetragen, ohne Vorgeschichte in der App."
+    begruendung?.trim() || "Entered by hand, without history in the app."
   );
 
   if (!r.ok) return r;

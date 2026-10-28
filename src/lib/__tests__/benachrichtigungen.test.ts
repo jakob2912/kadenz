@@ -7,9 +7,9 @@ describe("morgenNachricht", () => {
       { verbunden: true, regeneration: { score: 78, band: "gut" }, gewogenHeute: false },
       { art: "training", einheit: "push" }
     );
-    expect(n.title).toBe("Regeneration 78 · erholt");
-    expect(n.body).toContain("Heute Push");
-    expect(n.body).toContain("Morgengewicht");
+    expect(n.title).toBe("Recovery 78 · recovered");
+    expect(n.body).toContain("Today: Push");
+    expect(n.body).toContain("morning weight");
     expect(n.tag).toBe("morgen");
   });
 
@@ -18,15 +18,15 @@ describe("morgenNachricht", () => {
       { verbunden: true, regeneration: { score: 60, band: "mittel" }, gewogenHeute: true },
       { art: "pause", naechste: "pull" }
     );
-    expect(n.body).not.toContain("Morgengewicht");
-    expect(n.body).toContain("Rest Day");
+    expect(n.body).not.toContain("morning weight");
+    expect(n.body).toContain("Rest day");
     expect(n.body).toContain("Pull");
   });
 
   it("rät an einem schlechten Trainingstag zum Halten, nicht an einem Rest Day", () => {
     const schlecht = { verbunden: true as const, regeneration: { score: 30, band: "schlecht" as const }, gewogenHeute: true };
-    expect(morgenNachricht(schlecht, { art: "training", einheit: "pull" }).body).toContain("halten");
-    expect(morgenNachricht(schlecht, { art: "pause", naechste: "push" }).body).not.toContain("halten");
+    expect(morgenNachricht(schlecht, { art: "training", einheit: "pull" }).body).toContain("Hold weights");
+    expect(morgenNachricht(schlecht, { art: "pause", naechste: "push" }).body).not.toContain("Hold weights");
   });
 
   it("sagt zuerst, dass Google neu verbunden werden muss", () => {
@@ -34,8 +34,8 @@ describe("morgenNachricht", () => {
       { verbunden: false, grund: "abgelaufen" },
       { art: "training", einheit: "push" }
     );
-    expect(n.title).toBe("Google Health neu verbinden");
-    expect(n.body).toContain("Heute Push");
+    expect(n.title).toBe("Reconnect Google Health");
+    expect(n.body).toContain("Today: Push");
   });
 
   it("kommt ohne vollständige Nacht mit neutralem Titel aus", () => {
@@ -43,7 +43,7 @@ describe("morgenNachricht", () => {
       { verbunden: true, regeneration: null, gewogenHeute: true },
       { art: "training", einheit: "push" }
     );
-    expect(n.title).toBe("Guten Morgen");
+    expect(n.title).toBe("Good morning");
   });
 });
 
@@ -54,7 +54,7 @@ describe("abendNachricht", () => {
       trainiertHeute: false,
       kalorienvorschlagOffen: false,
     });
-    expect(n?.title).toBe("Heute noch Pull");
+    expect(n?.title).toBe("Still to do today: Pull");
     expect(n?.url).toBe("/training");
   });
 
@@ -94,7 +94,7 @@ describe("abendNachricht", () => {
       kalorienvorschlagOffen: true,
     });
     expect(n?.url).toBe("/training");
-    expect(n?.body).toContain("Kalorienvorschlag");
+    expect(n?.body).toContain("calorie suggestion");
   });
 });
 
@@ -104,8 +104,8 @@ describe("morgenNachricht bei einer Störung", () => {
       { verbunden: false, grund: "503", neuVerbinden: false },
       { art: "training", einheit: "push" }
     );
-    expect(n.title).toBe("Google Health antwortet nicht");
-    expect(n.body).not.toContain("nach dem Verbinden");
+    expect(n.title).toBe("Google Health isn't responding");
+    expect(n.body).not.toContain("after reconnecting");
   });
 });
 

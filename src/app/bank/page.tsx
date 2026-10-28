@@ -74,7 +74,7 @@ async function Inhalt() {
     return (
       <Card className="mt-7">
         <p className="text-sm leading-relaxed text-fg-dim">
-          The bench data can't be read right now. Try again in a moment — everything you
+          The bench data can’t be read right now. Try again in a moment — everything you
           logged is still saved.
         </p>
       </Card>
@@ -85,7 +85,7 @@ async function Inhalt() {
     return (
       <>
         <p className="mt-3 max-w-[62ch] text-sm leading-relaxed text-fg-dim">
-          The program isn't running yet. Barbell bench press has no history in Kadenz
+          The program isn’t running yet. Barbell bench press has no history in Kadenz
           to estimate a training max from — it is the basis of every percentage and is
           entered once.
         </p>
@@ -323,7 +323,7 @@ function Pr({
         {schaetzung !== null && (
           <>
             {" "}
-            Estimated max from recent weeks: {de(schaetzung, 1)} kg — that's where the first
+            Estimated max from recent weeks: {de(schaetzung, 1)} kg — that’s where the first
             attempt starts.
           </>
         )}
@@ -459,7 +459,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
           </p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
             The push session in between. The single is one clean, fast rep — no grinder
-            and no second one. Doesn't count toward the training max. The day is skipped in
+            and no second one. Doesn’t count toward the training max. The day is skipped in
             deload week — deload only exists from {DELOAD_AB_TM_KG} kg training max;
             below that a cycle lasts three weeks.
           </p>
@@ -472,7 +472,7 @@ function Ablauf({ tmKg }: { tmKg: number }) {
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
             Every {TEST_ALLE_ZYKLEN} cycles the TM day of the deload week becomes a max attempt.
-            The light day before it runs without a single. Doesn't move the training max.
+            The light day before it runs without a single. Doesn’t move the training max.
           </p>
         </div>
 
@@ -540,7 +540,7 @@ function Verlauf({ einheiten }: { einheiten: Bankeinheit[] }) {
           sie ein Zeichen, das nirgends steht. */}
       {unsauberDabei && (
         <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-          An asterisk marks a set whose form didn't hold. Those sets stay visible but
+          An asterisk marks a set whose form didn’t hold. Those sets stay visible but
           count neither toward the estimated max nor toward the training max
           progression.
         </p>

@@ -213,7 +213,7 @@ async function Gewichtsteil() {
                     {" "}
                     {unvollstaendig.length}{" "}
                     {unvollstaendig.length === 1 ? "more night" : "more nights"} without
-                    resting HR or HRV — those don't count.
+                    resting HR or HRV — those don’t count.
                   </>
                 )}
               </p>
@@ -329,8 +329,8 @@ function Zielkurve({
       </ol>
 
       <p className="mt-4 text-[11px] leading-relaxed text-fg-faint">
-        The curve is anchored at 82.5 kg on {kurzDatum("2026-08-25")} and doesn't move along —
-        that's the only way to see a deviation at all. It can be changed in one place:
+        The curve is anchored at 82.5 kg on {kurzDatum("2026-08-25")} and doesn’t move along —
+        that’s the only way to see a deviation at all. It can be changed in one place:
         GEWICHTSPLAN in src/lib/gewichtsplan.ts. The calorie coach reads the corridor from
         the same list, which is why it suggests cuts instead of increases during the mini-cut.
       </p>

@@ -209,7 +209,7 @@ export function PushSchalter({
         </Hinweis>
       )}
       {stand.art === "nicht-unterstuetzt" && (
-        <Hinweis>This browser can't receive push notifications.</Hinweis>
+        <Hinweis>This browser can’t receive push notifications.</Hinweis>
       )}
       {stand.art === "abgelehnt" && (
         <Hinweis>

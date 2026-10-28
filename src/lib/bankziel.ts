@@ -171,41 +171,41 @@ export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zie
 export function zielSatz(stand: Zielstand): string {
   if (stand.fehltTmKg === 0) {
     return (
-      `Der Trainingsmax steht bei ${zahl(stand.tmKg)} kg und trägt damit die ` +
-      `${ZIEL_KG} kg. Ab hier zählt nur noch, sie auch einmal sauber zu heben.`
+      `The training max is at ${zahl(stand.tmKg)} kg and so supports the ` +
+      `${ZIEL_KG} kg. From here all that counts is lifting it cleanly once.`
     );
   }
 
   const monate = Math.round(tageZwischen(stand.kurve[0].datum, stand.fruehestensAm) / 30.44);
 
   const tempo = stand.imPlan
-    ? `Das sind rund ${monate} Monate — und selbst dann nur, wenn kein einziger Zyklus stehen bleibt. ` +
-      `Bis Ende 2027 blieben ${Math.round(stand.puffertage / 30.44)} Monate Luft, und die wirst du brauchen.`
-    : `Damit läge das Ziel frühestens im ${monatName(stand.fruehestensAm)} — nach Ende 2027. ` +
-      `Mit ${zahl(TM_SCHRITT_KG)} kg je Zyklus geht es sich rechnerisch nicht aus.`;
+    ? `That's about ${monate} months — and only if not a single cycle stalls. ` +
+      `That leaves ${Math.round(stand.puffertage / 30.44)} months of buffer until the end of 2027, and you'll need it.`
+    : `That puts the goal in ${monatName(stand.fruehestensAm)} at the earliest — after the end of 2027. ` +
+      `At ${zahl(TM_SCHRITT_KG)} kg per cycle the numbers don't work out.`;
 
   return (
-    `Für saubere ${ZIEL_KG} kg braucht es einen Trainingsmax von ${zahl(ZIEL_TM_KG)} kg — ` +
-    `${zahl(stand.fehltTmKg)} kg mehr als heute. Das 5/3/1 holt sie nicht gleichmäßig, ` +
-    `sondern ${zahl(TM_SCHRITT_KG)} kg am Ende eines Zyklus; dazwischen steht der ` +
-    `Trainingsmax still, und ab ${zahl(DELOAD_AB_TM_KG)} kg geht die vierte Woche bewusst zurück. ` +
-    `${stand.zyklenNoetig} Zyklen à 21 bis 28 Tage. ${tempo}`
+    `A clean ${ZIEL_KG} kg needs a training max of ${zahl(ZIEL_TM_KG)} kg — ` +
+    `${zahl(stand.fehltTmKg)} kg more than today. 5/3/1 doesn't add that evenly ` +
+    `but ${zahl(TM_SCHRITT_KG)} kg at the end of each cycle; in between the ` +
+    `training max holds still, and from ${zahl(DELOAD_AB_TM_KG)} kg the fourth week deliberately backs off. ` +
+    `${stand.zyklenNoetig} cycles of 21 to 28 days. ${tempo}`
   );
 }
 
 const MONATE = [
-  "Jänner",
-  "Februar",
-  "März",
+  "January",
+  "February",
+  "March",
   "April",
-  "Mai",
-  "Juni",
-  "Juli",
+  "May",
+  "June",
+  "July",
   "August",
   "September",
-  "Oktober",
+  "October",
   "November",
-  "Dezember",
+  "December",
 ];
 
 function monatName(iso: string): string {
@@ -214,5 +214,5 @@ function monatName(iso: string): string {
 
 function zahl(n: number): string {
   const s = n.toFixed(1);
-  return s.endsWith(",0") ? s.slice(0, -2) : s;
+  return s.endsWith(".0") ? s.slice(0, -2) : s;
 }

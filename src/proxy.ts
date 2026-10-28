@@ -48,7 +48,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(ziel);
   }
 
-  return new NextResponse("Nicht angemeldet.", { status: 401 });
+  return new NextResponse("Not signed in.", { status: 401 });
 }
 
 export const config = {

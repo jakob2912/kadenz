@@ -61,7 +61,7 @@ export function BankTrainingsmax({
 
       {aktuellerTm === null ? (
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          Before the program can calculate anything, it needs a training max. That isn't your
+          Before the program can calculate anything, it needs a training max. That isn’t your
           best single, but 90 % of it — the buffer keeps the heavy weeks doable.
         </p>
       ) : (
