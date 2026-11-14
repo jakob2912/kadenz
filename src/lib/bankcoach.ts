@@ -9,7 +9,7 @@
  *   - Läuft das Bankdrücken, steht es oder geht es zurück — und wenn es
  *     steht, was ist im Rahmen des 5/3/1 der nächste Schritt?
  *   - Wann wären 140 kg erreicht, wenn es so weitergeht wie zuletzt, und wie
- *     schnell müsste es gehen, damit es Ende 2027 klappt?
+ *     schnell müsste es gehen, damit es bis zum Ende des Aufbaus klappt?
  *
  * Die Treppe in bankziel.ts beantwortet etwas anderes: den Bestfall des
  * Programms, wenn jeder Zyklus gelingt. Hier wird gemessen, nicht geplant.
@@ -29,7 +29,7 @@ import {
   type GeloggterSatz,
   type KraftUrteil,
 } from "./kraft";
-import { ZIEL_DATUM, ZIEL_KG } from "./bankziel";
+import { ZIEL_DATUM, ZIEL_KG, zielDatumText } from "./bankziel";
 
 /**
  * Wie weit der Coach zurückschaut: acht Wochen.
@@ -436,7 +436,7 @@ export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
   const imPlan = erreichtAm !== null && erreichtAm <= ZIEL_DATUM;
 
   const tempo = `Measured: ${zahl(kgPro4Wochen)} kg over four weeks (${zahl(urteil.prozentPro4Wochen)} %), estimated max currently ${zahl(aktuellKg)} kg.`;
-  const noetig = `${ZIEL_KG} kg by the end of 2027 needs ${zahl(noetigKgProMonat)} kg per month, i.e. ${zahl(noetigProzentPro4Wochen)} % over four weeks.`;
+  const noetig = `${ZIEL_KG} kg by ${zielDatumText()} needs ${zahl(noetigKgProMonat)} kg per month, i.e. ${zahl(noetigProzentPro4Wochen)} % over four weeks.`;
   const wann =
     fehlt === 0
       ? `The estimated max is already at ${ZIEL_KG} kg — only the clean single is missing.`

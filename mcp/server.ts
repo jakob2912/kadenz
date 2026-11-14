@@ -271,7 +271,7 @@ server.registerTool(
   {
     title: "Gewichtstrend",
     description:
-      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk 1 → Mini-Cut → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase das Vorzeichen: im Mini-Cut soll das Gewicht fallen.",
+      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk auf 96 kg → Cut für die Maturaball-Fotos → Hold bis nach dem Ball am 11.12.2027 → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase: positiv im Aufbau, negativ im Cut (das Gewicht soll fallen), um null beim Halten (das Gewicht soll stehen bleiben). wochenBisPhasenziel gibt es nur im Aufbau und im Cut; beim Halten ist es null, dort zählt nur phasenendeIso.",
     inputSchema: { tage: z.number().int().min(7).max(120).optional() },
   },
   async ({ tage }) => {
@@ -302,6 +302,7 @@ server.registerTool(
         trend: google.verbunden ? assessTrend(gewicht) : null,
         plan: {
           phase: phase.phase.label,
+          art: phase.phase.art,
           phaseNummer: `${phase.nummer} von ${phasenlauf().length}`,
           zweck: phase.phase.zweck,
           phasenzielKg: Math.round(phase.bisKg * 10) / 10,
@@ -314,13 +315,21 @@ server.registerTool(
           zielKorridorKgProWoche: zielKorridor(heute),
           endzielKg: ENDZIEL_KG,
           maxRateProWoche: MAX_RATE_PRO_WOCHE,
-          wochenBisPhasenziel: aktuell
-            ? weeksToGoal(aktuell.kg, phase.bisKg, phase.phase.rateProWoche)
-            : null,
+          /* Richtungsabhängig: im Cut liegt das Ziel unter dem Gewicht, also
+             mit gespiegelter Rechnung. Beim Halten gibt es kein Ziel, auf das
+             man zuläuft — Rate null, und eine Division dadurch käme als
+             Infinity bzw. null im JSON an. */
+          wochenBisPhasenziel:
+            aktuell === null || phase.phase.art === "halten"
+              ? null
+              : phase.phase.art === "cut"
+                ? weeksToGoal(phase.bisKg, aktuell.kg, -phase.phase.rateProWoche)
+                : weeksToGoal(aktuell.kg, phase.bisKg, phase.phase.rateProWoche),
         },
         allePhasen: phasenlauf().map((l) => ({
           nummer: l.nummer,
           label: l.phase.label,
+          art: l.phase.art,
           vonIso: l.vonIso,
           bisIso: l.bisIso,
           vonKg: Math.round(l.vonKg * 10) / 10,
@@ -876,7 +885,7 @@ server.registerTool(
   {
     title: "Bank-Coach",
     description:
-      "Echter PR (schwerster sauberer Single oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis 31.12.2027 und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
+      "Echter PR (schwerster sauberer Single oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis zum Ende des Aufbaus (Beginn des Cuts laut Gewichtsplan, derzeit 04.05.2027 — steht ausgeschrieben in der Antwort) und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
   },
   async () => {
     try {

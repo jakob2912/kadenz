@@ -16,7 +16,7 @@ type Messgroesse = keyof typeof MESSGROESSEN;
 /**
  * Die Nächte über die Zeit — bisher gab es nur die Referenzwerte als Zahlen,
  * aber keinen Verlauf. Ob der Ruhepuls seit dem Aufbau langsam steigt oder
- * die HRV im Mini-Cut fällt, sieht man erst über Wochen; dafür liegt seit
+ * die HRV im Cut fällt, sieht man erst über Wochen; dafür liegt seit
  * Oktober 2026 ein Jahr in der eigenen Ablage.
  *
  * Eine Größe auf einmal statt drei Linien übereinander: Stunden, Schläge und

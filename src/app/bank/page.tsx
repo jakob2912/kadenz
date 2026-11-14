@@ -380,8 +380,9 @@ function Ziel({ stand }: { stand: Zielstand }) {
     <Card>
       <div className="flex items-baseline justify-between gap-3">
         <Eyebrow>Ziel · {ZIEL_KG} kg sauber</Eyebrow>
-        {/* langDatum und nicht kurzDatum: "bis Fr., 31. Dez." stand ohne
-            Jahreszahl da und las sich wie dieses Jahr. Gemeint ist Ende 2027. */}
+        {/* langDatum und nicht kurzDatum: ein Datum ohne Jahreszahl las sich
+            wie dieses Jahr. Gemeint ist das Ende des Aufbaus (ZIEL_DATUM, aus
+            dem Gewichtsplan abgeleitet). */}
         <span className="text-[11px] text-fg-faint">bis {langDatum(ZIEL_DATUM)}</span>
       </div>
 

@@ -7,6 +7,7 @@
  */
 
 import type { CoachLage } from "./bankcoach";
+import { zielDatumText } from "./bankziel";
 
 /** ~6000 kcal je kg im Aufbau, wie in coach.ts. */
 const KCAL_PRO_KG = 6000;
@@ -66,7 +67,7 @@ export function lageHeute(e: {
       schritte.push(`Bench: ${e.bank.vorschlag}`);
     } else if (e.bank.zielImPlan === false) {
       schritte.push(
-        `Bench: 140 kg by the end of 2027 is out of reach at the current pace.${
+        `Bench: 140 kg by ${zielDatumText()} is out of reach at the current pace.${
           e.bank.lage === "laeuft" ? ` ${e.bank.vorschlag}` : ""
         }`
       );

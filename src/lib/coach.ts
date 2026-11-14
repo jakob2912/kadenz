@@ -506,9 +506,9 @@ export function kalorienAnpassung(opts: {
    * Der Zielkorridor der Gewichtsänderung in kg pro Woche.
    *
    * Stand bis zum 25.08.2026 fest auf 0,25 bis 0,50 — also immer auf Zunahme.
-   * Mit dem Phasenplan stimmt das die halbe Zeit nicht mehr: im Mini-Cut soll
-   * das Gewicht fallen, und ein fest positiver Korridor hätte dort Woche für
-   * Woche Erhöhungen vorgeschlagen. Wer den Korridor kennt, ist der Plan, und
+   * Mit dem Phasenplan stimmt das nicht mehr: im Cut soll das Gewicht fallen,
+   * beim Halten stehen bleiben, und ein fest positiver Korridor hätte in beiden
+   * Phasen Woche für Woche Erhöhungen vorgeschlagen. Wer den Korridor kennt, ist der Plan, und
    * der steht in gewichtsplan.ts.
    *
    * Der Standard bleibt der Aufbau-Korridor, damit Aufrufer ohne Phasenwissen
@@ -548,17 +548,22 @@ export function kalorienAnpassung(opts: {
 
   const rate = trend.kgPerWeek;
 
-  /* "steigt" stimmt nur im Aufbau. Im Mini-Cut ist der Korridor negativ, und
-     ein Satz wie "steigt mit -0,60 kg pro Woche" wäre schlicht falsch. */
-  const bewegung = rate >= 0 ? "is rising" : "is falling";
+  /* "steigt" stimmt nur im Aufbau. Im Cut ist der Korridor negativ, und ein
+     Satz wie "steigt mit -0,60 kg pro Woche" wäre schlicht falsch. Beim
+     Halten liegt die Rate oft so nah an null, dass sie auf 0,00 rundet —
+     "steigt um 0,00" wäre Unsinn, also heißt das dann "hält sich". */
   const betrag = komma(Math.abs(rate), 2);
+  const steht = betrag === komma(0, 2);
+  const bewegung = rate >= 0 ? "is rising" : "is falling";
+  const satzAnfang = steht
+    ? "Your average is holding steady"
+    : `Your average ${bewegung} by ${betrag} kg per week`;
+  const spanne = `${mitVorzeichen(korridor.unten)} to ${mitVorzeichen(korridor.oben)}`;
 
   if (rate >= korridor.unten && rate <= korridor.oben) {
     return {
       art: "kein-vorschlag",
-      grund:
-        `Your average ${bewegung} by ${betrag} kg per week — within the target corridor of ` +
-        `${komma(korridor.unten, 2)} to ${komma(korridor.oben, 2)}. Nothing to change.`,
+      grund: `${satzAnfang} — within the target corridor of ${spanne}. Nothing to change.`,
     };
   }
 
@@ -573,13 +578,18 @@ export function kalorienAnpassung(opts: {
 
   const erwarteteRate = rate + (deltaKcal * 7) / KCAL_PER_KG;
 
+  /* Nur im Aufbau ist die Obergrenze eine Fettgrenze: dort heißt "darüber",
+     dass der Überschuss ins Fett geht. Im Cut und beim Halten ist sie nur der
+     Rand des Korridors, und der Fett-Satz wäre beim Halten sogar irreführend —
+     wer dort zunimmt, hat keinen Überschuss geplant. */
+  const aufbau = korridor.unten > 0;
   const kopf =
     richtung === "hoch"
-      ? `Your average ${bewegung} by ${betrag} kg per week — below the target corridor ` +
-        `of ${komma(korridor.unten, 2)} to ${komma(korridor.oben, 2)}.`
-      : `Your average ${bewegung} by ${betrag} kg per week — above your upper limit ` +
-        `of ${komma(korridor.oben, 2)}.` +
-        (korridor.oben > 0 ? " From here the surplus mostly goes to fat." : "");
+      ? `${satzAnfang} — below the target corridor of ${spanne}.`
+      : aufbau
+        ? `${satzAnfang} — above your upper limit of ${komma(korridor.oben, 2)}.` +
+          " From here the surplus mostly goes to fat."
+        : `${satzAnfang} — above the target corridor of ${spanne}.`;
 
   const rechnung =
     `${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "more" : "less"} ` +
@@ -641,6 +651,17 @@ function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string
  */
 function komma(n: number, digits: number): string {
   return n.toFixed(digits);
+}
+
+/**
+ * Eine Korridorgrenze mit echtem Minuszeichen.
+ *
+ * Im Aufbau sind beide Grenzen positiv und erscheinen unverändert; erst im Cut
+ * und beim Halten tauchen negative auf, und dort liest sich "−0.25" sauberer
+ * als der Bindestrich, den toFixed liefert.
+ */
+function mitVorzeichen(n: number): string {
+  return komma(n, 2).replace(/^-/, "\u2212");
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -49,6 +49,6 @@ describe("lageHeute", () => {
       bank: { lage: "unklar", vorschlag: "Too few heavy days.", zielImPlan: false },
     });
     expect(l.aufKurs).toBe(false);
-    expect(l.schritte).toEqual(["Bench: 140 kg by the end of 2027 is out of reach at the current pace."]);
+    expect(l.schritte).toEqual(["Bench: 140 kg by the end of the bulk (4 May 2027) is out of reach at the current pace."]);
   });
 });

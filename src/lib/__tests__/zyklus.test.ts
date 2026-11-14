@@ -8,7 +8,8 @@ import {
   e1rmReihe,
   type GeloggterSatz,
 } from "../kraft";
-import { ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankziel";
+import { ZIEL_DATUM, ZIEL_TM_KG, zielProjektion, zielSatz } from "../bankziel";
+import { phasenlauf } from "../gewichtsplan";
 
 describe("Zyklus vorziehen (Deload überspringen)", () => {
   /* Jakob am 07.09.2026: "das fühlt sich zu leicht an, skip den Deload, ich
@@ -188,23 +189,42 @@ describe("zielProjektion", () => {
     expect(stand.kurve.at(-1)!.tmKg).toBe(ZIEL_TM_KG);
   });
 
-  it("erkennt, dass 15 Zyklen vor Ende 2027 liegen", () => {
-    const stand = zielProjektion(90, 1, "2026-08-20");
+  /* Das Ziel endet mit dem Aufbau (04.05.2027). Acht Zyklen ab 107,5 kg
+     enden am 01.04.2027 und passen; die 15 Zyklen ab 90 kg, die vor Ende 2027
+     noch passten, enden am 23.09.2027 — mitten im Halten nach dem Cut. */
+  it("erkennt, dass 8 Zyklen vor dem Ende des Aufbaus liegen", () => {
+    const stand = zielProjektion(107.5, 1, "2026-08-20");
+    expect(stand.zyklenNoetig).toBe(8);
+    expect(stand.fruehestensAm).toBe("2027-04-01");
     expect(stand.imPlan).toBe(true);
-    expect(stand.puffertage).toBeGreaterThan(0);
+    expect(stand.puffertage).toBe(33);
+  });
+
+  it("erkennt, dass 15 Zyklen nicht mehr vor das Ende des Aufbaus passen", () => {
+    const stand = zielProjektion(90, 1, "2026-08-20");
+    expect(stand.zyklenNoetig).toBe(15);
+    expect(stand.fruehestensAm).toBe("2027-09-23");
+    expect(stand.imPlan).toBe(false);
+  });
+
+  it("nimmt als Zieldatum den Beginn des Cuts aus dem Gewichtsplan", () => {
+    const cut = phasenlauf().find((l) => l.phase.art === "cut")!;
+    expect(ZIEL_DATUM).toBe(cut.vonIso);
+    expect(ZIEL_DATUM).toBe("2027-05-04");
   });
 
   it("meldet ein unerreichbares Ziel als solches", () => {
     const stand = zielProjektion(60, 1, "2027-06-01");
     expect(stand.imPlan).toBe(false);
-    expect(zielSatz(stand)).toContain("after the end of 2027");
+    expect(zielSatz(stand)).toContain("after the end of the bulk (4 May 2027)");
   });
 
   it("sagt im Text ausdrücklich, dass es nicht gleichmäßig geht", () => {
-    const text = zielSatz(zielProjektion(90, 1, "2026-08-20"));
+    const text = zielSatz(zielProjektion(107.5, 1, "2026-08-20"));
     expect(text).toContain("doesn't add that evenly");
-    expect(text).toContain("15 cycles");
+    expect(text).toContain("8 cycles");
     expect(text).toContain("not a single cycle stalls");
+    expect(text).toContain("until the end of the bulk (4 May 2027)");
   });
 
   it("wechselt den Ton, sobald der Trainingsmax das Ziel trägt", () => {

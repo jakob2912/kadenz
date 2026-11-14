@@ -260,8 +260,8 @@ export async function vorschlagLage(opts: {
     heute,
     koerpergewichtKg: opts.koerpergewichtKg,
     /* Der Korridor kommt aus der Phase, in der heute liegt. Ohne das rechnete
-       der Coach auch mitten im Mini-Cut gegen 0,25 bis 0,50 kg Zunahme und
-       schlüge dort Erhöhungen vor — genau gegen den Plan. */
+       der Coach auch mitten im Cut und beim Halten gegen 0,25 bis 0,50 kg
+       Zunahme und schlüge dort Erhöhungen vor — genau gegen den Plan. */
     korridor: zielKorridor(heute),
   });
 

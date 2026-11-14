@@ -10,6 +10,14 @@ import {
   zielKorridor,
 } from "../gewichtsplan";
 import { kalorienAnpassung } from "../coach";
+import { ZIEL_DATUM } from "../bankziel";
+
+function wochenVon(lauf: { vonIso: string; bisIso: string }): number {
+  return (
+    (Date.parse(`${lauf.bisIso}T00:00:00Z`) - Date.parse(`${lauf.vonIso}T00:00:00Z`)) /
+    (7 * 864e5)
+  );
+}
 
 describe("phasenlauf", () => {
   it("beginnt am verankerten Startpunkt", () => {
@@ -30,22 +38,44 @@ describe("phasenlauf", () => {
     expect(phasenlauf().at(-1)!.bisKg).toBeCloseTo(ENDZIEL_KG, 6);
   });
 
-  it("baut auf, schneidet ab, baut wieder auf", () => {
-    const [eins, zwei, drei] = phasenlauf();
+  it("baut auf, schneidet ab, hält, baut wieder auf", () => {
+    const [eins, zwei, drei, vier] = phasenlauf();
     expect(eins.bisKg).toBeGreaterThan(eins.vonKg);
     expect(zwei.bisKg).toBeLessThan(zwei.vonKg);
-    expect(drei.bisKg).toBeGreaterThan(drei.vonKg);
+    expect(drei.bisKg).toBeCloseTo(drei.vonKg, 6);
+    expect(vier.bisKg).toBeGreaterThan(vier.vonKg);
   });
 
-  /* Der Mini-Cut läuft über eine feste Dauer, nicht bis zu einer Marke — vier
-     bis acht Wochen ist Jakobs Rahmen, sechs die Mitte. */
-  it("hält den Mini-Cut in Jakobs Rahmen von vier bis acht Wochen", () => {
+  it("baut im ersten Aufbau bis 96 kg auf", () => {
+    const [eins] = phasenlauf();
+    expect(eins.phase.art).toBe("aufbau");
+    expect(eins.bisKg).toBeCloseTo(96, 6);
+  });
+
+  /* Der Cut läuft über eine feste Dauer, nicht bis zu einer Marke, und muss
+     vor den ersten Maturaball-Fotos am 11.08.2027 fertig sein. */
+  it("hält den Cut bei acht bis zwölf Wochen und beendet ihn vor den Fotos", () => {
     const cut = phasenlauf().find((l) => l.phase.art === "cut")!;
-    const wochen =
-      (Date.parse(`${cut.bisIso}T00:00:00Z`) - Date.parse(`${cut.vonIso}T00:00:00Z`)) /
-      (7 * 864e5);
-    expect(wochen).toBeGreaterThanOrEqual(4);
-    expect(wochen).toBeLessThanOrEqual(8);
+    expect(wochenVon(cut)).toBeGreaterThanOrEqual(8);
+    expect(wochenVon(cut)).toBeLessThanOrEqual(12);
+    expect(cut.bisIso < "2027-08-11").toBe(true);
+  });
+
+  /* Das Halten muss den Ball am 11.12.2027 einschließen — sonst begänne der
+     zweite Aufbau, solange er noch schlank sein soll. */
+  it("hält das Gewicht über den Ball am 11.12.2027", () => {
+    const halten = aktuellePhase("2027-12-11");
+    expect(halten.phase.art).toBe("halten");
+    expect(halten.phase.rateProWoche).toBe(0);
+    expect(halten.phase.korridor.unten).toBeLessThan(0);
+    expect(halten.phase.korridor.oben).toBeGreaterThan(0);
+  });
+
+  it("rechnet das Halten über seine Wochen und lässt das Gewicht stehen", () => {
+    const halten = phasenlauf().find((l) => l.phase.art === "halten")!;
+    expect(wochenVon(halten)).toBe(halten.phase.wochen);
+    expect(halten.bisKg).toBe(halten.vonKg);
+    expect(sollGewichtAm(halten.vonIso)).toBe(sollGewichtAm(halten.bisIso));
   });
 
   it("überschreitet Jakobs Obergrenze von 0,5 kg pro Woche nie", () => {
@@ -67,7 +97,7 @@ describe("sollKurve", () => {
     }
   });
 
-  /* Der Mini-Cut muss als Delle sichtbar sein — eine Kurve, die nur steigt,
+  /* Der Cut muss als Delle sichtbar sein — eine Kurve, die nur steigt,
      zeigt den Plan nicht, sondern eine Vereinfachung davon. */
   it("hat eine fallende Strecke in der Mitte", () => {
     const kurve = sollKurve();
@@ -101,8 +131,8 @@ describe("zielKorridor", () => {
   });
 
   /* Der Kern der Kopplung: ohne diesen Vorzeichenwechsel schlüge der
-     Kalorien-Coach mitten im Mini-Cut weiter Erhöhungen vor. */
-  it("dreht im Mini-Cut das Vorzeichen um", () => {
+     Kalorien-Coach mitten im Cut weiter Erhöhungen vor. */
+  it("dreht im Cut das Vorzeichen um", () => {
     const cut = phasenlauf().find((l) => l.phase.art === "cut")!;
     const mitten = new Date(
       (Date.parse(`${cut.vonIso}T00:00:00Z`) + Date.parse(`${cut.bisIso}T00:00:00Z`)) / 2
@@ -127,8 +157,8 @@ describe("zielKorridor", () => {
 describe("kalorienAnpassung mit Phasenkorridor", () => {
   const reihe = Array.from({ length: 21 }, (_, i) => ({
     date: new Date(Date.UTC(2027, 2, 1) + i * 864e5).toISOString().slice(0, 10),
-    // fällt mit rund 0,6 kg pro Woche — genau das Tempo des Mini-Cuts
-    kg: 92.5 - i * (0.6 / 7),
+    // fällt mit rund 0,6 kg pro Woche — genau das Tempo des Cuts
+    kg: 96 - i * (0.6 / 7),
   }));
 
   const aktuell = { kcal: 3600, kohlenhydrateG: 450, eiweissG: 200, fettG: 100 };
@@ -157,5 +187,86 @@ describe("kalorienAnpassung mit Phasenkorridor", () => {
       expect(urteil.grund).toContain("is falling");
       expect(urteil.grund).not.toContain("is rising");
     }
+  });
+});
+
+/**
+ * Der Coach gegen den Halte-Korridor.
+ *
+ * Beim Halten liegt null mitten im Korridor. Die Texte, die für Aufbau und
+ * Cut geschrieben sind, dürfen dort weder "steigt um 0,00" sagen noch vom
+ * Überschuss reden, der ins Fett geht — geplant ist ja gar keiner.
+ */
+describe("kalorienAnpassung mit Halte-Korridor", () => {
+  const halten = phasenlauf().find((l) => l.phase.art === "halten")!.phase.korridor;
+  const aktuell = { kcal: 3200, kohlenhydrateG: 380, eiweissG: 200, fettG: 90 };
+
+  function reiheMit(kgProWoche: number) {
+    return Array.from({ length: 21 }, (_, i) => ({
+      date: new Date(Date.UTC(2027, 8, 1) + i * 864e5).toISOString().slice(0, 10),
+      kg: 90 + i * (kgProWoche / 7),
+    }));
+  }
+
+  function urteilBei(kgProWoche: number) {
+    const reihe = reiheMit(kgProWoche);
+    return kalorienAnpassung({
+      aktuell,
+      gewicht: reihe,
+      letzteAnpassung: null,
+      heute: reihe[reihe.length - 1].date,
+      koerpergewichtKg: 90,
+      korridor: halten,
+    });
+  }
+
+  it("lässt ein stehendes Gewicht in Ruhe und sagt es auch so", () => {
+    const urteil = urteilBei(0);
+    expect(urteil.art).toBe("kein-vorschlag");
+    if (urteil.art !== "kein-vorschlag") return;
+    expect(urteil.grund).toContain("is holding steady");
+    expect(urteil.grund).not.toContain("0.00");
+    expect(urteil.grund).toContain("\u22120.25 to 0.25");
+  });
+
+  it("nimmt bei steigendem Gewicht zurück, ohne vom Fett-Überschuss zu reden", () => {
+    const urteil = urteilBei(0.4);
+    expect(urteil.art).toBe("vorschlag");
+    if (urteil.art !== "vorschlag") return;
+    expect(urteil.anpassung.richtung).toBe("runter");
+    expect(urteil.anpassung.zielRate).toBe(0);
+    expect(urteil.anpassung.begruendung).toContain("above the target corridor of \u22120.25 to 0.25");
+    expect(urteil.anpassung.begruendung).not.toContain("surplus");
+  });
+
+  it("legt bei fallendem Gewicht nach", () => {
+    const urteil = urteilBei(-0.5);
+    expect(urteil.art).toBe("vorschlag");
+    if (urteil.art !== "vorschlag") return;
+    expect(urteil.anpassung.richtung).toBe("hoch");
+    expect(urteil.anpassung.begruendung).toContain("is falling by 0.50 kg per week");
+  });
+
+  it("behält im Aufbau den Satz zum Fett-Überschuss", () => {
+    const reihe = reiheMit(0.8);
+    const urteil = kalorienAnpassung({
+      aktuell,
+      gewicht: reihe,
+      letzteAnpassung: null,
+      heute: reihe[reihe.length - 1].date,
+      koerpergewichtKg: 90,
+    });
+    expect(urteil.art).toBe("vorschlag");
+    if (urteil.art !== "vorschlag") return;
+    expect(urteil.anpassung.begruendung).toContain(
+      "above your upper limit of 0.50. From here the surplus mostly goes to fat."
+    );
+  });
+});
+
+describe("Bankziel aus dem Plan", () => {
+  it("ZIEL_DATUM ist der Beginn des Cuts", () => {
+    const cut = phasenlauf().find((l) => l.phase.art === "cut")!;
+    expect(ZIEL_DATUM).toBe(cut.vonIso);
   });
 });

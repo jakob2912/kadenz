@@ -153,7 +153,7 @@ async function Gewichtsteil() {
             </span>
           </div>
           {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
-              Wochen: der ganze Plan reicht bis November 2027, und über diese
+              Wochen: der ganze Plan reicht bis Juni 2028, und über diese
               Achse gelegt schrumpfte der Monat mit echten Messungen zu einem
               Strich am linken Rand. Die Frage an dieser Karte lautet "liege
               ich gerade richtig", nicht "wo endet das". Letzteres beantwortet
@@ -250,7 +250,7 @@ async function Gewichtsteil() {
  * hinaus.
  *
  * Gebraucht für die Karte oben, die neben der Messreihe steht. Der ganze Plan
- * reicht bis November 2027 — über diese Zeitachse gelegt schrumpfte der Monat
+ * reicht bis Juni 2028 — über diese Zeitachse gelegt schrumpfte der Monat
  * mit echten Messungen auf einen Strich.
  */
 function sollAusschnitt(abIso: string, wochenVoraus: number): { datum: string; wert: number }[] {
@@ -269,8 +269,9 @@ function sollAusschnitt(abIso: string, wochenVoraus: number): { datum: string; w
  * Der ganze Plan in einer Karte.
  *
  * Die Karte oben beantwortet "liege ich gerade richtig". Diese beantwortet
- * "wo führt das hin" — und dafür muss der Mini-Cut als Delle sichtbar sein,
- * sonst ist er nur eine Behauptung im Fließtext.
+ * "wo führt das hin" — und dafür muss der Cut vor den Maturaball-Fotos als
+ * Delle sichtbar sein und das Halten bis nach dem Ball als flache Strecke,
+ * sonst sind beide nur eine Behauptung im Fließtext.
  */
 function Zielkurve({
   reihe,
@@ -319,8 +320,12 @@ function Zielkurve({
                 </span>
                 <span className="block text-[11px] leading-relaxed text-fg-faint">
                   {kurzDatum(lauf.vonIso)} to {kurzDatum(lauf.bisIso)} ·{" "}
-                  {lauf.phase.rateProWoche > 0 ? "+" : ""}
-                  {de(lauf.phase.rateProWoche, 3).replace(/0$/, "")} kg/week · {lauf.phase.zweck}
+                  {/* Beim Halten ist die Rate null; "0.00 kg/week" sähe nach
+                      einem Rechenrest aus, "±0" sagt, dass es so gemeint ist. */}
+                  {lauf.phase.rateProWoche === 0
+                    ? "±0"
+                    : `${lauf.phase.rateProWoche > 0 ? "+" : ""}${de(lauf.phase.rateProWoche, 3).replace(/0$/, "")}`}{" "}
+                  kg/week · {lauf.phase.zweck}
                 </span>
               </span>
             </li>
@@ -332,7 +337,8 @@ function Zielkurve({
         The curve is anchored at 82.5 kg on {kurzDatum("2026-08-25")} and doesn’t move along —
         that’s the only way to see a deviation at all. It can be changed in one place:
         GEWICHTSPLAN in src/lib/gewichtsplan.ts. The calorie coach reads the corridor from
-        the same list, which is why it suggests cuts instead of increases during the mini-cut.
+        the same list, which is why it suggests cuts instead of increases during the cut and
+        leaves the calories alone during the hold as long as the weight stays put.
       </p>
     </Card>
   );
@@ -347,13 +353,21 @@ function Zielkurve({
  * nächste, was zählt, ist nicht die 100 — es ist die Marke der laufenden
  * Phase.
  *
+ * Die Marke hat eine Richtung: im Aufbau liegt sie über dem Gewicht, im Cut
+ * darunter, und beim Halten gibt es keinen Rest, nur ein Datum, bis zu dem das
+ * Gewicht stehen bleiben soll.
+ *
  * Die Abweichung steht ausdrücklich dabei. Eine Zielkurve, gegen die man sich
  * nicht vergleichen kann, ist Dekoration.
  */
 function zielSatz(aktuellKg: number | null, heuteIso: string): string {
   const jetzt = aktuellePhase(heuteIso);
   const soll = sollGewichtAm(heuteIso);
-  const marke = `${jetzt.phase.label} to ${de(jetzt.bisKg, 1)} kg (${kurzDatum(jetzt.bisIso)})`;
+  const art = jetzt.phase.art;
+  const marke =
+    art === "halten"
+      ? `${jetzt.phase.label} at ${de(jetzt.bisKg, 1)} kg until ${kurzDatum(jetzt.bisIso)}`
+      : `${jetzt.phase.label} to ${de(jetzt.bisKg, 1)} kg (${kurzDatum(jetzt.bisIso)})`;
 
   if (aktuellKg === null) return `${marke} · no measurement yet.`;
 
@@ -367,11 +381,17 @@ function zielSatz(aktuellKg: number | null, heuteIso: string): string {
         ? `that's ${de(abweichung, 1)} kg over plan`
         : `that's ${de(-abweichung, 1)} kg under plan`;
 
-  const fehlend = jetzt.bisKg - aktuellKg;
+  /* Beim Halten zählt nur die Abweichung vom Plan, die schon in "lage"
+     steht — ein "noch X kg" gäbe es dort nicht. */
+  const fehlend = art === "cut" ? aktuellKg - jetzt.bisKg : jetzt.bisKg - aktuellKg;
   const rest =
-    fehlend <= 0
-      ? " This phase's mark is reached."
-      : ` ${de(fehlend, 1)} kg to go to the mark.`;
+    art === "halten"
+      ? ""
+      : fehlend <= 0
+        ? " This phase's mark is reached."
+        : art === "cut"
+          ? ` ${de(fehlend, 1)} kg still to lose.`
+          : ` ${de(fehlend, 1)} kg to go to the mark.`;
 
   return `${marke} · today's plan is ${de(soll, 1)} kg, ${lage}.${rest}`;
 }

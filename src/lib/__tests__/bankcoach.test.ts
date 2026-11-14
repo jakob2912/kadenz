@@ -210,10 +210,12 @@ describe("prognose140", () => {
     // 4 % auf vier Wochen von 100 kg: 4 kg je 28 Tage, 36 kg fehlen → 252 Tage.
     expect(p.kgPro4Wochen).toBeCloseTo(4, 5);
     expect(p.erreichtAm).toBe("2027-06-23");
-    expect(p.imPlan).toBe(true);
-    // 443 Tage bis 31.12.2027.
-    expect(p.noetigKgProMonat).toBeCloseTo(36 / (443 / 30.44), 5);
-    expect(p.noetigProzentPro4Wochen).toBeCloseTo(((36 / 443) * 28 * 100) / 104, 5);
+    /* Das Ziel ist das Ende des Aufbaus, der 04.05.2027 — der 23.06. liegt
+       schon im Cut, also nicht im Plan. 202 Tage vom 14.10.2026 bis dahin. */
+    expect(p.imPlan).toBe(false);
+    expect(p.noetigKgProMonat).toBeCloseTo(36 / (202 / 30.44), 5);
+    expect(p.noetigProzentPro4Wochen).toBeCloseTo(((36 / 202) * 28 * 100) / 104, 5);
+    expect(p.text).toContain("140 kg by the end of the bulk (4 May 2027) needs");
   });
 
   it("warnt bei kurzer Spanne", () => {

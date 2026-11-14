@@ -3,17 +3,19 @@
  *
  * Bis hierher kannte die App eine einzige Zahl: ZIEL_KG = 97, an drei Stellen
  * getrennt hingeschrieben (Verlaufsseite und MCP-Server). Sie beschrieb einen
- * Plan, den es so nicht mehr gibt — seit dem 19.08.2026 steht in Jakobs Vault
- * ein Aufbau in zwei Etappen mit einem Mini-Cut dazwischen.
+ * Plan, den es so nicht mehr gibt. Seit dem 14.11.2026 gilt: ein langer
+ * Aufbau auf 96 kg, ein Cut auf die Maturaball-Fotos hin, Gewicht halten bis
+ * nach dem Ball, dann ein zweiter Aufbau auf 100 kg.
  *
  * Warum das nicht als drei Konstanten geht: die Zielkurve muss sagen, wo er
  * an einem beliebigen Tag stehen sollte, und das hängt davon ab, in welcher
  * Phase dieser Tag liegt. Erst recht gilt das für den Kalorien-Coach: sein
- * Zielkorridor ist im Aufbau positiv und im Cut negativ. Ohne diese
- * Unterscheidung schlüge er mitten im Mini-Cut Erhöhungen vor.
+ * Zielkorridor ist im Aufbau positiv, im Cut negativ und beim Halten um null.
+ * Ohne diese Unterscheidung schlüge er mitten im Cut Erhöhungen vor und beim
+ * Halten jede Woche ein Plus, weil das Gewicht nicht steigt.
  *
  * Der Plan ist bewusst als Liste geschrieben und nicht ausgerechnet. Wer ihn
- * ändern will — andere Zielmarke, längerer Cut, zweiter Cut —, ändert die
+ * ändern will — andere Zielmarke, längerer Cut, längeres Halten —, ändert die
  * Liste unten und sonst nichts.
  */
 
@@ -30,15 +32,18 @@ export type Gewichtspunkt = { datum: string; kg: number };
 export type Korridor = { unten: number; oben: number };
 
 export type Phase = {
-  /** Aufbau läuft bis zu einer Marke, ein Cut über eine feste Dauer. */
-  art: "aufbau" | "cut";
+  /**
+   * Aufbau läuft bis zu einer Marke, Cut und Halten über eine feste Dauer —
+   * beide hängen an Terminen (Fotos, Ball), nicht an einer Zahl auf der Waage.
+   */
+  art: "aufbau" | "cut" | "halten";
   label: string;
-  /** Angepeiltes Tempo. Positiv im Aufbau, negativ im Cut. */
+  /** Angepeiltes Tempo. Positiv im Aufbau, negativ im Cut, null beim Halten. */
   rateProWoche: number;
   korridor: Korridor;
   /** Nur beim Aufbau: bis zu welchem Gewicht die Phase läuft. */
   bisKg?: number;
-  /** Nur beim Cut: wie lange die Phase läuft. */
+  /** Nur bei Cut und Halten: wie lange die Phase läuft. */
   wochen?: number;
   /** Wofür die Phase da ist — steht so auch auf der Verlaufsseite. */
   zweck: string;
@@ -58,16 +63,21 @@ export type Phase = {
 export const START: Gewichtspunkt = { datum: "2026-08-25", kg: 82.5 };
 
 /**
- * Aufbau — Mini-Cut — Aufbau.
+ * Bulk — Cut — Halten — Bulk 2.
  *
- * Die Struktur stammt aus Jakobs Vault (01 Fitness & Training, korrigiert am
- * 19.08.2026) und ersetzt den früheren Ein-Phasen-Plan auf 97 kg.
+ * Jakobs Entscheidung vom 14.11.2026; sie ersetzt den Plan aus dem Vault vom
+ * 19.08.2026 (Aufbau auf 92,5 kg, sechs Wochen Mini-Cut, Aufbau auf 100 kg).
  *
- * Warum ein Mini-Cut in der Mitte und nicht durchgehend aufbauen: die zweite
- * Hälfte eines langen Aufbaus setzt anteilig mehr Fett an als die erste. Ein
- * kurzer Einschnitt bringt den Körperfettanteil zurück in den Bereich, in dem
- * ein Überschuss wieder überwiegend in Muskulatur geht — er kostet ein paar
- * Wochen und erspart eine lange Diät am Ende.
+ * Warum kein Mini-Cut mehr: ein Einschnitt mitten im Aufbau kostet Wochen, in
+ * denen die Bank nicht vorankommt, und am Ende stünde trotzdem ein Cut an —
+ * die Maturaball-Fotos (11.08.–11.10.2027) und der Ball (11.12.2027) verlangen,
+ * dass er dann schlank ist. Also ein langer Aufbau auf 96 kg und genau ein
+ * Cut, der so liegt, dass er vor den Fotos fertig ist.
+ *
+ * Warum danach Halten statt sofort wieder Aufbau: zwischen den letzten Fotos
+ * und dem Ball liegen zwei Monate, und vor den Fotos braucht es Luft, falls der Cut länger
+ * dauert. Das Halten deckt beides ab und endet erst nach dem Ball; dann
+ * beginnt der zweite Aufbau auf 100 kg.
  *
  * 0,375 kg/Woche ist die Mitte des Aufbau-Korridors, nicht seine Obergrenze.
  * Wer auf 0,5 zielt, liegt bei der Hälfte der Messungen darüber, und darüber
@@ -76,22 +86,35 @@ export const START: Gewichtspunkt = { datum: "2026-08-25", kg: 82.5 };
 export const GEWICHTSPLAN: readonly Phase[] = [
   {
     art: "aufbau",
-    label: "Bulk 1",
-    bisKg: 92.5,
+    label: "Bulk",
+    bisKg: 96,
     rateProWoche: 0.375,
     korridor: { unten: 0.25, oben: 0.5 },
-    zweck: "Build mass up to the point where a cut is worth it.",
+    zweck: "Build as much mass as possible before the cut for the Maturaball.",
   },
   {
     art: "cut",
-    label: "Mini-Cut",
-    wochen: 6,
+    label: "Cut",
+    wochen: 10,
     rateProWoche: -0.6,
     /* Nach unten offener als nach oben: schneller als 0,75 kg pro Woche geht
        im Defizit an die Muskulatur, langsamer als 0,4 ist die Zeit nicht
-       wert. Sechs Wochen sind die Mitte von Jakobs 4–8. */
+       wert. Zehn Wochen bei 0,6 sind 6 kg — von 96 auf 90 — und enden im
+       Juli, also mit vier Wochen Reserve vor den ersten Fotos am 11.08. */
     korridor: { unten: -0.75, oben: -0.4 },
-    zweck: "Take back the fat gained before the second bulk starts.",
+    zweck: "Get lean for the Maturaball photos.",
+  },
+  {
+    art: "halten",
+    label: "Hold",
+    wochen: 22,
+    rateProWoche: 0,
+    /* Symmetrisch um null: ±0,25 kg pro Woche ist im Rauschen der Waage,
+       alles darüber ist ein Trend, den man nach dem Cut nicht laufen lassen
+       will — nach oben nicht wegen der Fotos, nach unten nicht wegen der
+       Kraft. */
+    korridor: { unten: -0.25, oben: 0.25 },
+    zweck: "Stay lean through the photos and the ball on 11 Dec 2027.",
   },
   {
     art: "aufbau",
@@ -99,7 +122,7 @@ export const GEWICHTSPLAN: readonly Phase[] = [
     bisKg: 100,
     rateProWoche: 0.375,
     korridor: { unten: 0.25, oben: 0.5 },
-    zweck: "The road to 100 kg from the vision for December 2027.",
+    zweck: "The road to 100 kg once the ball is behind you.",
   },
 ];
 
@@ -150,8 +173,10 @@ export function phasenlauf(): Phasenlauf[] {
 
   for (const [i, phase] of GEWICHTSPLAN.entries()) {
     const wochen =
-      phase.art === "cut"
-        ? (phase.wochen ?? 0)
+      phase.art !== "aufbau"
+        ? /* Aufbau läuft bis zu einem Gewicht, jede andere Phase über ihre
+             Wochen — beim Halten bleibt das Gewicht dabei, wo es ist. */
+          (phase.wochen ?? 0)
         : /* Wie lange der Aufbau bis zur Marke braucht. Steht das Gewicht
              schon darüber, ist die Phase null Wochen lang statt negativ —
              sonst liefe die Kurve rückwärts. */
@@ -181,8 +206,8 @@ export function phasenlauf(): Phasenlauf[] {
  *
  * Wöchentlich und nicht täglich: die Linie sieht gleich aus, und die
  * Phasenknicke liegen ohnehin nicht auf Tagesgrenzen. Jede Phasengrenze
- * bekommt zusätzlich ihren eigenen Punkt, damit der Knick beim Mini-Cut
- * scharf bleibt und nicht über eine Woche verschliffen wird.
+ * bekommt zusätzlich ihren eigenen Punkt, damit die Knicke am Anfang und Ende
+ * des Cuts scharf bleiben und nicht über eine Woche verschliffen wird.
  */
 export function sollKurve(): Gewichtspunkt[] {
   const punkte: Gewichtspunkt[] = [];
@@ -253,7 +278,8 @@ export function aktuellePhase(iso: string): Phasenlauf {
  *
  * Das ist die Stelle, an der die Phasenplanung auf den Kalorien-Coach trifft:
  * anpassung() in coach.ts verglich bis hierher gegen fest verdrahtete 0,25
- * bis 0,50 und hätte im Mini-Cut jede Woche eine Erhöhung vorgeschlagen.
+ * bis 0,50 und hätte im Cut jede Woche eine Erhöhung vorgeschlagen — und beim
+ * Halten ebenso, weil ein stehendes Gewicht unter 0,25 liegt.
  */
 export function zielKorridor(iso: string): Korridor {
   return aktuellePhase(iso).phase.korridor;

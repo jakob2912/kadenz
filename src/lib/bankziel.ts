@@ -11,13 +11,38 @@
  * dieser Unterschied ist der Inhalt der Datei.
  */
 
+import { phasenlauf } from "./gewichtsplan";
 import { DELOAD_AB_TM_KG, pushTageImZyklus, TM_ANTEIL, TM_SCHRITT_KG } from "./kraft";
 
 /** Sauberes Einer-Maximum, das erreicht werden soll. */
 export const ZIEL_KG = 140;
 
-/** Bis wann. Letzter Tag des Jahres 2027. */
-export const ZIEL_DATUM = "2027-12-31";
+/**
+ * Bis wann: das Ende des Aufbaus, also der Tag, an dem der erste Cut beginnt.
+ *
+ * Bis zum 14.11.2026 stand hier der 31.12.2027. Mit dem neuen Gewichtsplan
+ * liegt dazwischen ein Cut, und im Defizit wächst keine Bank — 140 kg müssen
+ * stehen, solange noch Überschuss da ist. Aus dem Plan abgeleitet statt
+ * hingeschrieben, damit ein längerer oder kürzerer Aufbau das Bankziel
+ * mitnimmt, statt still von ihm abzuweichen.
+ *
+ * Kennt der Plan keinen Cut, gilt sein Ende.
+ */
+export const ZIEL_DATUM: string = (() => {
+  const laeufe = phasenlauf();
+  const cut = laeufe.find((l) => l.phase.art === "cut");
+  return cut ? cut.vonIso : laeufe[laeufe.length - 1].bisIso;
+})();
+
+/**
+ * Das Ziel in Worten, für jeden Satz, der es nennt: "the end of the bulk
+ * (4 May 2027)". An einer Stelle gebaut, damit Bank-Seite, Coach, Tageslage
+ * und MCP-Server dasselbe Datum im selben Format sagen.
+ */
+export function zielDatumText(): string {
+  const [jahr, monat, tag] = ZIEL_DATUM.split("-").map(Number);
+  return `the end of the bulk (${tag} ${MONATE[monat - 1]} ${jahr})`;
+}
 
 /**
  * Der Trainingsmax, der das Ziel trägt.
@@ -180,8 +205,8 @@ export function zielSatz(stand: Zielstand): string {
 
   const tempo = stand.imPlan
     ? `That's about ${monate} months — and only if not a single cycle stalls. ` +
-      `That leaves ${Math.round(stand.puffertage / 30.44)} months of buffer until the end of 2027, and you'll need it.`
-    : `That puts the goal in ${monatName(stand.fruehestensAm)} at the earliest — after the end of 2027. ` +
+      `That leaves ${Math.round(stand.puffertage / 30.44)} months of buffer until ${zielDatumText()}, and you'll need it.`
+    : `That puts the goal in ${monatName(stand.fruehestensAm)} at the earliest — after ${zielDatumText()}. ` +
       `At ${zahl(TM_SCHRITT_KG)} kg per cycle the numbers don't work out.`;
 
   return (
