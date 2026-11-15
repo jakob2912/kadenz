@@ -890,8 +890,12 @@ export function belegtePlaetze(
 }
 
 
-/** Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest. */
-export type GeplanterSatz = { kg: number; wdh: number; amrap: boolean };
+/**
+ * Ein vom Programm vorgegebener Satz — Gewicht und Sollwiederholungen stehen fest.
+ * `notiz` steht in der Satzzeile, wenn der Satz anders gemacht wird als
+ * gewohnt ("FSL", "paused"; siehe BankSatz in kraft.ts).
+ */
+export type GeplanterSatz = { kg: number; wdh: number; amrap: boolean; notiz?: string };
 
 /** Eine Übung, deren Sätze ein Programm vorgibt statt progression(). */
 export type Programmvorgabe = {
@@ -934,7 +938,9 @@ function baue(ex: ZuPlanen, last: SetLog[]): PlannedExercise {
     return {
       ...ex,
       last,
-      ziel: saetze.length > 0 ? saetze[saetze.length - 1].kg : 0,
+      /* Das schwerste Gewicht des Tages, nicht das des letzten Satzes: seit
+         den FSL-Sätzen am TM-Tag ist der letzte Satz der leichteste. */
+      ziel: saetze.length > 0 ? Math.max(...saetze.map((s) => s.kg)) : 0,
       delta: 0,
       grund: null,
       prev,

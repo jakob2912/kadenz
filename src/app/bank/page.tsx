@@ -11,11 +11,12 @@ import { behauptetesMaximum, type Trainingsmax } from "@/lib/bank";
 import {
   SINGLE_PROZENT,
   TEST_ALLE_ZYKLEN,
-  DELOAD_AB_TM_KG,
+  FSL_SAETZE,
+  FSL_WDH,
   ZUSATZ_PROZENT,
   bankZusatzPlan,
 } from "@/lib/kraft";
-import { ZIEL_DATUM, ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib/bankziel";
+import { ZIEL_KG, ZIEL_TM_KG, zielSatz, type Zielstand } from "@/lib/bankziel";
 import type { Bankcoach, Prognose } from "@/lib/bankcoach";
 import { BankTrainingsmax } from "@/components/bank-trainingsmax";
 import { ReihenChart } from "@/components/reihen-chart";
@@ -204,6 +205,7 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                   <span>
                     × {s.wdh}
                     {s.amrap && "+"}
+                    {s.notiz && <span className="ml-1.5 text-fg-faint">{s.notiz}</span>}
                     {w.test && si >= w.saetze.length - 3 && (
                       <span className="ml-1.5 text-fg-faint">Versuch {si - w.saetze.length + 4}</span>
                     )}
@@ -219,7 +221,7 @@ function Vorschau({ wochen, standTag }: { wochen: Wochenvorschau[]; standTag: st
                 Zeichen. Der AMRAP-Satz ist das Messinstrument des Programms. */}
             <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
               {w.test
-                ? "Warm up, then singles. Only take the next attempt if the previous one moved cleanly — stop at the first grinder."
+                ? "Warm up, then singles. Only take the next attempt if the previous one went up without a grinder — stop at the first grinder. Any technique counts."
                 : w.deload
                   ? "Deliberately light, no max-rep set. This week is for backing off."
                   : "The last set is for max reps — Kadenz uses it to set the next training max."}
@@ -276,7 +278,8 @@ function TmHistorie({ historie }: { historie: Trainingsmax[] }) {
 }
 
 /**
- * Der echte Bestwert: der schwerste saubere Single — oder, wenn höher, der
+ * Der echte Bestwert: der schwerste Single (jede Technik zählt, nur ausdrücklich
+ * als unsauber markierte Altsätze nicht) — oder, wenn höher, der
  * von Jakob eingetragene PR (echterPrAus() in bankuebersicht.ts). Kein
  * geschätztes Maximum.
  * Daneben, wann wieder getestet wird.
@@ -308,18 +311,18 @@ function Pr({
           </p>
           <p className="mt-1.5 text-[13px] text-fg-dim">
             {pr.quelle === "geloggt"
-              ? `Heaviest clean single, on ${kurzDatum(pr.datum)}.`
+              ? `Heaviest single, on ${kurzDatum(pr.datum)}.`
               : `Best from ${kurzDatum(pr.datum)} · entered by you. A heavier logged single replaces it.`}
           </p>
         </>
       ) : (
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
-          No clean single logged yet.
+          No single logged yet.
         </p>
       )}
 
       <p className="mt-3 text-[11px] leading-relaxed text-fg-faint">
-        Tested every {TEST_ALLE_ZYKLEN} cycles, on the TM day of the deload week.
+        Tested every {TEST_ALLE_ZYKLEN} cycles, on the TM day of the fourth week.
         {schaetzung !== null && (
           <>
             {" "}
@@ -379,10 +382,11 @@ function Ziel({ stand }: { stand: Zielstand }) {
   return (
     <Card>
       <div className="flex items-baseline justify-between gap-3">
-        <Eyebrow>Ziel · {ZIEL_KG} kg sauber</Eyebrow>
-        {/* langDatum und nicht kurzDatum: "bis Fr., 31. Dez." stand ohne
-            Jahreszahl da und las sich wie dieses Jahr. Gemeint ist Ende 2027. */}
-        <span className="text-[11px] text-fg-faint">bis {langDatum(ZIEL_DATUM)}</span>
+        <Eyebrow>Goal · {ZIEL_KG} kg single</Eyebrow>
+        {/* langDatum und nicht kurzDatum: ein Datum ohne Jahreszahl las sich
+            wie dieses Jahr. Gemeint ist das Ende des Aufbaus (ZIEL_DATUM, aus
+            dem Gewichtsplan abgeleitet). */}
+        <span className="text-[11px] text-fg-faint">bis {langDatum(stand.zielIso)}</span>
       </div>
 
       <p className="mt-2 text-[27px] font-bold leading-none tracking-[-0.03em]">
@@ -442,7 +446,9 @@ function Ablauf({ tmKg }: { tmKg: number }) {
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
             Every second push session. Three sets following the wave, the last one for
-            max reps — only that set in week 3 moves the training max.
+            max reps, then {FSL_SAETZE} × {FSL_WDH} with the first set’s weight (First Set
+            Last). The max-rep set in week 3 moves the training max: +2.5 kg, or +5 kg if
+            it shows clearly more.
           </p>
         </div>
 
@@ -452,16 +458,16 @@ function Ablauf({ tmKg }: { tmKg: number }) {
             <Tag tone="gut">+ Single</Tag>
           </div>
           <p className="mt-1.5 text-[13px] tabular-nums text-fg">
-            3 × {fuenfer.wdh} at {de(fuenfer.kg, 1)} kg
+            3 × {fuenfer.wdh} at {de(fuenfer.kg, 1)} kg paused
             <span className="text-fg-faint"> · {de(ZUSATZ_PROZENT, 1)} %</span>, then 1 ×{" "}
             {de(single.kg, 1)} kg
             <span className="text-fg-faint"> · {de(SINGLE_PROZENT, 0)} %</span>
           </p>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            The push session in between. The single is one clean, fast rep — no grinder
-            and no second one. Doesn’t count toward the training max. The day is skipped in
-            deload week — deload only exists from {DELOAD_AB_TM_KG} kg training max;
-            below that a cycle lasts three weeks.
+            The push session in between. The fives pause on the chest; the single is one
+            fast rep — no grinder and no second one. Doesn’t count toward the training max.
+            A cycle lasts three weeks; only every third cycle has a fourth week, and that one
+            is the test week — its light day is skipped.
           </p>
         </div>
 
@@ -471,8 +477,9 @@ function Ablauf({ tmKg }: { tmKg: number }) {
             <Tag tone="warnung">1RM</Tag>
           </div>
           <p className="mt-1.5 text-[13px] leading-relaxed text-fg-dim">
-            Every {TEST_ALLE_ZYKLEN} cycles the TM day of the deload week becomes a max attempt.
-            The light day before it runs without a single. Doesn’t move the training max.
+            Every {TEST_ALLE_ZYKLEN} cycles the TM day of the fourth week is a max attempt. The
+            light day before it runs without a single. The heaviest single calibrates the
+            next training max: 90 % of it, rounded down, at least +2.5 and at most +5 kg.
           </p>
         </div>
 

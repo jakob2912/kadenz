@@ -3,12 +3,13 @@ import { heuteWien } from "./datum";
 import {
   MIN_TAGE_ZWISCHEN_ANPASSUNGEN,
   kalorienAnpassung,
+  phasenwechselAnpassung,
   type Anpassung,
   type Makros,
   type WeightEntry,
 } from "./coach";
-import { zielKorridor } from "./gewichtsplan";
-import { mengeSkalieren, skalierung, type Skalierung } from "./portionen";
+import { phasenwechselSeit, zielKorridor } from "./gewichtsplan";
+import { mengenBasis, mengeSkalieren, skalierung, type Skalierung } from "./portionen";
 
 /**
  * Kadenz — Ernährung: Plan lesen, Ziel führen, Vorschläge verwalten.
@@ -100,8 +101,9 @@ export type VorschlagLage =
  * Kohlenhydratquellen auf das Verhältnis zwischen Ausgangs- und laufendem
  * Kohlenhydratziel um.
  *
- * Der Ausgangswert kommt aus der Zielhistorie (quelle "plan") und nicht aus
- * einer Konstanten. Eine Konstante wäre eine zweite Meinung darüber, zu
+ * Der Ausgangswert kommt aus der Zielhistorie (Ausgangsplan oder von Hand
+ * gesetztes Ziel, siehe mengenBasis() in portionen.ts) und nicht aus einer
+ * Konstanten. Eine Konstante wäre eine zweite Meinung darüber, zu
  * welchem Ziel die gespeicherten Mengen gehören, und sie liefe beim ersten
  * neuen Ausgangsplan auseinander.
  */
@@ -141,18 +143,21 @@ export async function ernaehrungsplanLesen(): Promise<Ernaehrungsplan> {
 }
 
 /**
- * Das Ziel, zu dem die gespeicherten Mengen gehören — der Ausgangsplan.
+ * Das Ziel, zu dem die gespeicherten Mengen gehören.
  *
- * Die älteste Zeile mit quelle "plan", nicht die jüngste: kommt eines Tages
- * ein zweiter Ausgangsplan dazu, wären die Mengen in der Datenbank so lange
- * die des ersten, bis auch sie ersetzt sind.
+ * Bis zum 15.11.2026 die älteste Zeile mit quelle "plan". Seit Jakob am
+ * 10.11.2026 die Mengen zu seinem von Hand gesetzten Ziel neu gebaut hat,
+ * gehören sie zu diesem — die Auswahl steht in mengenBasis().
  */
 async function planZiel(): Promise<{ kohlenhydrateG: number } | null> {
-  return prisma.ernaehrungsziel.findFirst({
-    where: { quelle: "plan" },
+  const zeilen = await prisma.ernaehrungsziel.findMany({
+    where: { quelle: { in: ["plan", "jakob"] } },
     orderBy: [{ gueltigAb: "asc" }, { gesetztAm: "asc" }],
-    select: { kohlenhydrateG: true },
+    select: { quelle: true, gueltigAb: true, kohlenhydrateG: true },
   });
+  return mengenBasis(
+    zeilen.map((z) => ({ ...z, gueltigAb: isoTag(z.gueltigAb) }))
+  );
 }
 
 /** Das derzeit gültige Ziel — die jüngste Zeile der Historie. */
@@ -231,6 +236,39 @@ export async function vorschlagLage(opts: {
     orderBy: { erstelltAm: "desc" },
   });
 
+  /* Phasenwechsel zuerst und an der Zehn-Tage-Sperre vorbei: das Ziel stammt
+     aus einer früheren Phase, und der Plan will jetzt etwas anderes. Nur
+     solange seit Beginn der neuen Phase noch kein Vorschlag entstanden ist —
+     danach (angenommen, abgelehnt oder offen) übernehmen die gewohnten
+     Regeln, sonst käme der Wechselvorschlag nach einem Nein bei jedem
+     Seitenaufruf wieder. */
+  const wechsel = phasenwechselSeit(ziel.gueltigAb, heute);
+  if (wechsel && (!neuester || isoTag(neuester.erstelltAm) < wechsel.nach.vonIso)) {
+    const letzte = await letzteAnpassungTag();
+    const anpassung = phasenwechselAnpassung({
+      aktuell: {
+        kcal: ziel.kcal,
+        kohlenhydrateG: ziel.kohlenhydrateG,
+        eiweissG: ziel.eiweissG,
+        fettG: ziel.fettG,
+      },
+      von: { label: wechsel.von.phase.label, korridor: wechsel.von.phase.korridor },
+      nach: { label: wechsel.nach.phase.label, korridor: wechsel.nach.phase.korridor },
+      gewicht: letzte ? opts.gewicht.filter((e) => e.date >= letzte) : opts.gewicht,
+      koerpergewichtKg: opts.koerpergewichtKg,
+    });
+
+    if (anpassung) {
+      if (neuester?.status === OFFEN) {
+        await prisma.kalorienvorschlag.updateMany({
+          where: { id: neuester.id, status: OFFEN },
+          data: { status: "ersetzt", entschiedenAm: new Date(), offenSchluessel: null },
+        });
+      }
+      return { art: "vorschlag", vorschlag: alsVorschlag(await anlegen(ziel, anpassung)) };
+    }
+  }
+
   if (neuester) {
     const tage = tageZwischen(isoTag(neuester.erstelltAm), heute);
 
@@ -260,8 +298,8 @@ export async function vorschlagLage(opts: {
     heute,
     koerpergewichtKg: opts.koerpergewichtKg,
     /* Der Korridor kommt aus der Phase, in der heute liegt. Ohne das rechnete
-       der Coach auch mitten im Mini-Cut gegen 0,25 bis 0,50 kg Zunahme und
-       schlüge dort Erhöhungen vor — genau gegen den Plan. */
+       der Coach auch mitten im Cut und beim Halten gegen 0,25 bis 0,50 kg
+       Zunahme und schlüge dort Erhöhungen vor — genau gegen den Plan. */
     korridor: zielKorridor(heute),
   });
 

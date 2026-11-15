@@ -84,21 +84,24 @@ Referenzgewichte vor. Beides läuft in einer Transaktion.
 
 | Werkzeug | Liefert |
 |---|---|
-| `bank_plan_heute` | Zyklus, Programmwoche, Trainingsmax und die drei Sätze mit Gewicht |
+| `bank_plan_heute` | Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht (am TM-Tag drei nach der Welle plus 2 × 5 First Set Last) |
 | `bank_trainingsmax` | Der aktuelle Trainingsmax samt Historie — jeder Zyklus mit Begründung |
-| `bank_coach` | Läuft, steht oder fällt das Bankdrücken (56 Tage, nur schwere Tage), ein Vorschlag nach 5/3/1-Regeln und die Hochrechnung auf 140 kg samt nötigem Tempo bis Ende 2027. Ändert nichts |
+| `bank_coach` | Läuft, steht oder fällt das Bankdrücken (56 Tage, nur schwere Tage), ein Vorschlag nach 5/3/1-Regeln und die Hochrechnung auf 140 kg samt nötigem Tempo bis zum Ende des Aufbaus (Beginn des Cuts laut Gewichtsplan, derzeit 15.04.2027). Ändert nichts |
 | `bank_tm_setzen` | Setzt den Trainingsmax; zum Einstieg nötig, danach nur noch als Korrektur |
 | `bank_pr_setzen` | Trägt den echten PR für die Karte „Echter PR“ ein (nur Anzeige, keine Wirkung auf Trainingsmax oder Historie); ein schwererer geloggter Single löst ihn ab |
 
-Bank-Tag ist **jede zweite Push-Einheit**, also alle sechs Tage; ein Zyklus
-dauert damit 24 Tage. Gezählt wird ab dem Tag, an dem der Trainingsmax gesetzt
+Bank-Tag ist **jede zweite Push-Einheit**; mit zwei Push-Einheiten je Woche
+dauert ein Zyklus 21 Tage. Eine vierte Woche hat seit dem 15.11.2026 nur der
+Testzyklus (jeder dritte), dort steht am TM-Tag der Test — 28 Tage. Gezählt wird ab dem Tag, an dem der Trainingsmax gesetzt
 wurde, nicht ab dem Rotationsanker — sonst begänne die erste Bankeinheit
 mitten im Zyklus.
 
 Den ersten Trainingsmax schätzt Kadenz **nicht**: Langhantel-Bankdrücken hat in
 dieser App keine Historie, und ein geratener Startwert wäre die Grundlage
 sämtlicher Prozente des Programms gewesen. Danach schreibt Kadenz ihn nach
-jedem Zyklus aus dem AMRAP-Satz selbst fort.
+jedem Zyklus aus dem AMRAP-Satz selbst fort: +2,5 kg, +5 kg bei einem starken
+AMRAP-Satz, und nach einem Testzyklus geeicht am schwersten Single des Tests
+(90 % davon abgerundet, höchstens +5 kg).
 
 ## Einrichtung in Claude Desktop
 

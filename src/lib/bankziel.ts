@@ -11,13 +11,49 @@
  * dieser Unterschied ist der Inhalt der Datei.
  */
 
-import { DELOAD_AB_TM_KG, pushTageImZyklus, TM_ANTEIL, TM_SCHRITT_KG } from "./kraft";
+import { bulkEndeIso } from "./gewichtsplan";
+import {
+  pushTageImZyklus,
+  TEST_ALLE_ZYKLEN,
+  TM_ANTEIL,
+  TM_SCHRITT_GROSS_KG,
+  TM_SCHRITT_KG,
+} from "./kraft";
 
-/** Sauberes Einer-Maximum, das erreicht werden soll. */
+/**
+ * Das Einer-Maximum, das erreicht werden soll — mit jeder Technik.
+ *
+ * Bis zum 15.11.2026 hieß das Ziel "140 kg sauber". Seit der 110-kg-PR vom
+ * 26.10.2026 mit gehobener Hüfte zählt, zählt Ego-Bank: das Ziel ist einfach
+ * der schwerste Single, egal wie er hochgeht.
+ */
 export const ZIEL_KG = 140;
 
-/** Bis wann. Letzter Tag des Jahres 2027. */
-export const ZIEL_DATUM = "2027-12-31";
+/**
+ * Bis wann: das Ende des Aufbaus, also der Tag, an dem der erste Cut beginnt.
+ *
+ * Bis zum 14.11.2026 stand hier der 31.12.2027. Mit dem neuen Gewichtsplan
+ * liegt dazwischen ein Cut, und im Defizit wächst keine Bank — 140 kg müssen
+ * stehen, solange noch Überschuss da ist. Aus dem Plan abgeleitet statt
+ * hingeschrieben, damit ein längerer oder kürzerer Aufbau das Bankziel
+ * mitnimmt, statt still von ihm abzuweichen.
+ *
+ * Kennt der Plan keinen Cut, gilt sein Ende.
+ */
+export const ZIEL_DATUM: string = bulkEndeIso();
+
+/**
+ * Das Ziel in Worten, für jeden Satz, der es nennt: "the end of the bulk
+ * (15 April 2027)". An einer Stelle gebaut, damit Bank-Seite, Coach,
+ * Tageslage und MCP-Server dasselbe Datum im selben Format sagen.
+ *
+ * Das Datum als Parameter, damit ein Text, der mit einem anderen Zieldatum
+ * gerechnet wurde (in Tests), auch dieses Datum nennt.
+ */
+export function zielDatumText(zielIso: string = ZIEL_DATUM): string {
+  const [jahr, monat, tag] = zielIso.split("-").map(Number);
+  return `the end of the bulk (${tag} ${MONATE[monat - 1]} ${jahr})`;
+}
 
 /**
  * Der Trainingsmax, der das Ziel trägt.
@@ -39,11 +75,12 @@ export const ZIEL_TM_KG =
 /**
  * Wie lange ein Zyklus dauert.
  *
- * Drei oder vier Programmwochen (ohne bzw. mit Deload, siehe wochenImZyklus()
- * in kraft.ts), und eine Programmwoche ist bei Jakob jede zweite
- * Push-Einheit. Seit dem Wochenplan (rotationFor() in plan.ts) kommt Push
- * zweimal pro Woche, also sieben Tage je Programmwoche — 21 Tage je Zyklus
- * ohne Deload, 28 mit.
+ * Drei Programmwochen, im Testzyklus vier (siehe wochenImZyklus() in
+ * kraft.ts), und eine Programmwoche ist bei Jakob jede zweite Push-Einheit.
+ * Seit dem Wochenplan (rotationFor() in plan.ts) kommt Push zweimal pro
+ * Woche, also sieben Tage je Programmwoche — 21 Tage je Zyklus, 28 im
+ * Testzyklus. Gerechnet wird nach der Regel ab dem 15.11.2026; ein laufender
+ * Zyklus, der vorher angefangen hat, kann eine Woche länger sein.
  *
  * Abgeleitet und nicht hingeschrieben: ändert sich der Kalender, ändert sich
  * diese Zahl mit, und die Projektion bleibt richtig.
@@ -76,6 +113,8 @@ export type Zielstand = {
    * Ausdrücklich die Untergrenze und nicht die Erwartung.
    */
   fruehestensAm: string;
+  /** Das Zieldatum, gegen das gerechnet wurde. */
+  zielIso: string;
   /** Liegt dieser Tag noch vor dem Zieldatum? */
   imPlan: boolean;
   /** Tage zwischen dem frühestmöglichen Tag und dem Zieldatum. */
@@ -103,10 +142,10 @@ function plusTage(iso: string, tage: number): string {
  *
  *   - Der Trainingsmax bewegt sich überhaupt nur am Ende eines Zyklus, also
  *     alle 21 bis 28 Tage, und dann um 2,5 kg. Dazwischen steht er still, während die
- *     Tagesgewichte zwischen 40 und 95 Prozent auf und ab gehen. Eine gerade
+ *     Tagesgewichte zwischen 65 und 95 Prozent auf und ab gehen. Eine gerade
  *     Linie durch diese Welle beschreibt keinen einzigen echten Tag.
- *   - Ab 100 kg Trainingsmax ist die vierte Woche jedes Zyklus ein Deload.
- *     Dass es dort rückwärts geht, ist keine Stagnation, sondern ihr Zweck.
+ *   - Jeder dritte Zyklus hat eine vierte Woche für den Test und dauert
+ *     damit eine Woche länger.
  *
  * Was hier herauskommt, ist deshalb eine echte Treppe, und zwar mit ZWEI
  * Punkten je Zyklus: einer am Anfang, einer am letzten Tag desselben Zyklus,
@@ -116,13 +155,23 @@ function plusTage(iso: string, tage: number): string {
  * exakt die Gerade, die hier nicht gemeint ist. Die Stufen müssen im Bild
  * stehen, nicht nur im Text darunter.
  *
- * Und es ist ausdrücklich die schnellstmögliche Treppe — sie unterstellt, dass
- * jeder AMRAP-Satz sein Soll trägt und kein Zyklus stehen bleibt. Das ist bei
+ * Und es ist die Treppe des regulären Schritts — sie unterstellt, dass jeder
+ * AMRAP-Satz sein Soll trägt und kein Zyklus stehen bleibt. Schneller geht es
+ * seit dem 15.11.2026 nur mit dem großen Schritt (TM_SCHRITT_GROSS_KG) nach
+ * einem starken AMRAP-Satz oder einem guten Test; damit zu rechnen hieße,
+ * jeden Zyklus als Ausnahme einzuplanen. Der Satz darunter nennt ihn. Das ist bei
  * 5/3/1 nicht die Erwartung, sondern der Bestfall: naechsterTm() setzt den
  * Trainingsmax planmäßig zurück, wenn der AMRAP-Satz das Soll verfehlt. Die
  * Kurve ist damit eine Untergrenze für den Zeitbedarf, keine Vorhersage.
  */
-export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zielstand {
+export function zielProjektion(
+  tmKg: number,
+  zyklus: number,
+  abIso: string,
+  /* Standard ist das Ende des Aufbaus laut Plan. Tests geben ein festes
+     Datum mit, damit sie nicht jedes Mal brechen, wenn sich der Plan ändert. */
+  zielIso: string = ZIEL_DATUM
+): Zielstand {
   const fehltTmKg = Math.max(0, ZIEL_TM_KG - tmKg);
   const zyklenNoetig = Math.ceil(fehltTmKg / TM_SCHRITT_KG);
 
@@ -154,8 +203,9 @@ export function zielProjektion(tmKg: number, zyklus: number, abIso: string): Zie
     fehltTmKg,
     zyklenNoetig,
     fruehestensAm,
-    imPlan: fruehestensAm <= ZIEL_DATUM,
-    puffertage: tageZwischen(fruehestensAm, ZIEL_DATUM),
+    zielIso,
+    imPlan: fruehestensAm <= zielIso,
+    puffertage: tageZwischen(fruehestensAm, zielIso),
     kurve,
   };
 }
@@ -172,7 +222,7 @@ export function zielSatz(stand: Zielstand): string {
   if (stand.fehltTmKg === 0) {
     return (
       `The training max is at ${zahl(stand.tmKg)} kg and so supports the ` +
-      `${ZIEL_KG} kg. From here all that counts is lifting it cleanly once.`
+      `${ZIEL_KG} kg. From here all that counts is lifting it once.`
     );
   }
 
@@ -180,15 +230,17 @@ export function zielSatz(stand: Zielstand): string {
 
   const tempo = stand.imPlan
     ? `That's about ${monate} months — and only if not a single cycle stalls. ` +
-      `That leaves ${Math.round(stand.puffertage / 30.44)} months of buffer until the end of 2027, and you'll need it.`
-    : `That puts the goal in ${monatName(stand.fruehestensAm)} at the earliest — after the end of 2027. ` +
-      `At ${zahl(TM_SCHRITT_KG)} kg per cycle the numbers don't work out.`;
+      `That leaves ${Math.round(stand.puffertage / 30.44)} months of buffer until ${zielDatumText(stand.zielIso)}, and you'll need it.`
+    : `That puts the goal in ${monatName(stand.fruehestensAm)} at the earliest — after ${zielDatumText(stand.zielIso)}. ` +
+      `At ${zahl(TM_SCHRITT_KG)} kg per cycle the numbers don't work out — only cycles that ` +
+      `earn the ${zahl(TM_SCHRITT_GROSS_KG)} kg step can close the gap.`;
 
   return (
-    `A clean ${ZIEL_KG} kg needs a training max of ${zahl(ZIEL_TM_KG)} kg — ` +
+    `A ${ZIEL_KG} kg single needs a training max of ${zahl(ZIEL_TM_KG)} kg — ` +
     `${zahl(stand.fehltTmKg)} kg more than today. 5/3/1 doesn't add that evenly ` +
-    `but ${zahl(TM_SCHRITT_KG)} kg at the end of each cycle; in between the ` +
-    `training max holds still, and from ${zahl(DELOAD_AB_TM_KG)} kg the fourth week deliberately backs off. ` +
+    `but ${zahl(TM_SCHRITT_KG)} kg at the end of each cycle (${zahl(TM_SCHRITT_GROSS_KG)} kg after a ` +
+    `strong AMRAP set or test); in between the training max holds still, and every ` +
+    `${TEST_ALLE_ZYKLEN}rd cycle runs a week longer for the test. ` +
     `${stand.zyklenNoetig} cycles of 21 to 28 days. ${tempo}`
   );
 }

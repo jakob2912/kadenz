@@ -79,14 +79,15 @@ export type Wochenvorschau = {
   test: boolean;
 };
 
-/** Ein sauber gehobener Single. */
+/** Ein gehobener Single — jede Technik zählt (Ego-Bank, seit 15.11.2026). */
 export type EchterPr = {
   kg: number;
   datum: string;
   /**
-   * "geloggt": der schwerste saubere Single aus SetLog.
+   * "geloggt": der schwerste Single aus SetLog, ohne ausdrücklich als
+   * unsauber markierte Altsätze.
    * "eingetragen": von Jakob genannt (Einstellung bank_pr) — ein Bestwert aus
-   * der Zeit vor den sauberen Singles in Kadenz, ohne Satz dahinter.
+   * der Zeit vor den geloggten Singles in Kadenz, ohne Satz dahinter.
    */
   quelle: "geloggt" | "eingetragen";
 };
@@ -152,7 +153,7 @@ export type Bankuebersicht = {
   vorschau: Wochenvorschau[];
   einheiten: Bankeinheit[];
   ziel: Zielstand | null;
-  /** Schwerster sauberer Single im Fenster — ein gehobenes Gewicht, keine Formel. */
+  /** Schwerster Single im Fenster — ein gehobenes Gewicht, keine Formel. */
   pr: EchterPr | null;
   /** Kalendertag des nächsten Testtags. */
   naechsterTest: string | null;
@@ -321,6 +322,7 @@ export async function bankuebersicht(): Promise<Bankuebersicht> {
       pushIndex: pushIndexAbDatum(tm.gueltigAb, wahlen),
       zyklus: tm.zyklus,
       tmKg: tm.tmKg,
+      abIso: tm.gueltigAb,
     };
 
     vorschau = vorschauAb(naechster.pushIndex, anker, tm.tmKg, schaetzung, tagVon);

@@ -13,7 +13,10 @@ import {
   rangliste,
   schaetzungAus,
   testPlan,
+  testPushIndex,
+  TM_SCHRITT_GROSS_KG,
   vorTest,
+  zyklusAnfang,
   type GeloggterSatz,
 } from "../kraft";
 import { datumFuerPushIndex } from "../plan";
@@ -165,13 +168,48 @@ describe("rangliste", () => {
 });
 
 describe("bankPlan", () => {
-  it("liefert die Sollprozente, gerundet auf 2,5 kg", () => {
+  it("liefert die Sollprozente, gerundet auf 2,5 kg, und danach zwei FSL-Sätze", () => {
     expect(bankPlan(100, 1)).toEqual([
       { prozent: 65, wdh: 5, amrap: false, kg: 65 },
       { prozent: 75, wdh: 5, amrap: false, kg: 75 },
       { prozent: 85, wdh: 5, amrap: true, kg: 85 },
+      { prozent: 65, wdh: 5, amrap: false, kg: 65, notiz: "FSL" },
+      { prozent: 65, wdh: 5, amrap: false, kg: 65, notiz: "FSL" },
     ]);
-    expect(bankPlan(90, 1).map((s) => s.kg)).toEqual([57.5, 67.5, 77.5]);
+    expect(bankPlan(90, 1).map((s) => s.kg)).toEqual([57.5, 67.5, 77.5, 57.5, 57.5]);
+  });
+
+  /* First Set Last: das Gewicht des ersten Satzes der jeweiligen Woche, also
+     70 % in Woche 2 und 75 % in Woche 3 — immer fünf Wiederholungen, auch
+     wenn die Welle in dieser Woche Dreier oder einen Single verlangt. */
+  it("nimmt für FSL das Gewicht des ersten Satzes jeder Woche", () => {
+    for (const woche of [1, 2, 3] as const) {
+      const plan = bankPlan(100, woche);
+      expect(plan).toHaveLength(5);
+      const fsl = plan.filter((s) => s.notiz === "FSL");
+      expect(fsl).toHaveLength(2);
+      for (const satz of fsl) {
+        expect(satz.kg).toBe(plan[0].kg);
+        expect(satz.wdh).toBe(5);
+        expect(satz.amrap).toBe(false);
+      }
+    }
+    expect(bankPlan(100, 3).filter((s) => s.notiz === "FSL").map((s) => s.kg)).toEqual([75, 75]);
+  });
+
+  it("lässt die FSL-Sätze in der Deload-Woche weg", () => {
+    expect(bankPlan(100, 4)).toHaveLength(3);
+    expect(bankPlan(100, 4).some((s) => s.notiz === "FSL")).toBe(false);
+  });
+
+  /* Der AMRAP-Satz bleibt der schwerste Satz des Tages — amrapSatzVon() in
+     bank.ts sucht ihn über das Gewicht. */
+  it("bleibt mit FSL beim AMRAP-Satz als schwerstem Satz", () => {
+    for (const woche of [1, 2, 3] as const) {
+      const plan = bankPlan(100, woche);
+      const amrap = plan.find((s) => s.amrap)!;
+      expect(Math.max(...plan.map((s) => s.kg))).toBe(amrap.kg);
+    }
   });
 
   it("hat in der Deload-Woche keinen AMRAP-Satz", () => {
@@ -182,14 +220,18 @@ describe("bankPlan", () => {
 });
 
 describe("bankZusatzPlan", () => {
-  it("gibt drei Fünfer bei 72,5 % und einen Single bei 90 %", () => {
+  it("gibt drei pausierte Fünfer bei 72,5 % und einen Single bei 90 %", () => {
     // 72,5 % von 90 sind 65,25 kg, 90 % sind 81 kg — auf 2,5 gerundet.
     expect(bankZusatzPlan(90)).toEqual([
-      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
-      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
-      { prozent: 72.5, wdh: 5, amrap: false, kg: 65 },
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65, notiz: "paused" },
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65, notiz: "paused" },
+      { prozent: 72.5, wdh: 5, amrap: false, kg: 65, notiz: "paused" },
       { prozent: 90, wdh: 1, amrap: false, kg: 80 },
     ]);
+  });
+
+  it("pausiert die Fünfer auch vor dem Test, ohne Single", () => {
+    expect(bankZusatzPlan(95, false).every((s) => s.notiz === "paused")).toBe(true);
   });
 
   it("rechnet Jakobs aktuellen Trainingsmax", () => {
@@ -222,27 +264,40 @@ describe("bankZusatzPlan", () => {
 
 describe("Testtag", () => {
   const anker = { pushIndex: 8, zyklus: 2, tmKg: 100 };
-  // Zyklus n beginnt bei Push-Index 8 + 8·(n − 2); Woche 4 liegt 6 Push-Tage später.
-  const woche4 = (zyklus: number) => 8 + 8 * (zyklus - 2) + 6;
+  /* Seit dem 15.11.2026 haben nur Testzyklen eine vierte Woche: Zyklus 2 und
+     3 je sechs Push-Tage, Zyklus 4 acht, 5 und 6 je sechs. Woche 4 liegt
+     sechs Push-Tage nach dem Anfang des Zyklus. */
+  const woche4 = (zyklus: number) => zyklusAnfang(anker, zyklus) + 6;
 
-  it("liegt in jedem dritten Zyklus am TM-Tag der Deload-Woche", () => {
+  it("liegt in jedem dritten Zyklus am TM-Tag der vierten Woche", () => {
     expect([2, 3, 4, 5, 6, 7, 10, 13].filter(istTestZyklus)).toEqual([4, 7, 10, 13]);
+    expect(woche4(4)).toBe(26);
+    expect(woche4(7)).toBe(26 + 2 + 6 + 6 + 6);
     expect(bankPosition(woche4(4), anker)).toMatchObject({ art: "test", zyklus: 4, woche: 4 });
     expect(bankPosition(woche4(7), anker)).toMatchObject({ art: "test", zyklus: 7, woche: 4 });
-    expect(bankPosition(woche4(3), anker)).toMatchObject({ art: "tm", zyklus: 3, woche: 4 });
-    expect(bankPosition(woche4(5), anker).art).toBe("tm");
+    expect(testPushIndex(zyklusAnfang(anker, 4))).toBe(woche4(4));
   });
 
-  it("fällt für Jakobs Kalender auf Sa, 28.11.2026", () => {
-    expect(datumFuerPushIndex(woche4(4))).toBe("2026-11-28");
-    expect(datumFuerPushIndex(woche4(7))).toBe("2027-02-20");
+  it("gibt Zyklen ohne Test keine vierte Woche, auch ab 100 kg", () => {
+    // Sechs Push-Tage nach dem Anfang von Zyklus 3 beginnt schon Zyklus 4.
+    expect(bankPosition(zyklusAnfang(anker, 3) + 6, anker)).toMatchObject({
+      art: "tm",
+      zyklus: 4,
+      woche: 1,
+    });
+    expect(bankPosition(zyklusAnfang(anker, 5), anker).wochen).toBe(3);
+  });
+
+  it("fällt für diesen Anker auf Sa, 14.11.2026 und Sa, 23.01.2027", () => {
+    expect(datumFuerPushIndex(woche4(4))).toBe("2026-11-14");
+    expect(datumFuerPushIndex(woche4(7))).toBe("2027-01-23");
   });
 
   it("nimmt dem leichten Tag davor den Single", () => {
     const davor = bankPosition(woche4(4) - 1, anker);
     expect(davor).toMatchObject({ art: "zusatz", zyklus: 4, woche: 3 });
     expect(vorTest(davor)).toBe(true);
-    expect(vorTest(bankPosition(woche4(3) - 1, anker))).toBe(false);
+    expect(vorTest(bankPosition(zyklusAnfang(anker, 3) + 5, anker))).toBe(false);
     expect(bankZusatzPlan(95, false)).toHaveLength(3);
   });
 
@@ -275,8 +330,16 @@ describe("bankPosition", () => {
   /* Der Anker ist seit dem Deload-Skip kein nackter Index mehr, sondern
      Push-Tag PLUS Zyklusnummer: gezählt wird ab dem Anfang des laufenden
      Zyklus, nicht ab dem Programmstart. Für diese Fälle bleibt es dasselbe —
-     Zyklus 1 fängt beim Programmstart an. */
-  const ab = (pushIndex: number, zyklus = 1) => ({ pushIndex, zyklus, tmKg: 100 });
+     Zyklus 1 fängt beim Programmstart an.
+
+     Mit Startdatum vor dem 16.11.2026 und 100 kg: Zyklus 1 rechnet nach der
+     alten Regel und hat seine Deload-Woche. */
+  const ab = (pushIndex: number, zyklus = 1) => ({
+    pushIndex,
+    zyklus,
+    tmKg: 100,
+    abIso: "2026-08-20",
+  });
 
   it("zählt ab dem Anfang des Zyklus, nicht ab dem Rotationsanker", () => {
     /* Sonst wäre die allererste Bankeinheit je nach Startdatum mitten im
@@ -349,5 +412,53 @@ describe("naechsterTm", () => {
        gegen einen Anspruch von 100 kg und lösten einen Reset aus, obwohl der
        Satz gut lief. */
     expect(naechsterTm(90, { kg: 85.5, reps: 3 }, soll).richtung).not.toBe("zurueck");
+  });
+  /* Großer Schritt: 90 % des geschätzten Maximums mindestens TM + 5.
+     85,5 × 8 ergibt 108,3 kg, 90 % davon 97,5 ≥ 95 → +5. 85,5 × 7 ergibt
+     105,45 kg, 90 % davon 94,9 < 95 → weiter +2,5. */
+  it("hebt um 5 kg, wenn der AMRAP-Satz deutlich mehr trägt", () => {
+    const e = naechsterTm(90, { kg: 85.5, reps: 8 }, soll);
+    expect(e).toMatchObject({ richtung: "hoch", tmNeu: 95 });
+    expect(e.begruendung).toContain("big step");
+    expect(naechsterTm(90, { kg: 85.5, reps: 7 }, soll).tmNeu).toBe(92.5);
+    expect(TM_SCHRITT_GROSS_KG).toBe(5);
+  });
+
+  describe("Eichung durch den Testsingle", () => {
+    const knapp = { kg: 85.5, reps: 3 };
+
+    it("hebt mindestens um 2,5 kg, auch wenn der Single wenig hergibt", () => {
+      // 90 % von 100 sind 90 — unter TM + 2,5.
+      expect(naechsterTm(90, knapp, soll, 100).tmNeu).toBe(92.5);
+    });
+
+    it("folgt dem Single bis höchstens TM + 5", () => {
+      // 90 % von 108 sind 97,2 → abgerundet 95 = TM + 5.
+      expect(naechsterTm(90, knapp, soll, 108).tmNeu).toBe(95);
+      // 90 % von 115 sind 103,5 → 102,5, gedeckelt auf 95.
+      const e = naechsterTm(90, knapp, soll, 115);
+      expect(e.tmNeu).toBe(95);
+      expect(e.begruendung).toContain("capped");
+    });
+
+    it("rundet ab, nicht kaufmännisch", () => {
+      // 90 % von 116 sind 104,4: abgerundet 102,5 (gerundet wären es 105).
+      const e = naechsterTm(100, { kg: 95, reps: 3 }, soll, 116);
+      expect(e.tmNeu).toBe(102.5);
+      expect(e.begruendung).toContain("Test single 116.0 kg: 90 % rounded down is 102.5 kg");
+    });
+
+    it("übersteuert den verfehlten AMRAP-Satz nicht", () => {
+      expect(naechsterTm(90, { kg: 85.5, reps: 0 }, soll, 130)).toMatchObject({
+        richtung: "bleibt",
+        tmNeu: 90,
+      });
+      expect(naechsterTm(90, { kg: 85.5, reps: 1 }, soll, 130).richtung).toBe("zurueck");
+    });
+
+    it("rechnet ohne Testsingle wie bisher", () => {
+      expect(naechsterTm(90, knapp, soll, null).tmNeu).toBe(92.5);
+      expect(naechsterTm(90, knapp, soll).tmNeu).toBe(92.5);
+    });
   });
 });

@@ -841,6 +841,7 @@ export function TrainingLogger({
                     zielKg={zielKg}
                     zielReps={satz.wdh}
                     amrap={satz.amrap}
+                    notiz={satz.notiz}
                     vorgegeben={programm}
                     logged={logged[key]}
                     hervorgehoben={zuletzt === key}
@@ -991,6 +992,7 @@ function SatzZeile({
   zielKg,
   zielReps,
   amrap = false,
+  notiz,
   vorgegeben = false,
   logged,
   hervorgehoben,
@@ -1022,6 +1024,8 @@ function SatzZeile({
   zielReps: number;
   /** Satz auf Maximalwiederholungen: zielReps ist die Untergrenze, nicht das Ziel. */
   amrap?: boolean;
+  /** Wie der Satz gemacht wird, wenn nicht wie gewohnt — "FSL", "paused". */
+  notiz?: string;
   /**
    * Ein Programm gibt den Satz vor — beim 5/3/1 rechnet sich das Gewicht aus
    * dem Trainingsmax und ist für jeden Satz ein anderes. Dann stehen die Werte
@@ -1113,7 +1117,15 @@ function SatzZeile({
       className={`grid grid-cols-[26px_58px_1fr_1fr_44px] items-center gap-2 rounded-sm py-1
                   transition-colors duration-500 ${hervorgehoben ? "bg-ready/10" : ""}`}
     >
-      <span className="text-center text-xs font-semibold text-fg-faint">{nummer}</span>
+      {/* Die Notiz unter der Satznummer statt in einer eigenen Spalte: sie
+          betrifft nur das Bankdrücken, und eine Spalte dafür kostete jede
+          andere Übung Breite. */}
+      <span className="flex flex-col items-center text-center text-xs font-semibold leading-none text-fg-faint">
+        {nummer}
+        {notiz && (
+          <span className="mt-0.5 whitespace-nowrap text-[8px] font-semibold text-accent">{notiz}</span>
+        )}
+      </span>
       <span className="whitespace-nowrap rounded-sm bg-surface-2 py-1.5 text-center text-xs text-fg-faint">
         {/* Beim Bankdrücken im ersten Zyklus gibt es noch keine letzte
             Ausführung. Ein Gedankenstrich sagt das; ein leeres Feld sähe

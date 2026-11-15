@@ -94,3 +94,37 @@ export function mengeSkalieren(zutat: ZutatMengen, s: Skalierung | null): number
   const skaliert = Math.round((zutat.mengeLautPlan * s.faktor) / SCHRITT_G) * SCHRITT_G;
   return Math.max(MIN_G, skaliert);
 }
+
+/** Eine Zeile der Zielhistorie, soweit die Mengenbasis sie braucht. */
+export type BasisKandidat = {
+  quelle: string;
+  /** ISO-Kalendertag. */
+  gueltigAb: string;
+  kohlenhydrateG: number;
+};
+
+/**
+ * Zu welchem Ziel die gespeicherten Mengen gehören.
+ *
+ * Bis zum 15.11.2026 war das immer der Ausgangsplan (quelle "plan", 560 g
+ * Kohlenhydrate). Am 10.11.2026 hat Jakob das Ziel aber von Hand auf 3700 kcal
+ * mit 565 g gesetzt und die Mengen dazu neu gebaut (Toast, Erdnussbutter und
+ * Marmelade im letzten Meal, weniger Haferflocken). Danach rechnete die
+ * Anzeige diese neuen Mengen noch einmal mit 565 / 560 = 1,009 hoch — die
+ * Mengen trugen die 565 g schon, und der Faktor kam ein zweites Mal dazu. Bei
+ * 5-g-Rundung sah man das noch nicht; beim ersten großen Vorschlag (Cut)
+ * hätte jede Menge um knapp 1 % falsch gelegen.
+ *
+ * Deshalb gilt als Basis das jüngste Ziel, das nicht der Coach gesetzt hat:
+ * ein Ausgangsplan oder ein von Hand gesetztes Ziel. Von Hand gesetzt wird
+ * ein Ziel nur zusammen mit neuen Mengen — der Coach dagegen bewegt nur die
+ * Zahl, und genau diese Differenz soll die Skalierung tragen.
+ */
+export function mengenBasis(historie: readonly BasisKandidat[]): BasisKandidat | null {
+  let basis: BasisKandidat | null = null;
+  for (const z of historie) {
+    if (z.quelle !== "plan" && z.quelle !== "jakob") continue;
+    if (basis === null || z.gueltigAb >= basis.gueltigAb) basis = z;
+  }
+  return basis;
+}
