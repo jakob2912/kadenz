@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { lageHeute } from "../heute-lage";
+import { zielDatumText } from "../bankziel";
 
 const bankGut = { lage: "laeuft" as const, vorschlag: "Keep going.", zielImPlan: true };
 
@@ -49,6 +50,12 @@ describe("lageHeute", () => {
       bank: { lage: "unklar", vorschlag: "Too few heavy days.", zielImPlan: false },
     });
     expect(l.aufKurs).toBe(false);
-    expect(l.schritte).toEqual(["Bench: 140 kg by the end of the bulk (4 May 2027) is out of reach at the current pace."]);
+    expect(l.schritte).toEqual([`Bench: 140 kg by ${zielDatumText()} is out of reach at the current pace.`]);
+  });
+});
+
+describe("zielDatumText", () => {
+  it("nennt das Ende des Aufbaus mit ausgeschriebenem Datum", () => {
+    expect(zielDatumText("2027-04-15")).toBe("the end of the bulk (15 April 2027)");
   });
 });

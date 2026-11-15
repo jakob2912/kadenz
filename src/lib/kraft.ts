@@ -424,6 +424,13 @@ export type BankSatz = {
   wdh: number;
   amrap: boolean;
   kg: number;
+  /**
+   * Wie der Satz gemacht wird, wenn es nicht der Normalfall ist: "FSL" für
+   * die Zusatzsätze mit dem Gewicht des ersten Satzes, "paused" für die
+   * Fünfer am leichten Tag mit Pause auf der Brust. Englisch, weil es so in
+   * der Oberfläche steht.
+   */
+  notiz?: "FSL" | "paused";
 };
 
 const WOCHEN: Record<BankWoche, { prozent: number; wdh: number; amrap: boolean }[]> = {
@@ -456,11 +463,48 @@ export const TM_ANTEIL = 0.9;
 /** Zuwachs pro abgeschlossenem Zyklus, wenn der AMRAP-Satz ihn gedeckt hat. */
 export const TM_SCHRITT_KG = 2.5;
 
+/**
+ * Der große Schritt: wenn der AMRAP-Satz deutlich mehr trägt als den
+ * nächsten kleinen Schritt.
+ *
+ * Seit dem 15.11.2026. Mit 2,5 kg je Zyklus kam der Trainingsmax dem, was
+ * Jakob tatsächlich bewegt, nicht hinterher — der AMRAP-Satz zeigte Zyklus für
+ * Zyklus Reserve, und das Programm rechnete mit Gewichten, die zu leicht
+ * waren. Die Schwelle (90 % des geschätzten Maximums mindestens TM + 5) heißt:
+ * auch nach dem großen Schritt liegt der Trainingsmax noch bei höchstens 90 %
+ * dessen, was der Satz belegt, also so konservativ wie die Definition selbst.
+ */
+export const TM_SCHRITT_GROSS_KG = 5;
+
+/**
+ * Wie viele First-Set-Last-Sätze am TM-Tag nach den drei Programmsätzen
+ * kommen — mit dem Gewicht des ersten Satzes, je fünf Wiederholungen.
+ *
+ * Seit dem 15.11.2026. Die drei Sätze der Welle allein bringen in Woche 3 nur
+ * neun Wiederholungen schwer; für Muskelaufbau im Bulk ist das wenig. Zwei
+ * FSL-Sätze bei 65 bis 75 % holen Volumen dazu, ohne den AMRAP-Satz davor zu
+ * entwerten — sie kommen danach.
+ */
+export const FSL_SAETZE = 2;
+export const FSL_WDH = 5;
+
 export function bankPlan(tmKg: number, woche: BankWoche): BankSatz[] {
-  return WOCHEN[woche].map((s) => ({
+  const welle = WOCHEN[woche].map((s) => ({
     ...s,
     kg: aufZweiKommaFuenf((tmKg * s.prozent) / 100),
   }));
+  /* Kein FSL in der Deload-Woche: die Woche ist zum Zurücknehmen da, und
+     zwei Fünfer mit 40 % wären nur Beschäftigung. */
+  if (woche === 4) return welle;
+  const erster = welle[0];
+  const fsl = Array.from({ length: FSL_SAETZE }, () => ({
+    prozent: erster.prozent,
+    wdh: FSL_WDH,
+    amrap: false,
+    kg: erster.kg,
+    notiz: "FSL" as const,
+  }));
+  return [...welle, ...fsl];
 }
 
 /**
@@ -471,11 +515,15 @@ export function bankPlan(tmKg: number, woche: BankWoche): BankSatz[] {
  * ist. 72,5 % liegen unter jedem AMRAP-Satz des Programms (85, 90, 95 %) und
  * damit im Bereich, in dem fünf Wiederholungen mit Reserve stehen.
  *
+ * Seit dem 15.11.2026 mit Pause auf der Brust: bei 72,5 % sind die Fünfer
+ * sonst kaum mehr als Aufwärmen, und die Pause trainiert genau die Stelle,
+ * an der schwere Singles stehen bleiben — unten, ohne Schwung.
+ *
  * Danach ein schwerer Single bei 90 %. Jakob hat an den leichten Tagen ohnehin
  * schwer weitergemacht (13.09.2026: 70 × 5, dann 75 × 3 und 85 × 4) — die
  * leichte Einheit allein war ihm zu wenig. Ein fest vorgegebener Single
  * fängt das ein, ohne den Tag zum zweiten Testtag zu machen: eine
- * Wiederholung, sauber und schnell, kein Satz bis zum Versagen. 90 % liegen
+ * Wiederholung, schnell, kein Satz bis zum Versagen. 90 % liegen
  * unter dem AMRAP-Satz der Woche 3, und ein Single kostet kaum Erholung.
  *
  * Bewusst ohne AMRAP-Zeile: der AMRAP-Satz ist das Messinstrument des
@@ -493,6 +541,7 @@ export function bankZusatzPlan(tmKg: number, mitSingle = true): BankSatz[] {
     wdh: ZUSATZ_WDH,
     amrap: false,
     kg: aufZweiKommaFuenf((tmKg * ZUSATZ_PROZENT) / 100),
+    notiz: "paused" as const,
   };
   const single = {
     prozent: SINGLE_PROZENT,
@@ -512,14 +561,16 @@ export function bankZusatzPlan(tmKg: number, mitSingle = true): BankSatz[] {
  * Ein echter Maximalversuch, einmal im Quartal.
  *
  * 5/3/1 testet von sich aus nie — die AMRAP-Sätze sind Wiederholungsrekorde.
- * Jakobs Ziel heißt aber "140 kg sauber", und das ist ein Single. Deshalb
+ * Jakobs Ziel heißt aber "140 kg im Single" — seit dem 15.11.2026 mit jeder
+ * Technik, Ego-Bank zählt —, und das ist ein Single. Deshalb
  * ersetzt in jedem dritten Zyklus (4, 7, 10, …) der TM-Tag der Deload-Woche
  * die Deload-Welle durch einen Test: gut drei Monate Abstand, und die
  * Deload-Woche davor ist ohnehin die frischeste Stelle im Zyklus.
  *
- * Der Test bewegt den Trainingsmax nicht. Der folgt weiter dem AMRAP-Satz der
- * Woche 3; liegt ein Test deutlich unter dem, was der Trainingsmax behauptet,
- * setzt Jakob ihn von Hand zurück.
+ * Seit dem 15.11.2026 eicht der Test den Trainingsmax: der schwerste Single
+ * des Testtags geht in naechsterTm() ein (Parameter testSingle). Liegt ein
+ * Test deutlich unter dem, was der Trainingsmax behauptet, setzt Jakob ihn
+ * weiter von Hand zurück — nach unten eicht der Test nicht, siehe dort.
  */
 export const TEST_ALLE_ZYKLEN = 3;
 
@@ -601,9 +652,9 @@ export function amrapSoll(woche: BankWoche): { prozent: number; wdh: number } | 
  *             wird.
  * "zusatz"  — die Push-Einheit dazwischen: leicht plus ein schwerer Single,
  *             ohne Wirkung auf den Trainingsmax.
- * "test"    — der TM-Tag der Deload-Woche in jedem dritten Zyklus: statt der
- *             Deload-Welle ein echter Maximalversuch (testPlan()).
- * "keiner"  — vor dem Programmstart, und die Zusatz-Einheit der Deload-Woche.
+ * "test"    — der TM-Tag der vierten Woche in jedem dritten Zyklus: ein
+ *             echter Maximalversuch (testPlan()).
+ * "keiner"  — vor dem Programmstart, und die Zusatz-Einheit der vierten Woche.
  *
  * Ein Aufzählungstyp statt zweier Wahrheitswerte: mit istBankTag und
  * istZusatzTag nebeneinander gäbe es den Zustand "beides zugleich", den es
@@ -622,30 +673,52 @@ export type BankPosition = {
 };
 
 /**
- * Ab diesem Trainingsmax gibt es wieder eine Deload-Woche.
+ * Die alte Deload-Schwelle: ab diesem Trainingsmax hatte jeder Zyklus eine
+ * vierte Woche.
  *
  * Jakob am 02.10.2026: die Deloads weglassen, bis der Trainingsmax bei rund
- * 100 kg steht — bei diesen Gewichten braucht es sie noch nicht. Darunter
- * dauert ein Zyklus drei Programmwochen statt vier, die Welle 5/3/1 läuft
- * ohne die Woche 40/50/60 % direkt in den nächsten Zyklus.
+ * 100 kg steht. Am 15.11.2026 ganz abgeschafft — eine vierte Woche hat nur
+ * noch der Testzyklus, und dort steht statt des Deloads der Test. Die Zahl
+ * bleibt, weil Zyklen, die vor NEUE_DELOAD_REGEL_AB angefangen haben, ihre
+ * Länge behalten: sonst sprängen die Wochen des laufenden Zyklus mitten im
+ * Zyklus um.
  */
 export const DELOAD_AB_TM_KG = 100;
 
 /**
+ * Ab diesem Tag gilt: vierte Woche nur im Testzyklus. Ein Zyklus, dessen
+ * Anker (gueltigAb) davor liegt, rechnet nach der alten Schwelle.
+ */
+export const NEUE_DELOAD_REGEL_AB = "2026-11-16";
+
+/** Gilt für einen Zyklus, der an diesem Tag angefangen hat, noch die alte Regel? */
+export function alteDeloadRegel(abIso: string | undefined): boolean {
+  return abIso !== undefined && abIso < NEUE_DELOAD_REGEL_AB;
+}
+
+/**
  * Wie viele Programmwochen ein Zyklus hat.
  *
- * Ein Testzyklus behält seine vierte Woche auch unter der Schwelle: dort
- * steht statt des Deloads der Maximalversuch, und der ist kein Deload, den
- * man weglassen könnte. Ohne Trainingsmax (null) gilt der volle Zyklus.
+ * Vier nur im Testzyklus (jeder dritte, istTestZyklus()): dort steht in der
+ * vierten Woche der Maximalversuch. Alle anderen Zyklen laufen drei Wochen,
+ * die Welle 5/3/1 geht ohne die Woche 40/50/60 % direkt in den nächsten
+ * Zyklus. Warum ohne Deload: der Test alle drei Zyklen ist ohnehin die
+ * frischeste, leichteste Woche des Programms, und zwischen zwei Tests liegen
+ * mit 3 + 3 + 4 Wochen gut zwei Monate — kürzer, als ein Deload sich lohnt.
+ *
+ * `alteRegel` für Zyklen, die vor NEUE_DELOAD_REGEL_AB angefangen haben: dort
+ * gilt weiter die Schwelle DELOAD_AB_TM_KG, und ohne Trainingsmax (null) der
+ * volle Zyklus.
  */
-export function wochenImZyklus(zyklus: number, tmKg: number | null): 3 | 4 {
-  if (tmKg === null || tmKg >= DELOAD_AB_TM_KG || istTestZyklus(zyklus)) return 4;
+export function wochenImZyklus(zyklus: number, tmKg: number | null, alteRegel = false): 3 | 4 {
+  if (istTestZyklus(zyklus)) return 4;
+  if (alteRegel && (tmKg === null || tmKg >= DELOAD_AB_TM_KG)) return 4;
   return 3;
 }
 
 /** Push-Tage eines Zyklus: zwei je Programmwoche (TM-Tag plus leichter Tag). */
-export function pushTageImZyklus(zyklus: number, tmKg: number | null): number {
-  return wochenImZyklus(zyklus, tmKg) * 2;
+export function pushTageImZyklus(zyklus: number, tmKg: number | null, alteRegel = false): number {
+  return wochenImZyklus(zyklus, tmKg, alteRegel) * 2;
 }
 
 /**
@@ -685,21 +758,36 @@ export function pushTageImZyklus(zyklus: number, tmKg: number | null): number {
 export type Zyklusanker = {
   pushIndex: number;
   zyklus: number;
-  /** Trainingsmax dieses Zyklus — entscheidet, ob er eine Deload-Woche hat. */
+  /** Trainingsmax dieses Zyklus — entscheidet nach der alten Regel, ob er eine Deload-Woche hat. */
   tmKg: number | null;
+  /**
+   * Der Tag, an dem der Zyklus des Ankers angefangen hat (gueltigAb). Liegt
+   * er vor NEUE_DELOAD_REGEL_AB, behält genau dieser eine Zyklus seine Länge
+   * nach der alten Regel; alle Zyklen danach rechnen nach der neuen. Ohne
+   * Angabe gilt für alle die neue.
+   */
+  abIso?: string;
 };
+
+/** Wie viele Push-Tage ein Zyklus ab einem Anker hat — der Ankerzyklus nach seiner Regel. */
+function pushTageAb(anker: Zyklusanker, zyklus: number): number {
+  return pushTageImZyklus(
+    zyklus,
+    anker.tmKg,
+    zyklus === anker.zyklus && alteDeloadRegel(anker.abIso)
+  );
+}
 
 /**
  * Der Push-Tag, an dem ein späterer Zyklus anfängt.
  *
- * Für die Zyklen nach dem Anker gilt dessen Trainingsmax: wie hoch er dort
- * steht, entscheidet erst der AMRAP-Satz. Kreuzt er die Deload-Schwelle,
- * stimmt die Vorausschau für die Zyklen danach um eine Woche nicht — sobald
- * aufZyklusBringen() die neue Zeile anlegt, rechnet alles vom neuen Anker.
+ * Seit es eine vierte Woche nur noch im Testzyklus gibt, hängt die Länge der
+ * Zyklen nach dem Anker nicht mehr am Trainingsmax — die Vorausschau stimmt
+ * also auch dann, wenn der AMRAP-Satz ihn über die alte Schwelle hebt.
  */
 export function zyklusAnfang(anker: Zyklusanker, zyklus: number): number {
   let index = anker.pushIndex;
-  for (let z = anker.zyklus; z < zyklus; z++) index += pushTageImZyklus(z, anker.tmKg);
+  for (let z = anker.zyklus; z < zyklus; z++) index += pushTageAb(anker, z);
   return index;
 }
 
@@ -711,7 +799,7 @@ export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPositio
       art: "keiner",
       zyklus: anker.zyklus,
       woche: 1,
-      wochen: wochenImZyklus(anker.zyklus, anker.tmKg),
+      wochen: wochenImZyklus(anker.zyklus, anker.tmKg, alteDeloadRegel(anker.abIso)),
     };
   }
 
@@ -719,11 +807,11 @@ export function bankPosition(pushIndex: number, anker: Zyklusanker): BankPositio
      sind die Zyklen nicht mehr gleich lang. */
   let zyklus = anker.zyklus;
   let anfang = anker.pushIndex;
-  while (pushIndex - anfang >= pushTageImZyklus(zyklus, anker.tmKg)) {
-    anfang += pushTageImZyklus(zyklus, anker.tmKg);
+  while (pushIndex - anfang >= pushTageAb(anker, zyklus)) {
+    anfang += pushTageAb(anker, zyklus);
     zyklus++;
   }
-  const wochen = wochenImZyklus(zyklus, anker.tmKg);
+  const wochen = (pushTageAb(anker, zyklus) / 2) as 3 | 4;
 
   /* Die Zusatz-Einheit teilt sich Zyklus und Woche mit dem TM-Tag davor —
      Math.floor() rundet den ungeraden Versatz auf denselben Bank-Index ab.
@@ -757,6 +845,11 @@ export function amrapPushIndex(ankerPushIndex: number): number {
   return ankerPushIndex + 4;
 }
 
+/** Der Push-Tag, an dem der Test eines Testzyklus liegt — der TM-Tag der Woche 4. */
+export function testPushIndex(ankerPushIndex: number): number {
+  return ankerPushIndex + 6;
+}
+
 export type TmEntscheidung = {
   tmNeu: number;
   richtung: "hoch" | "bleibt" | "zurueck";
@@ -781,11 +874,27 @@ export type TmEntscheidung = {
  * Fällt das geschätzte Maximum dagegen unter den Trainingsmax, ist der zu
  * hoch angesetzt: dann steht im Plan ein Gewicht, das gar nicht mehr einmal
  * geht, und sämtliche Prozente darunter sind zu schwer.
+ *
+ * Seit dem 15.11.2026 zwei Ergänzungen, beide nur nach oben:
+ *
+ *   - Trägt der AMRAP-Satz deutlich mehr (90 % seines geschätzten Maximums
+ *     mindestens TM + 5), steigt der Trainingsmax um TM_SCHRITT_GROSS_KG.
+ *   - Nach einem Testzyklus eicht der schwerste Single des Tests: 90 % davon,
+ *     auf 2,5 kg ABgerundet, mindestens TM + 2,5 und höchstens TM + 5. Ab-
+ *     gerundet, weil ein Single am Testtag der beste Tag des Quartals ist und
+ *     nicht der Durchschnitt; gedeckelt, weil ein großer Sprung alle Prozente
+ *     auf einmal verschiebt und ein einzelner guter Versuch dafür zu wenig ist.
+ *
+ * Die Eichung greift nur, wenn der AMRAP-Satz bestanden ist. Bleibt er unter
+ * dem Soll oder unter dem Trainingsmax, gilt die Regel von oben — ein guter
+ * Single hebt keinen Trainingsmax, mit dem die Fünfer schon nicht gehen.
  */
 export function naechsterTm(
   tmAlt: number,
   amrapSatz: SetLog | null,
-  sollWdh: number
+  sollWdh: number,
+  /** Schwerster Single des Testtags; nur nach einem Testzyklus. */
+  testSingle?: number | null
 ): TmEntscheidung {
   if (amrapSatz === null) {
     return {
@@ -832,12 +941,37 @@ export function naechsterTm(
     };
   }
 
-  const tmNeu = tmAlt + TM_SCHRITT_KG;
+  const gross = gemessen * TM_ANTEIL >= tmAlt + TM_SCHRITT_GROSS_KG;
+  const ausAmrap = tmAlt + (gross ? TM_SCHRITT_GROSS_KG : TM_SCHRITT_KG);
+  const amrapSatzText =
+    `${amrapSatz.reps} reps at ${komma(amrapSatz.kg, 1)} kg — target was ${sollWdh}` +
+    (gross
+      ? `, and 90 % of the ${komma(gemessen, 1)} kg it implies is at least ` +
+        `${komma(tmAlt + TM_SCHRITT_GROSS_KG, 1)} kg, so the big step of ${komma(TM_SCHRITT_GROSS_KG, 1)} kg.`
+      : ".");
+
+  if (testSingle != null && testSingle > 0) {
+    const geeicht = Math.floor((testSingle * TM_ANTEIL) / TM_SCHRITT_KG) * TM_SCHRITT_KG;
+    const tmNeu = Math.min(
+      tmAlt + TM_SCHRITT_GROSS_KG,
+      Math.max(ausAmrap, tmAlt + TM_SCHRITT_KG, geeicht)
+    );
+    return {
+      tmNeu,
+      richtung: "hoch",
+      begruendung:
+        `${amrapSatzText} Test single ${komma(testSingle, 1)} kg: 90 % rounded down is ` +
+        `${komma(geeicht, 1)} kg` +
+        (geeicht > tmAlt + TM_SCHRITT_GROSS_KG
+          ? `, capped at +${komma(TM_SCHRITT_GROSS_KG, 1)} kg per cycle.`
+          : ".") +
+        ` Training max ${komma(tmAlt, 1)} → ${komma(tmNeu, 1)} kg.`,
+    };
+  }
+
   return {
-    tmNeu,
+    tmNeu: ausAmrap,
     richtung: "hoch",
-    begruendung:
-      `${amrapSatz.reps} reps at ${komma(amrapSatz.kg, 1)} kg — target was ` +
-      `${sollWdh}. Training max ${komma(tmAlt, 1)} → ${komma(tmNeu, 1)} kg.`,
+    begruendung: `${amrapSatzText} Training max ${komma(tmAlt, 1)} → ${komma(ausAmrap, 1)} kg.`,
   };
 }

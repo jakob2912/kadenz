@@ -336,8 +336,8 @@ export function bankcoach(eingabe: {
           text:
             `${wie} The training max fits the sets (${Math.round((tmAnteil ?? 0) * 100)} % ` +
             `of the estimated max), so it's missing stimulus, not recovery. Keep the training max and ` +
-            `on TM day add 5 × 5 with the first set's weight after the AMRAP set ` +
-            `(First Set Last): ${zahl(fslKg[1])} kg in week 1, ${zahl(fslKg[2])} kg in week 2, ` +
+            `on TM day go from the planned 2 × 5 to 5 × 5 with the first set's weight after the ` +
+            `AMRAP set (First Set Last): ${zahl(fslKg[1])} kg in week 1, ${zahl(fslKg[2])} kg in week 2, ` +
             `${zahl(fslKg[3])} kg in week 3. No joker sets — Kadenz reads the heaviest ` +
             `set of the TM day as the AMRAP set.`,
         },
@@ -410,7 +410,12 @@ export type Prognose =
  * wird mit der Zeit langsamer; die Gerade ist deshalb eher zu optimistisch,
  * und auch das steht im Text.
  */
-export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
+export function prognose140(
+  urteil: KraftUrteil,
+  heuteIso: string,
+  /* Standard ist das Ende des Aufbaus laut Plan; Tests geben ein festes Datum mit. */
+  zielIso: string = ZIEL_DATUM
+): Prognose {
   if (!urteil.verwertbar) {
     return {
       verwertbar: false,
@@ -420,7 +425,7 @@ export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
 
   const aktuellKg = urteil.auf;
   const kgPro4Wochen = (urteil.von * urteil.prozentPro4Wochen) / 100;
-  const restTage = Math.max(1, tageZwischen(heuteIso, ZIEL_DATUM));
+  const restTage = Math.max(1, tageZwischen(heuteIso, zielIso));
   const fehlt = Math.max(0, ZIEL_KG - aktuellKg);
   const noetigKgProMonat = fehlt / (restTage / 30.44);
   const noetigProzentPro4Wochen = aktuellKg > 0 ? ((fehlt / restTage) * 28 * 100) / aktuellKg : 0;
@@ -433,13 +438,13 @@ export function prognose140(urteil: KraftUrteil, heuteIso: string): Prognose {
     const tage = Math.ceil(fehlt / (kgPro4Wochen / 28));
     if (tage <= MAX_PROGNOSE_TAGE) erreichtAm = plusTage(heuteIso, tage);
   }
-  const imPlan = erreichtAm !== null && erreichtAm <= ZIEL_DATUM;
+  const imPlan = erreichtAm !== null && erreichtAm <= zielIso;
 
   const tempo = `Measured: ${zahl(kgPro4Wochen)} kg over four weeks (${zahl(urteil.prozentPro4Wochen)} %), estimated max currently ${zahl(aktuellKg)} kg.`;
-  const noetig = `${ZIEL_KG} kg by ${zielDatumText()} needs ${zahl(noetigKgProMonat)} kg per month, i.e. ${zahl(noetigProzentPro4Wochen)} % over four weeks.`;
+  const noetig = `${ZIEL_KG} kg by ${zielDatumText(zielIso)} needs ${zahl(noetigKgProMonat)} kg per month, i.e. ${zahl(noetigProzentPro4Wochen)} % over four weeks.`;
   const wann =
     fehlt === 0
-      ? `The estimated max is already at ${ZIEL_KG} kg — only the clean single is missing.`
+      ? `The estimated max is already at ${ZIEL_KG} kg — only the single itself is missing.`
       : erreichtAm === null
         ? kgPro4Wochen <= 0
           ? `At this pace ${ZIEL_KG} kg never comes — the heavy days aren't rising right now.`

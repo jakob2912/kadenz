@@ -204,14 +204,14 @@ describe("prognose140", () => {
   ]);
 
   it("rechnet Datum und nötiges Tempo aus dem gemessenen Trend", () => {
-    const p = prognose140(steigend, "2026-10-14");
+    const p = prognose140(steigend, "2026-10-14", "2027-05-04");
     expect(p.verwertbar).toBe(true);
     if (!p.verwertbar) return;
     // 4 % auf vier Wochen von 100 kg: 4 kg je 28 Tage, 36 kg fehlen → 252 Tage.
     expect(p.kgPro4Wochen).toBeCloseTo(4, 5);
     expect(p.erreichtAm).toBe("2027-06-23");
-    /* Das Ziel ist das Ende des Aufbaus, der 04.05.2027 — der 23.06. liegt
-       schon im Cut, also nicht im Plan. 202 Tage vom 14.10.2026 bis dahin. */
+    /* Mit festem Zieldatum 04.05.2027 — der 23.06. liegt danach, also nicht
+       im Plan. 202 Tage vom 14.10.2026 bis dahin. */
     expect(p.imPlan).toBe(false);
     expect(p.noetigKgProMonat).toBeCloseTo(36 / (202 / 30.44), 5);
     expect(p.noetigProzentPro4Wochen).toBeCloseTo(((36 / 202) * 28 * 100) / 104, 5);

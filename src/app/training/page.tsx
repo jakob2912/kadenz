@@ -326,10 +326,11 @@ function BankHinweis({ bank, wann = "Today" }: { bank: Bankstand; wann?: string 
         </div>
         <p className="mt-2 text-[13px] leading-relaxed text-fg-dim">
           {wann}: real test. Warm up, then singles up to the first grinder. Only take the
-          next attempt if the previous one moved cleanly. Hips stay on the bench.
+          next attempt if the previous one went up without a grinder. Any technique counts.
         </p>
         <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
-          The test replaces the deload wave and doesn’t move the training max (
+          The heaviest single calibrates the next training max — 90 % of it, rounded down,
+          at most 5 kg more than now (
           {de(bank.tm.tmKg, 1)} kg, implying about {de(behauptetesMaximum(bank.tm.tmKg), 1)} kg).
           If your best single is clearly lower, reset the training max.
         </p>
@@ -357,8 +358,8 @@ function BankHinweis({ bank, wann = "Today" }: { bank: Bankstand; wann?: string 
             </>
           ) : (
             <>
-              {wann}: no bench. The light day is skipped in deload week — the week is for
-              backing off.
+              {wann}: no bench. The light day is skipped in the fourth week — after the
+              test the week is for backing off.
             </>
           )}
           {bank.naechsterBankTag && (

@@ -26,6 +26,9 @@ import {
   TEST_VERSUCHE,
   TM_ANTEIL,
   pushTageImZyklus,
+  alteDeloadRegel,
+  istTestZyklus,
+  testPushIndex,
   SINGLE_PROZENT,
   ZUSATZ_PROZENT,
   vorTest,
@@ -101,10 +104,12 @@ async function zyklusanker(wahlen: readonly Wochenwahl[]): Promise<Zyklusanker |
   const zeile = await prisma.bankTrainingsmax.findFirst({ orderBy: { zyklus: "desc" } });
   if (!zeile) return null;
 
+  const abIso = zeile.gueltigAb.toISOString().slice(0, 10);
   return {
-    pushIndex: pushIndexAbDatum(zeile.gueltigAb.toISOString().slice(0, 10), wahlen),
+    pushIndex: pushIndexAbDatum(abIso, wahlen),
     zyklus: zeile.zyklus,
     tmKg: zeile.tmKg,
+    abIso,
   };
 }
 
@@ -287,7 +292,7 @@ async function aufZyklusBringen(
          Anfang des neuen Zyklus der Tag, an dem jemand zufällig die Seite
          aufgerufen hat. */
       abPushIndex: zyklusAnfang(
-        { pushIndex: anker, zyklus: aktuell.zyklus, tmKg: aktuell.tmKg },
+        { pushIndex: anker, zyklus: aktuell.zyklus, tmKg: aktuell.tmKg, abIso: aktuell.gueltigAb },
         zielZyklus
       ),
       begruendung:
@@ -311,14 +316,28 @@ async function aufZyklusBringen(
       console.error("AMRAP-Satz nicht lesbar:", e);
     }
 
-    const entscheidung = naechsterTm(aktuell.tmKg, satz, soll.wdh);
+    /* Nach einem Testzyklus eicht der schwerste Satz des Testtags den
+       Trainingsmax mit (naechsterTm()). Ohne Mindestgewicht: am Testtag ist
+       der schwerste Satz der Test selbst, die Aufwärmsätze liegen darunter. */
+    let testSingle: number | null = null;
+    if (istTestZyklus(aktuell.zyklus)) {
+      try {
+        testSingle = (await amrapSatzVon(testPushIndex(anker), 0, wahlen))?.kg ?? null;
+      } catch (e) {
+        console.error("Testsingle nicht lesbar:", e);
+      }
+    }
+
+    const entscheidung = naechsterTm(aktuell.tmKg, satz, soll.wdh, testSingle);
 
     /* Der nächste Zyklus beginnt sechs oder acht Push-Tage nach diesem
-       (mit oder ohne Deload, siehe wochenImZyklus()) — ausgerechnet
+       (mit oder ohne vierte Woche, siehe wochenImZyklus()) — ausgerechnet
        und nicht "heute". Wird die Fortschreibung ein paar Tage zu früh oder
        zu spät angestoßen, stünde sonst ein Anfangsdatum in der Zeile, das mit
-       der Welle nichts zu tun hat, und die Wochen liefen ab da schief. */
-    anker += pushTageImZyklus(aktuell.zyklus, aktuell.tmKg);
+       der Welle nichts zu tun hat, und die Wochen liefen ab da schief. Die
+       Länge des abgeschlossenen Zyklus nach der Regel, die bei seinem Anfang
+       galt — bestehende Anker werden nicht umgeschrieben. */
+    anker += pushTageImZyklus(aktuell.zyklus, aktuell.tmKg, alteDeloadRegel(aktuell.gueltigAb));
 
     aktuell = await anlegenOderLesen(aktuell.zyklus + 1, entscheidung.tmNeu, "zyklus", wahlen, {
       abPushIndex: anker,
@@ -476,8 +495,8 @@ function vorgabeFuer(
       saetze: testPlan(tmKg, schaetzung),
       hinweis:
         `Test day: four warm-up sets, then up to ${TEST_VERSUCHE} singles. Only take the next ` +
-        `attempt if the previous one moved cleanly — stop at the first grinder. Hips ` +
-        `stay on the bench, otherwise the attempt doesn't count. 3–5 minutes rest. Simply ` +
+        `attempt if the previous one went up without a grinder — stop at the first grinder. ` +
+        `Any technique counts; the heaviest single is the result. 3–5 minutes rest. Simply ` +
         `don't check attempts you missed.` +
         (schaetzung === null
           ? " No estimate from recent weeks — the first attempt is at the training max."
@@ -500,7 +519,7 @@ function vorgabeFuer(
       hinweis:
         `Light day: three sets of five at ${String(ZUSATZ_PROZENT)} %, then ` +
         `one heavy single at ${SINGLE_PROZENT} % of the training max. One rep, ` +
-        `clean and fast — no grinder, no second one. Doesn't count toward the ` +
+        `fast — no grinder, no second one. Doesn't count toward the ` +
         `training max progression; that's what the AMRAP set on TM day is for.`,
     };
   }
@@ -508,8 +527,8 @@ function vorgabeFuer(
   return {
     saetze: [],
     hinweis:
-      "No bench today. The extra session is skipped in deload week — " +
-      "the week is for backing off.",
+      "No bench today. The extra session is skipped in the fourth week — " +
+      "after the test (or the deload of an older cycle) the week is for backing off.",
   };
 }
 

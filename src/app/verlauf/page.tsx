@@ -153,7 +153,7 @@ async function Gewichtsteil() {
             </span>
           </div>
           {/* Die Soll-Linie hier nur über das gemessene Fenster plus vier
-              Wochen: der ganze Plan reicht bis Juni 2028, und über diese
+              Wochen: der ganze Plan reicht bis August 2028, und über diese
               Achse gelegt schrumpfte der Monat mit echten Messungen zu einem
               Strich am linken Rand. Die Frage an dieser Karte lautet "liege
               ich gerade richtig", nicht "wo endet das". Letzteres beantwortet
@@ -250,7 +250,7 @@ async function Gewichtsteil() {
  * hinaus.
  *
  * Gebraucht für die Karte oben, die neben der Messreihe steht. Der ganze Plan
- * reicht bis Juni 2028 — über diese Zeitachse gelegt schrumpfte der Monat
+ * reicht bis August 2028 — über diese Zeitachse gelegt schrumpfte der Monat
  * mit echten Messungen auf einen Strich.
  */
 function sollAusschnitt(abIso: string, wochenVoraus: number): { datum: string; wert: number }[] {

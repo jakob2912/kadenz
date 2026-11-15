@@ -271,7 +271,7 @@ server.registerTool(
   {
     title: "Gewichtstrend",
     description:
-      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk auf 96 kg → Cut für die Maturaball-Fotos → Hold bis nach dem Ball am 11.12.2027 → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase: positiv im Aufbau, negativ im Cut (das Gewicht soll fallen), um null beim Halten (das Gewicht soll stehen bleiben). wochenBisPhasenziel gibt es nur im Aufbau und im Cut; beim Halten ist es null, dort zählt nur phasenendeIso.",
+      "Gewichtsreihe, 7-Tage-Schnitt und Trendurteil, dazu der Stand im Phasenplan: welche Phase gerade läuft (Bulk auf 95 kg → Cut auf 87 kg für die Maturaball-Fotos ab 11.08.2027 → Hold bis 12.12.2027, dem Tag nach dem Ball → Bulk 2, Endziel 100 kg), was heute laut Plan auf der Waage stehen sollte und wie weit Jakob davon abweicht. Das Trendurteil sagt ausdrücklich auch, WANN es nicht rechnet — etwa nach einer Messlücke, solange sich das Gewicht noch nicht stabilisiert hat. Der Zielkorridor wechselt mit der Phase: positiv im Aufbau, negativ im Cut (das Gewicht soll fallen), um null beim Halten (das Gewicht soll stehen bleiben). wochenBisPhasenziel gibt es nur im Aufbau und im Cut; beim Halten ist es null, dort zählt nur phasenendeIso.",
     inputSchema: { tage: z.number().int().min(7).max(120).optional() },
   },
   async ({ tage }) => {
@@ -885,7 +885,7 @@ server.registerTool(
   {
     title: "Bank-Coach",
     description:
-      "Echter PR (schwerster sauberer Single oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last (5 × 5 mit dem Gewicht des ersten Satzes); bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis zum Ende des Aufbaus (Beginn des Cuts laut Gewichtsplan, derzeit 04.05.2027 — steht ausgeschrieben in der Antwort) und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
+      "Echter PR (schwerster Single — jede Technik zählt, Ego-Bank inklusive — oder der eingetragene, siehe bank_pr_setzen) und: Läuft das Bankdrücken, steht es oder geht es zurück — gerechnet aus den letzten 56 Tagen, und zwar nur aus den schweren Tagen (die leichten mit 3 × 5 und dem 90-%-Single würden den Trend flach rechnen). Bei Stillstand ein Vorschlag nach 5/3/1-Regeln: Trainingsmax zurücksetzen, wenn er mehr als 2,5 kg über 90 % des geschätzten Maximums liegt; sonst First Set Last von den geplanten 2 × 5 auf 5 × 5 mit dem Gewicht des ersten Satzes; bei Rückschritt Erholung. Dazu die Hochrechnung auf 140 kg aus dem gemessenen Tempo, das nötige Tempo bis zum Ende des Aufbaus (Beginn des Cuts laut Gewichtsplan, derzeit 15.04.2027 — steht ausgeschrieben in der Antwort) und zum Vergleich der frühestmögliche Tag laut Programm (Bestfall-Treppe). Ändert NICHTS — den Trainingsmax setzt nur bank_tm_setzen, und das erst nach Jakobs Ja.",
   },
   async () => {
     try {
@@ -944,7 +944,7 @@ server.registerTool(
   {
     title: "Bankdrücken heute",
     description:
-      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, nur dieser Tag schreibt den Trainingsmax fort), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"test\" der TM-Tag der Deload-Woche in jedem dritten Zyklus (Aufwärmen, dann bis zu drei Singles ab dem geschätzten Maximum, ohne Wirkung auf den Trainingsmax), \"keiner\" der Zwischentag der Deload-Woche. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
+      "Wo das 5/3/1 gerade steht: Zyklus, Programmwoche, Trainingsmax und die Sätze mit Gewicht. Bankdrücken steht an jeder Push-Einheit. `art` sagt, welcher Tag das ist: \"tm\" ist der Programmtag (jede zweite Push-Einheit, drei Sätze nach der Welle, danach 2 × 5 First Set Last mit dem Gewicht des ersten Satzes; der AMRAP-Satz der Woche 3 schreibt den Trainingsmax fort, +2,5 kg oder +5 kg, wenn 90 % seines geschätzten Maximums mindestens TM + 5 sind), \"zusatz\" der leichte Tag dazwischen (3 × 5 bei 72,5 % mit Pause auf der Brust plus ein schwerer Single bei 90 % vom Trainingsmax, ohne Wirkung auf die Progression), \"test\" der TM-Tag der vierten Woche in jedem dritten Zyklus (Aufwärmen, dann bis zu drei Singles ab dem geschätzten Maximum, jede Technik zählt; der schwerste Single eicht den nächsten Trainingsmax: 90 % davon abgerundet, mindestens +2,5, höchstens +5 kg), \"keiner\" der Zwischentag der vierten Woche. Eine vierte Woche hat seit dem 15.11.2026 nur noch der Testzyklus; Zyklen, die vorher angefangen haben, behalten ihre Länge. Ohne Trainingsmax steht hier der Hinweis, dass er fehlt — Kadenz schätzt ihn nicht.",
   },
   async () => {
     try {
@@ -1030,7 +1030,7 @@ server.registerTool(
   {
     title: "Bank-PR eintragen",
     description:
-      "Trägt Jakobs echten Bankdrück-PR (schwerstes einmal gehobenes Gewicht) für die Karte \"Echter PR\" im Bench-Tab ein — für Bestwerte, die nicht als sauberer Single in Kadenz geloggt sind. Ändert NUR die Anzeige: kein Satz in der Historie, keine Wirkung auf Trainingsmax, Schätzung oder Kraftverlauf. Ein geloggter sauberer Single, der schwerer ist, löst den Eintrag automatisch ab. `kg: null` entfernt den Eintrag.",
+      "Trägt Jakobs echten Bankdrück-PR (schwerstes einmal gehobenes Gewicht) für die Karte \"Echter PR\" im Bench-Tab ein — für Bestwerte, die nicht als Single in Kadenz geloggt sind. Ändert NUR die Anzeige: kein Satz in der Historie, keine Wirkung auf Trainingsmax, Schätzung oder Kraftverlauf. Ein geloggter Single, der schwerer ist, löst den Eintrag automatisch ab. `kg: null` entfernt den Eintrag.",
     inputSchema: {
       kg: z.number().min(20).max(300).nullable(),
       datum: z

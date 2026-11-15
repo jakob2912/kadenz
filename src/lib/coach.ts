@@ -630,6 +630,100 @@ function schritt(rateLuecke: number): number {
   return Math.sign(roh) * Math.round(betrag / 10) * 10;
 }
 
+/**
+ * ~7700 kcal je kg Abnahme.
+ *
+ * Nicht dieselbe Zahl wie KCAL_PER_KG: was im Aufbau dazukommt, ist Gewebe mit
+ * viel Wasser und Glykogen (~6000 kcal/kg), was im Cut geht, ist zum größten
+ * Teil Fett (~7700 kcal/kg). Für die kleinen Schritte des Coaches ist der
+ * Unterschied egal — dort wird ohnehin nachgemessen. Beim Phasenwechsel geht
+ * es um einen Sprung von einem Überschuss in ein Defizit, und da machte die
+ * Aufbau-Zahl das Defizit um ein Fünftel zu klein.
+ */
+const KCAL_PRO_KG_ABNAHME = 7700;
+
+/** Die Tagesbilanz in kcal, die zu einer Rate in kg pro Woche gehört. */
+function bilanzKcal(kgProWoche: number): number {
+  return (kgProWoche * (kgProWoche >= 0 ? KCAL_PER_KG : KCAL_PRO_KG_ABNAHME)) / 7;
+}
+
+/**
+ * Der Vorschlag zum Phasenwechsel: auf einen Schlag, ohne Deckel und ohne
+ * Wartezeit.
+ *
+ * Die kleinen Schritte von kalorienAnpassung() sind für Korrekturen innerhalb
+ * einer Phase gebaut: 150 bis 200 kcal, frühestens alle zehn Tage. Von Bulk
+ * auf Cut fehlen aber rund 850 bis 950 kcal — in 200er-Schritten mit zehn
+ * Tagen Abstand wären das sechs Wochen, in denen der Cut nach Plan läuft und
+ * in Wahrheit noch gar nicht begonnen hat. Der Wechsel ist keine Korrektur
+ * einer Messung, sondern ein neuer Plan; deshalb gilt hier weder die Sperre
+ * noch der Deckel.
+ *
+ * Gerechnet wird von der Rate, die das jetzige Ziel tatsächlich bringt — der
+ * gemessenen, wenn die Reihe verwertbar ist, sonst der Mitte des alten
+ * Korridors — auf die Mitte des neuen. Dazwischen liegt die Differenz der
+ * Tagesbilanzen.
+ *
+ * Bleibt ein Vorschlag mit Ja und Nein wie jeder andere: Kadenz setzt das Ziel
+ * nicht selbst.
+ */
+export function phasenwechselAnpassung(opts: {
+  aktuell: Makros;
+  von: { label: string; korridor: { unten: number; oben: number } };
+  nach: { label: string; korridor: { unten: number; oben: number } };
+  /** Die Gewichtsreihe seit der letzten Anpassung. */
+  gewicht: WeightEntry[];
+  koerpergewichtKg: number | null;
+}): Anpassung | null {
+  const { aktuell, von, nach, koerpergewichtKg } = opts;
+  const alteMitte = (von.korridor.unten + von.korridor.oben) / 2;
+  const zielRate = (nach.korridor.unten + nach.korridor.oben) / 2;
+
+  const trend = assessTrend(opts.gewicht);
+  const gemessen = trend.usable;
+  const rate = trend.usable ? trend.kgPerWeek : alteMitte;
+
+  const deltaKcal = Math.round((bilanzKcal(zielRate) - bilanzKcal(rate)) / 10) * 10;
+  /* Unter 50 kcal ist es kein Wechsel, den man essen könnte — dann bleibt das
+     Ziel, und der Coach misst wie gewohnt nach. */
+  if (Math.abs(deltaKcal) < 50) return null;
+
+  const richtung: "hoch" | "runter" = deltaKcal > 0 ? "hoch" : "runter";
+  const kohlenhydrateNeu = Math.max(
+    0,
+    aktuell.kohlenhydrateG + Math.round(deltaKcal / KCAL_PRO_G_KOHLENHYDRAT)
+  );
+
+  const grundlage = gemessen
+    ? `Your average ${rate >= 0 ? "is rising" : "is falling"} by ${komma(Math.abs(rate), 2)} kg per week right now`
+    : `There's no usable trend right now, so I'm starting from the old plan rate of ${mitVorzeichen(alteMitte)} kg per week`;
+
+  const begruendung =
+    `The plan moves from ${von.label} to ${nach.label}: the target is now ` +
+    `${mitVorzeichen(zielRate)} kg per week (corridor ${mitVorzeichen(nach.korridor.unten)} to ` +
+    `${mitVorzeichen(nach.korridor.oben)}). ${grundlage}. ` +
+    `That takes ${Math.abs(deltaKcal)} kcal ${richtung === "hoch" ? "more" : "less"} at once — ` +
+    `a phase change, not a correction, so not in ${SCHRITT_MAX_KCAL}-kcal steps and without the ` +
+    `${MIN_TAGE_ZWISCHEN_ANPASSUNGEN}-day wait. ` +
+    `${richtung === "hoch" ? "They go into" : "They come out of"} carbs: ` +
+    `${aktuell.kohlenhydrateG} → ${kohlenhydrateNeu} g. Protein and fat stay the same.`;
+
+  return {
+    richtung,
+    deltaKcal,
+    neu: {
+      kcal: aktuell.kcal + deltaKcal,
+      kohlenhydrateG: kohlenhydrateNeu,
+      eiweissG: aktuell.eiweissG,
+      fettG: aktuell.fettG,
+    },
+    gemesseneRate: rate,
+    zielRate,
+    begruendung,
+    eiweissNotiz: eiweissNotiz(aktuell.eiweissG, koerpergewichtKg),
+  };
+}
+
 function eiweissNotiz(eiweissG: number, koerpergewichtKg: number | null): string | null {
   if (koerpergewichtKg === null || koerpergewichtKg <= 0) return null;
 
